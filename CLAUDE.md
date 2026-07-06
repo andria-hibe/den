@@ -96,10 +96,16 @@ to sync names/status/attention.
 - **Resizable** panels (draggable splitters, sizes persisted to localStorage).
 - Session **titles**: Claude auto-titles via OSC (shells don't); manual rename
   locks it; the **topbar tints to the active session's colour + shows its title**.
-- **Reactive pixel-art fox**: topbar status fox from GitHub PR health
-  (happy/alert/sit); sleeping fox (drifting z) in the empty state; walking fox in
-  loading rows. Sprites in `foxSprites.ts`; keep integer scale + stepped
-  animation or they blur.
+- **Reactive pixel-art fox**: topbar status fox — `alert` only when a PR needs
+  *your* action (an authored PR failing CI / changes requested, or a review you
+  owe); a PR you're *reviewing* failing its CI does NOT alert. Driven by the
+  server-computed `PullRequest.needsAttention` (see `getMyPullRequests`), the
+  same flag that marks cards. Else `happy` (open PRs) / `sit` (none). Sleeping
+  fox (drifting z) in the empty state; walking fox in loading rows. Sprites in
+  `foxSprites.ts`; keep integer scale + stepped animation or they blur.
+- **PR cards flag what needs you**: cards with `needsAttention` get a pink accent
+  + pulsing `!` (tooltip = `attentionReason`), so the "review requested" and "my
+  open PRs" sections show at a glance which ones are on you.
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and
   on rail cards (matched via the `fast-NNNN` branch hint + explicit ids).

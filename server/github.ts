@@ -27,6 +27,13 @@ export interface PullRequest {
   ticketHint?: string;
   /** True for your own PRs (authored), false for others' (review-requested). */
   isMine: boolean;
+  /** Whether this PR needs *your* action right now. For authored PRs: failing
+   * checks or changes requested. For review-requested PRs: you owe a review
+   * (first review or a re-review). A review-requested PR's own CI status does
+   * NOT count — that's the author's problem, not yours. */
+  needsAttention: boolean;
+  /** Short human reason for `needsAttention`, for a card tooltip. */
+  attentionReason?: string;
 }
 
 export interface PrBuckets {
@@ -170,6 +177,7 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
     review,
     ticketHint: parseTicketHint(branch),
     isMine: false,
+    needsAttention: false, // set per-bucket in getMyPullRequests
   };
 }
 
@@ -200,7 +208,24 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
     mapLimit(authoredRows, 6, enrich),
     mapLimit(reviewRows, 6, enrich),
   ]);
-  authored.forEach((p) => (p.isMine = true));
+  // Your own PRs need attention when *you* have to act: failing CI or a
+  // colleague requested changes.
+  authored.forEach((p) => {
+    p.isMine = true;
+    const reasons: string[] = [];
+    if (p.review === "changes_requested") reasons.push("changes requested");
+    if (p.checks === "failing") reasons.push("checks failing");
+    p.needsAttention = !p.isDraft && reasons.length > 0;
+    p.attentionReason = p.needsAttention ? reasons.join(" · ") : undefined;
+  });
+  // A review-requested PR needs attention simply because you owe a review —
+  // whether it's a first review or a re-review after they addressed your notes
+  // (GitHub re-adds you as a requested reviewer, so it lands in this bucket
+  // either way). Its own CI status is irrelevant to you.
+  reviewRequested.forEach((p) => {
+    p.needsAttention = !p.isDraft;
+    p.attentionReason = p.needsAttention ? "your review is requested" : undefined;
+  });
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
 }
 

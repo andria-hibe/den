@@ -100,10 +100,11 @@ export function App() {
         if (!alive || d.error) return;
         const all: PullRequest[] = [...(d.authored ?? []), ...(d.reviewRequested ?? [])];
         setPrs(all);
-        const trouble = all.some(
-          (p) => p.checks === "failing" || p.review === "changes_requested",
-        );
-        setStatusPose(trouble ? "alert" : all.length ? "happy" : "sit");
+        // The fox only reacts to PRs that need *my* action: my own PRs failing
+        // CI or with changes requested, or reviews I owe. A PR I'm reviewing
+        // failing its CI is the author's problem, so it doesn't count.
+        const needsMe = all.some((p) => p.needsAttention);
+        setStatusPose(needsMe ? "alert" : all.length ? "happy" : "sit");
       } catch {
         // leave as-is
       }
@@ -144,7 +145,7 @@ export function App() {
 
   const STATUS_TITLE: Record<FoxPose, string> = {
     happy: "all your PRs look happy 🎉",
-    alert: "a PR needs a look — failing check or changes requested",
+    alert: "something needs you — a PR to fix or a review you owe",
     sit: "no open PRs right now",
     sleep: "",
     walk: "",

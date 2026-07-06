@@ -37,12 +37,20 @@ function PrCard({
   const review = REVIEW_LABEL[pr.review];
   return (
     <div
-      className="pr-card ticket-card"
+      className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}`}
       onClick={() => onOpen(pr)}
       role="button"
       tabIndex={0}
     >
       <div className="pr-top">
+        {pr.needsAttention && (
+          <span
+            className="pr-attn"
+            title={pr.attentionReason ?? "needs your attention"}
+          >
+            !
+          </span>
+        )}
         <span className={`pr-check ${check.cls}`} title={`checks ${pr.checks}`}>
           {check.icon}
         </span>
