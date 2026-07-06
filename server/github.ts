@@ -209,13 +209,14 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
     mapLimit(reviewRows, 6, enrich),
   ]);
   // Your own PRs need attention when *you* have to act: failing CI or a
-  // colleague requested changes.
+  // colleague requested changes. Drafts count too — failing checks on your own
+  // WIP are still yours to fix, and you want to see that before marking ready.
   authored.forEach((p) => {
     p.isMine = true;
     const reasons: string[] = [];
     if (p.review === "changes_requested") reasons.push("changes requested");
     if (p.checks === "failing") reasons.push("checks failing");
-    p.needsAttention = !p.isDraft && reasons.length > 0;
+    p.needsAttention = reasons.length > 0;
     p.attentionReason = p.needsAttention ? reasons.join(" · ") : undefined;
   });
   // A review-requested PR needs attention simply because you owe a review —
