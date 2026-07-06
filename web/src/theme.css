@@ -142,6 +142,41 @@ body {
   50% { top: -5px; }
   75% { top: -3px; }
 }
+
+/* Drifting "z z z" above the sleeping fox's head. */
+.sleep-fox {
+  position: relative;
+  display: inline-block;
+}
+.zzz {
+  position: absolute;
+  top: 24%;
+  right: 24%;
+  font-family: ui-monospace, Menlo, monospace;
+  font-weight: 800;
+  color: var(--lilac);
+  opacity: 0;
+  animation: z-drift 3.6s ease-in infinite;
+  pointer-events: none;
+}
+.zzz.z1 {
+  font-size: 14px;
+  animation-delay: 0s;
+}
+.zzz.z2 {
+  font-size: 18px;
+  animation-delay: 1.2s;
+}
+.zzz.z3 {
+  font-size: 22px;
+  animation-delay: 2.4s;
+}
+@keyframes z-drift {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-8deg); }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(18px, -46px) rotate(8deg); }
+}
 .work {
   grid-area: work;
   padding: 14px;

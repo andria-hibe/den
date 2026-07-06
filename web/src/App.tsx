@@ -240,7 +240,12 @@ export function App() {
           </>
         ) : (
           <div className="empty-terminal">
-            <Fox pose="sleep" size={150} className="fox-bob" />
+            <div className="sleep-fox">
+              <Fox pose="sleep" size={150} className="fox-bob" />
+              <span className="zzz z1">z</span>
+              <span className="zzz z2">z</span>
+              <span className="zzz z3">z</span>
+            </div>
             <div className="placeholder">the den is quiet — spawn a session 🌙</div>
           </div>
         )}

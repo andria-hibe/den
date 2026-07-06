@@ -37,11 +37,12 @@ const SIT = [
   "..DDDD....DDDD....",
 ];
 
-// Sleeping: eyes closed (single line), little "z" drifting up-right.
+// Sleeping: eyes closed (single line). The drifting "z"s are overlaid + animated
+// in the UI (see .zzz in the empty state), not baked into the sprite.
 const SLEEP = [
-  "...DD.......DD.zzz",
-  "..DOOD.....DOOD.z.",
-  "..DOpOD...DOpODzz.",
+  "...DD.......DD....",
+  "..DOOD.....DOOD...",
+  "..DOpOD...DOpOD...",
   "..DOOOODDDOOOOD...",
   "..DOOOOOOOOOOOD...",
   "..DOOOOOOOOOOOD...",
