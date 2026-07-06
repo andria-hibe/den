@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useTerminal, type TerminalConfig } from "./useTerminal.ts";
+import { WorkPanel } from "./WorkPanel.tsx";
 
 interface Session {
   id: string;
@@ -109,18 +110,8 @@ export function App() {
         <TerminalView key={active.id} session={active} onExit={markEnded} />
       </main>
 
-      {/* Right: work (placeholder until v1) */}
-      <aside className="panel work">
-        <h2>work</h2>
-        <div className="placeholder">
-          🌱 GitHub PRs and Linear tickets will live here.
-          <br />
-          <br />
-          For now this is the <strong>v0 spike</strong>: proving Claude sessions
-          stream into the browser. Try typing in the terminal, resize the window,
-          and spin up more sessions.
-        </div>
-      </aside>
+      {/* Right: work — live GitHub PRs */}
+      <WorkPanel />
     </div>
   );
 }

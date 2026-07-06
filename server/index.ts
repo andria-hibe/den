@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import { spawnSession } from "./pty.ts";
+import { getMyPullRequests, type PrBuckets } from "./github.ts";
 import type { ClientMessage } from "./ws-protocol.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -16,6 +17,24 @@ await app.register(websocket);
 
 // Health / sanity endpoint.
 app.get("/api/health", async () => ({ ok: true, home: os.homedir() }));
+
+// GitHub PRs — cached briefly since `gh` calls are relatively slow.
+const PR_TTL_MS = 30_000;
+let prCache: { at: number; data: PrBuckets } | null = null;
+app.get("/api/github/prs", async (req, reply) => {
+  const fresh = (req.query as { refresh?: string })?.refresh === "1";
+  if (!fresh && prCache && Date.now() - prCache.at < PR_TTL_MS) {
+    return prCache.data;
+  }
+  try {
+    const data = await getMyPullRequests();
+    prCache = { at: Date.now(), data };
+    return data;
+  } catch (err) {
+    reply.code(502);
+    return { error: "gh_failed", message: (err as Error).message };
+  }
+});
 
 /**
  * Terminal WebSocket. Query params:
@@ -47,7 +66,7 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
 });
 
 // Serve the built web app in production (dev uses the Vite server + proxy).
-const webDist = join(__dirname, "..", "web");
+const webDist = join(__dirname, "..", "dist", "web");
 if (existsSync(webDist)) {
   await app.register(fastifyStatic, { root: webDist });
 }

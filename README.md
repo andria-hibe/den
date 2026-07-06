@@ -4,7 +4,8 @@ A cozy cockpit for Claude-driven development. One pastel home base for all your
 Claude Code sessions, tied to their GitHub PRs and Linear tickets — instead of
 juggling terminal tabs.
 
-Status: **v0 spike** — real Claude Code sessions stream into the browser.
+Status: **v1 (in progress)** — Claude sessions stream into the browser, and the
+right panel shows your live GitHub PRs (checks, review status, ticket hints).
 
 ## Run
 
@@ -25,8 +26,8 @@ Open http://localhost:5173. Use **+ claude** to spawn a Claude Code session or
 
 ## Roadmap
 
-- **v1** — persistent multi-session manager (rename/recolour, scrollback on
-  switch) + read-only GitHub PR & Linear ticket panels.
+- **v1** — ✅ GitHub PR panel · ⬜ persistent multi-session manager
+  (rename/recolour, scrollback on switch) · ⬜ Linear ticket panel.
 - **v2** — workspace linking (ticket ↔ worktree ↔ PR ↔ session), quick actions.
 - **v3** — notifications, pixel-art polish, optional Tauri desktop packaging.
 
