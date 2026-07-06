@@ -630,7 +630,7 @@ export function App() {
                   setEditingId(s.id);
                   setDraft(s.name);
                 }}
-                title={`${s.name}\n(double-click to rename)`}
+                title={s.name}
               >
                 {s.name}
               </span>

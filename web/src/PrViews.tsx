@@ -75,6 +75,8 @@ export function PrReviewView({
 }) {
   const detail = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [loadingSummaries, setLoadingSummaries] = useState(true);
   const [review, setReview] = useState<string>("");
   const [reviewing, setReviewing] = useState(false);
   const started = useRef(false);
@@ -88,6 +90,24 @@ export function PrReviewView({
       .then((r) => r.json())
       .then((d) => !d.error && setDiff(d.diff ?? ""))
       .catch(() => {});
+  }, [repo, number]);
+
+  // Per-file summaries for the side column (headless Claude — takes a bit).
+  useEffect(() => {
+    setLoadingSummaries(true);
+    fetch("/api/github/pr/diff-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo, number }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        const map: Record<string, string> = {};
+        for (const s of d.summaries ?? []) map[s.file] = s.summary;
+        setSummaries(map);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSummaries(false));
   }, [repo, number]);
 
   const generate = () => {
@@ -115,7 +135,11 @@ export function PrReviewView({
   return (
     <div className="pr-review" ref={rootRef}>
       <div className="pr-diff-wrap" style={{ flex: `${diffFrac} 1 0` }}>
-        <DiffView diff={diff} />
+        <DiffView
+          diff={diff}
+          summaries={summaries}
+          loadingSummaries={loadingSummaries}
+        />
       </div>
       <Splitter
         dir="y"

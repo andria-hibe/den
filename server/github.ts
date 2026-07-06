@@ -281,14 +281,8 @@ async function viewerLogin(): Promise<string> {
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 
-/** Ask Claude (headless) for a written review of a PR's diff. */
-export async function reviewPr(repo: string, number: number): Promise<string> {
-  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
-  const prompt =
-    "You are reviewing a GitHub pull request. The unified diff follows on " +
-    "stdin. Give a concise, skimmable code review in markdown with sections: " +
-    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. Be " +
-    "specific and reference file names. If it looks solid, say so briefly.";
+/** Run `claude -p <prompt>` with `input` on stdin; resolve its stdout. */
+function claudePrint(prompt: string, input: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, ["-p", prompt], { timeout: 180_000 });
     let out = "";
@@ -301,7 +295,46 @@ export async function reviewPr(repo: string, number: number): Promise<string> {
         ? resolve(out.trim())
         : reject(new Error(err.trim() || `claude exited ${code}`)),
     );
-    child.stdin.write(diff);
+    child.stdin.write(input);
     child.stdin.end();
   });
+}
+
+/** Ask Claude (headless) for a written review of a PR's diff. */
+export async function reviewPr(repo: string, number: number): Promise<string> {
+  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
+  const prompt =
+    "You are reviewing a GitHub pull request. The unified diff follows on " +
+    "stdin. Give a concise, skimmable code review in markdown with sections: " +
+    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. Be " +
+    "specific and reference file names. If it looks solid, say so briefly.";
+  return claudePrint(prompt, diff);
+}
+
+export interface FileSummary {
+  file: string;
+  summary: string;
+}
+
+/** Per-file one-line summaries of a PR's diff, for a scannable side column. */
+export async function summarizePrDiff(
+  repo: string,
+  number: number,
+): Promise<FileSummary[]> {
+  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
+  const prompt =
+    "Summarize this PR's unified diff (on stdin), one entry per changed file. " +
+    'Return ONLY a JSON array, no prose or code fences: [{"file": "<the path ' +
+    'exactly as it appears after "b/" in the file\'s "diff --git a/… b/…" ' +
+    'line>", "summary": "<one concise sentence: what changed in this file and ' +
+    'why>"}].';
+  const raw = await claudePrint(prompt, diff);
+  const m = raw.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try {
+    const parsed = JSON.parse(m[0]) as FileSummary[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

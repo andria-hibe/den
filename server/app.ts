@@ -10,6 +10,7 @@ import {
   getPrDetail,
   getPrDiff,
   reviewPr,
+  summarizePrDiff,
   type PrBuckets,
 } from "./github.ts";
 import {
@@ -255,6 +256,24 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       reply.code(502);
       return { error: "review_failed", message: (err as Error).message };
+    }
+  });
+
+  // Per-file one-line summaries of a PR's diff (for the side column).
+  app.post("/api/github/pr/diff-summary", async (req, reply) => {
+    const { repo, number } = (req.body ?? {}) as {
+      repo?: string;
+      number?: number;
+    };
+    if (!repo || !number) {
+      reply.code(400);
+      return { error: "repo_and_number_required" };
+    }
+    try {
+      return { summaries: await summarizePrDiff(repo, number) };
+    } catch (err) {
+      reply.code(502);
+      return { error: "summary_failed", message: (err as Error).message };
     }
   });
 
