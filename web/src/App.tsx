@@ -63,6 +63,9 @@ export function App() {
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   const [autoReviewPr, setAutoReviewPr] = useState<number | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  // Collapse the colour picker whenever we switch sessions.
+  useEffect(() => setColorPickerOpen(false), [activeId]);
   const [runnRoot, setRunnRoot] = useState<string>("");
 
   useEffect(() => {
@@ -357,21 +360,33 @@ export function App() {
 
   const renderHeader = (s: SessionMeta) => (
     <div className="term-header">
-      <span className="dot" style={{ background: s.color }} />
+      <span className="color-picker">
+        <button
+          className="dot dot-btn"
+          style={{ background: s.color }}
+          title="recolour"
+          onClick={() => setColorPickerOpen((o) => !o)}
+        />
+        {colorPickerOpen && (
+          <span className="swatches">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                className={`swatch ${c === s.color ? "on" : ""}`}
+                style={{ background: c }}
+                title="recolour"
+                onClick={() => {
+                  patch(s.id, { color: c });
+                  setColorPickerOpen(false);
+                }}
+              />
+            ))}
+          </span>
+        )}
+      </span>
       <strong className="term-name" title={s.name}>
         {s.name}
       </strong>
-      <span className="swatches">
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            className={`swatch ${c === s.color ? "on" : ""}`}
-            style={{ background: c }}
-            title="recolour"
-            onClick={() => patch(s.id, { color: c })}
-          />
-        ))}
-      </span>
       <span className="term-cwd" title={s.cwd}>
         {s.cwd.replace(/^\/Users\/[^/]+/, "~")}
       </span>
