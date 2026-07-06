@@ -233,9 +233,11 @@ body {
   font: inherit;
   font-weight: 700;
   font-size: 12px;
-  border: 2px solid var(--border);
+  border: 2px solid #e6d48f;
   background: var(--lemon);
-  color: var(--ink);
+  /* Fixed dark ink: the pastel background stays light in both themes, so the
+     theme-driven --ink (near-white in dark mode) would be unreadable here. */
+  color: #6b5a3a;
   padding: 6px 12px;
   border-radius: 10px;
   cursor: pointer;
@@ -417,4 +419,201 @@ body {
   border-top: 1px dashed var(--border);
   margin-top: 6px;
   padding-top: 12px;
+}
+
+.term-cwd {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--bg-rail);
+  padding: 2px 8px;
+  border-radius: 8px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- New Session dialog ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(60, 40, 70, 0.35);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal {
+  width: 460px;
+  max-width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 3px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+
+.choose-grid {
+  display: grid;
+  gap: 10px;
+}
+.choose-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  background: var(--bg-rail);
+  transition: transform 0.08s ease, border-color 0.08s ease;
+}
+.choose-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--pink-deep);
+}
+.choose-card.work:hover {
+  border-color: var(--sky);
+}
+.choose-card.personal:hover {
+  border-color: var(--pink-deep);
+}
+.choose-card.other:hover {
+  border-color: var(--lilac);
+}
+.choose-emoji {
+  font-size: 26px;
+}
+.choose-title {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--ink);
+}
+.choose-sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.browser {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.path-input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.browser-error {
+  font-size: 12px;
+  color: var(--pink-deep);
+  margin-bottom: 8px;
+}
+.browser-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 120px;
+  max-height: 320px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  background: var(--bg);
+}
+.dir-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.dir-row:hover {
+  background: var(--bg-rail);
+}
+.dir-row.highlight {
+  background: var(--sky);
+  color: #234a63;
+  font-weight: 700;
+}
+.dir-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background: #fff;
+  border-radius: 7px;
+  padding: 1px 7px;
+  color: #234a63;
+}
+
+.new-folder {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+}
+.new-folder input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 6px;
+}
+.foot-path {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--pink);
+  border-color: var(--pink-deep);
+  box-shadow: 0 2px 0 var(--pink-deep);
+  color: #7a2a45;
+  white-space: nowrap;
 }

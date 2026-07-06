@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import { sessions } from "./sessions.ts";
 import { getMyPullRequests, type PrBuckets } from "./github.ts";
+import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -20,6 +21,34 @@ await app.register(websocket);
 // Health / sanity endpoint.
 app.get("/api/health", async () => ({ ok: true, home: os.homedir() }));
 
+// --- Filesystem browsing (for the New Session dialog) -----------------------
+
+app.get("/api/fs/roots", async () => roots());
+
+app.get("/api/fs/dirs", async (req, reply) => {
+  const path = (req.query as { path?: string })?.path ?? roots().documents;
+  try {
+    return listDirs(path);
+  } catch (err) {
+    reply.code(400);
+    return { error: (err as Error).message };
+  }
+});
+
+app.post("/api/fs/dirs", async (req, reply) => {
+  const { parent, name } = (req.body ?? {}) as { parent?: string; name?: string };
+  if (!parent || !name) {
+    reply.code(400);
+    return { error: "parent_and_name_required" };
+  }
+  try {
+    return { path: makeDir(parent, name) };
+  } catch (err) {
+    reply.code(400);
+    return { error: (err as Error).message };
+  }
+});
+
 // --- Sessions REST ----------------------------------------------------------
 
 app.get("/api/sessions", async () => ({ sessions: sessions.list() }));
@@ -31,6 +60,10 @@ app.post("/api/sessions", async (req, reply) => {
     cwd?: string;
     shell?: boolean;
   };
+  if (body.cwd && !isDir(body.cwd)) {
+    reply.code(400);
+    return { error: "bad_cwd" };
+  }
   const meta = sessions.create(body);
   reply.code(201);
   return meta;

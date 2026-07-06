@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
+import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -31,6 +32,7 @@ export function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
     api<{ sessions: SessionMeta[] }>("/api/sessions")
@@ -44,10 +46,10 @@ export function App() {
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
-  const addSession = async (shell: boolean) => {
+  const addSession = async (opts: { shell?: boolean; cwd?: string }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
-      body: JSON.stringify({ shell }),
+      body: JSON.stringify(opts),
     });
     setSessions((prev) => [...prev, meta]);
     setActiveId(meta.id);
@@ -146,10 +148,10 @@ export function App() {
           <div className="placeholder">no sessions yet — spawn one below 🌱</div>
         )}
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          <button className="btn" onClick={() => addSession(false)}>
+          <button className="btn" onClick={() => setShowNew(true)}>
             + claude
           </button>
-          <button className="btn" onClick={() => addSession(true)}>
+          <button className="btn" onClick={() => addSession({ shell: true })}>
             + shell
           </button>
         </div>
@@ -173,6 +175,9 @@ export function App() {
                   />
                 ))}
               </span>
+              <span className="term-cwd" title={active.cwd}>
+                {active.cwd.replace(/^\/Users\/[^/]+/, "~")}
+              </span>
               <span style={{ marginLeft: "auto" }}>
                 {active.shell ? "shell" : "claude"} · {active.status}
               </span>
@@ -192,6 +197,16 @@ export function App() {
 
       {/* Right: work — live GitHub PRs */}
       <WorkPanel />
+
+      {showNew && (
+        <NewSessionDialog
+          onClose={() => setShowNew(false)}
+          onCreate={(cwd) => {
+            setShowNew(false);
+            addSession({ cwd });
+          }}
+        />
+      )}
     </div>
   );
 }

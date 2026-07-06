@@ -1,5 +1,7 @@
 import * as pty from "node-pty";
 import os from "node:os";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
@@ -168,7 +170,10 @@ class SessionManager {
     const shell = opts.shell ?? false;
     const name = opts.name ?? (shell ? "shell" : `den-${this.sessions.size + 1}`);
     const color = opts.color ?? COLORS[this.colorIdx++ % COLORS.length];
-    const cwd = opts.cwd || os.homedir();
+    // Default to ~/Documents (falling back to home) so sessions start somewhere
+    // useful; the New Session dialog usually passes an explicit cwd.
+    const documents = join(os.homedir(), "Documents");
+    const cwd = opts.cwd || (existsSync(documents) ? documents : os.homedir());
     const s = new DenSession(id, name, color, cwd, shell, now, now);
     s.spawn();
     this.sessions.set(id, s);

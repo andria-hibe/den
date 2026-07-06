@@ -1,0 +1,69 @@
+import { readdirSync, statSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve, join, dirname } from "node:path";
+
+// All filesystem browsing is sandboxed to the home directory — this is a local
+// personal tool, but there's no reason to let the UI wander the whole disk.
+const HOME = homedir();
+
+export interface DirEntry {
+  name: string;
+  path: string;
+}
+
+function within(p: string): boolean {
+  const r = resolve(p);
+  return r === HOME || r.startsWith(HOME + "/");
+}
+
+/** Well-known starting points offered in the New Session dialog. */
+export function roots() {
+  const documents = join(HOME, "Documents");
+  return {
+    home: HOME,
+    documents,
+    work: join(documents, "work"),
+    runn: join(documents, "work", "runn"),
+    projects: join(documents, "projects"),
+  };
+}
+
+export function isDir(p: string): boolean {
+  try {
+    const r = resolve(p);
+    return within(r) && existsSync(r) && statSync(r).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function listDirs(p: string): {
+  path: string;
+  parent: string | null;
+  dirs: DirEntry[];
+} {
+  const path = resolve(p);
+  if (!within(path)) throw new Error("outside_home");
+  if (!isDir(path)) throw new Error("not_found");
+  const dirs = readdirSync(path, { withFileTypes: true })
+    .filter((e) => {
+      if (e.name.startsWith(".")) return false;
+      if (e.isDirectory()) return true;
+      // follow symlinks that point at directories
+      if (e.isSymbolicLink()) return isDir(join(path, e.name));
+      return false;
+    })
+    .map((e) => ({ name: e.name, path: join(path, e.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const up = dirname(path);
+  return { path, parent: up !== path && within(up) ? up : null, dirs };
+}
+
+export function makeDir(parent: string, name: string): string {
+  const clean = name.trim().replace(/[/\\]/g, "");
+  if (!clean) throw new Error("bad_name");
+  const path = resolve(join(parent, clean));
+  if (!within(path)) throw new Error("outside_home");
+  mkdirSync(path, { recursive: true });
+  return path;
+}
