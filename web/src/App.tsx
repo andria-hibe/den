@@ -3,6 +3,7 @@ import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { PixelFox } from "./PixelFox.tsx";
+import { Fox } from "./Fox.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -97,6 +98,7 @@ export function App() {
       {/* Left: sessions */}
       <aside className="panel rail">
         <h2>sessions</h2>
+        <div className="session-list">
         {sessions.map((s) => (
           <div
             key={s.id}
@@ -149,11 +151,12 @@ export function App() {
         {sessions.length === 0 && (
           <div className="placeholder">no sessions yet — spawn one below 🌱</div>
         )}
-        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          <button className="btn" onClick={() => setShowNew(true)}>
+        </div>
+        <div className="rail-actions">
+          <button className="btn btn-primary" onClick={() => setShowNew(true)}>
             + claude
           </button>
-          <button className="btn" onClick={() => addSession({ shell: true })}>
+          <button className="btn btn-ghost-outline" onClick={() => addSession({ shell: true })}>
             + shell
           </button>
         </div>
@@ -192,7 +195,7 @@ export function App() {
           </>
         ) : (
           <div className="empty-terminal">
-            <PixelFox size={96} className="fox-bob" />
+            <Fox pose="sit" size={150} className="fox-bob" />
             <div className="placeholder">pick or spawn a session to begin</div>
           </div>
         )}

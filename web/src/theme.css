@@ -95,6 +95,26 @@ body {
 .rail {
   grid-area: rail;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.session-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.rail-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.rail-actions .btn {
+  flex: 1;
 }
 .term-wrap {
   grid-area: term;
@@ -249,23 +269,43 @@ body {
 }
 
 /* ---- Buttons ---- */
+/* Default = soft neutral. Primary (pink) = main action. Ghost-outline = subtle. */
 .btn {
   font: inherit;
   font-weight: 700;
   font-size: 12px;
-  border: 2px solid #e6d48f;
-  background: var(--lemon);
-  /* Fixed dark ink: the pastel background stays light in both themes, so the
-     theme-driven --ink (near-white in dark mode) would be unreadable here. */
-  color: #6b5a3a;
-  padding: 6px 12px;
+  border: 2px solid var(--border);
+  background: var(--bg-rail);
+  color: var(--ink);
+  padding: 7px 12px;
   border-radius: 10px;
   cursor: pointer;
-  box-shadow: 0 2px 0 #e6d48f;
+  transition: transform 0.06s ease, filter 0.1s ease;
+}
+.btn:hover {
+  filter: brightness(1.03);
 }
 .btn:active {
   transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--pink);
+  border-color: var(--pink-deep);
+  box-shadow: 0 2px 0 var(--pink-deep);
+  color: #7a2a45;
+  white-space: nowrap;
+}
+.btn-primary:active {
   box-shadow: none;
+}
+.btn-ghost-outline {
+  background: transparent;
+  border: 2px solid var(--border);
+  color: var(--ink-soft);
+}
+.btn-ghost-outline:hover {
+  border-color: var(--pink-deep);
+  color: var(--ink);
 }
 
 .placeholder {
@@ -664,12 +704,5 @@ body {
   color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.btn-primary {
-  background: var(--pink);
-  border-color: var(--pink-deep);
-  box-shadow: 0 2px 0 var(--pink-deep);
-  color: #7a2a45;
   white-space: nowrap;
 }

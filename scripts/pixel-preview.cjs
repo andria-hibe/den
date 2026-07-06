@@ -1,62 +1,75 @@
-// Renders a pixel-art grid to a PNG so we can eyeball it. Run via electron.
+// Renders one or more pixel-art grids side by side (with labels) for visual QA.
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// Fox mascot — edit this grid freely.
-const GRID = [
-  "..DD........DD..",
-  ".DOOD......DOOD.",
-  ".DOpOD....DOpOD.",
-  ".DOOOD....DOOOD.",
-  ".DOOOOD..DOOOOD.",
-  "DOOOOOOOOOOOOOOD",
-  "DOOOOOOOOOOOOOOD",
-  "DOOeeOOOOOOeeOOD",
-  "DOOeeOOOOOOeeOOD",
-  "DOOOOOOOOOOOOOOD",
-  ".DOwwwwwwwwwwOD.",
-  ".DOwwwwppwwwwOD.",
-  "..DOwwwwwwwwOD..",
-  "...DOwwwwwwOD...",
-  "....DDOOOODD....",
-];
-
 const PALETTE = {
   ".": "transparent",
-  D: "#5b4b66",
-  O: "#f2a25c",
-  l: "#ffd19a",
-  e: "#3a2e40",
-  w: "#fff6fb",
-  p: "#ff9ec4",
-  P: "#ff9ec4",
+  D: "#5b4b66", // outline
+  O: "#f2a25c", // fox orange
+  o: "#e08945", // darker orange (shading)
+  w: "#fff6fb", // cream / belly / tail tip
+  e: "#3a2e40", // eye
+  p: "#ff9ec4", // pink nose / inner ear
 };
 
+// --- SPRITES ---------------------------------------------------------------
+// Sitting fox, front 3/4, tail curled to the right.
+const SIT = [
+  "...DD.......DD....",
+  "..DOOD.....DOOD...",
+  "..DOpOD...DOpOD...",
+  "..DOOOODDDOOOOD...",
+  "..DOOOOOOOOOOOD...",
+  "..DOOOOOOOOOOOD...",
+  ".DOOeeOOOOeeOOD...",
+  ".DOOeeOOOOeeOOD...",
+  ".DOOOOOOOOOOOOD...",
+  ".DOOwwwppwwwOOD...",
+  "..DOOwwwwwwOOD.DD.",
+  "..DOOOOOOOOOD.DooD",
+  ".DOOwwwwwwwwOODooD",
+  ".DOwwwwwwwwwwODowD",
+  ".DOwwwwwwwwwwODwwD",
+  ".DOOwwwwwwwwOODwD.",
+  "..DOOOOOOOOOOODD..",
+  "..DOwOD...DOwOD...",
+  "..DDDD....DDDD....",
+];
+
+function pad(grid) {
+  const w = Math.max(...grid.map((r) => r.length));
+  return grid.map((r) => r.padEnd(w, "."));
+}
+
 function toSvg(grid, px) {
-  const w = grid[0].length * px;
-  const h = grid.length * px;
+  const g = pad(grid);
+  const w = g[0].length * px;
+  const h = g.length * px;
   let rects = "";
-  grid.forEach((row, y) => {
+  g.forEach((row, y) => {
     [...row].forEach((ch, x) => {
       const c = PALETTE[ch];
-      if (!c || c === "transparent") return;
-      rects += `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${c}"/>`;
+      if (c && c !== "transparent")
+        rects += `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${c}"/>`;
     });
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
+const SPRITES = [{ name: "sit", grid: SIT }];
+
 app.whenReady().then(async () => {
-  const big = toSvg(GRID, 22);
-  const mid = toSvg(GRID, 10);
-  const small = toSvg(GRID, 5);
-  const win = new BrowserWindow({ width: 720, height: 460, show: false });
-  const html = `<!doctype html><meta charset=utf8><style>
-    body{margin:0;display:flex;gap:44px;align-items:center;justify-content:center;
-      height:460px;background:#fdf6fb}
-  </style>
-  <div>${big}</div><div>${mid}</div><div>${small}</div>`;
+  const cells = SPRITES.map(
+    (s) =>
+      `<div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+        <div>${toSvg(s.grid, 18)}</div>
+        <div>${toSvg(s.grid, 7)}</div>
+        <div style="font:14px sans-serif;color:#5b4b66">${s.name}</div>
+      </div>`,
+  ).join("");
+  const win = new BrowserWindow({ width: 900, height: 560, show: false });
+  const html = `<!doctype html><meta charset=utf8><body style="margin:0;display:flex;gap:40px;align-items:center;justify-content:center;height:560px;background:#fdf6fb">${cells}</body>`;
   await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
   await new Promise((r) => setTimeout(r, 400));
   const img = await win.webContents.capturePage();
