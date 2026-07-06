@@ -94,21 +94,27 @@ export function NewSessionDialog({
           <div className="choose-grid">
             <button className="choose-card work" onClick={() => choose("work")}>
               <div className="choose-emoji">🏢</div>
-              <div className="choose-title">Work</div>
-              <div className="choose-sub">runn codebase &amp; work folder</div>
+              <div className="choose-text">
+                <div className="choose-title">Work</div>
+                <div className="choose-sub">runn codebase &amp; work folder</div>
+              </div>
             </button>
             <button
               className="choose-card personal"
               onClick={() => choose("personal")}
             >
               <div className="choose-emoji">🌸</div>
-              <div className="choose-title">Personal</div>
-              <div className="choose-sub">projects — pick or create a folder</div>
+              <div className="choose-text">
+                <div className="choose-title">Personal</div>
+                <div className="choose-sub">projects — pick or create a folder</div>
+              </div>
             </button>
             <button className="choose-card other" onClick={() => choose("other")}>
               <div className="choose-emoji">✨</div>
-              <div className="choose-title">Other</div>
-              <div className="choose-sub">type a path or start in Documents</div>
+              <div className="choose-text">
+                <div className="choose-title">Other</div>
+                <div className="choose-sub">type a path or start in Documents</div>
+              </div>
             </button>
           </div>
         ) : (
