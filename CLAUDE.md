@@ -111,6 +111,12 @@ to sync names/status/attention.
 - **PR cards flag what needs you**: cards with `needsAttention` get a pink accent
   + pulsing `!` (tooltip = `attentionReason`), so the "review requested" and "my
   open PRs" sections show at a glance which ones are on you.
+- **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
+  that opens a normal 3-pane Claude workspace rooted in den's own source
+  (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
+  Claude primed to read CLAUDE.md. Race-safe reuse via the sentinel ticket
+  `"den:self-edit"` (one editor at a time). The app/dock icon is the same pixel
+  fox (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and
   on rail cards (matched via the `fast-NNNN` branch hint + explicit ids).
