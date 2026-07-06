@@ -53,6 +53,8 @@ export interface SessionMeta {
   /** Git branch of the working dir (captured at start), and its ticket hint. */
   branch: string | null;
   ticketHint: string | null;
+  /** The session rang the bell while unwatched — it wants your attention. */
+  attention: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -71,6 +73,8 @@ class DenSession {
   /** Once the user renames, stop auto-updating the title from the terminal. */
   titleLocked = false;
   private oscCarry = "";
+  /** Set when the terminal rings the bell while unwatched (Claude wants input). */
+  attention = false;
 
   /** Overrides the default spawn args (used for the main Claude of a workspace). */
   spawnArgs: string[] | null = null;
@@ -115,6 +119,10 @@ class DenSession {
     this.bufferBytes += data.length;
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
+    }
+    // A bell while nobody's watching = this session wants your attention.
+    if (this.listeners.size === 0 && data.includes("\u0007")) {
+      this.attention = true;
     }
     this.maybeTitle(data);
     this.emit({ type: "output", data });
@@ -165,6 +173,7 @@ class DenSession {
 
   /** Register a client; synchronously returns the scrollback to replay first. */
   attach(listener: Listener): { scrollback: string; detach: () => void } {
+    this.attention = false; // viewing it clears the nudge
     const scrollback = this.buffer.join("");
     this.listeners.add(listener);
     return {
@@ -209,6 +218,7 @@ class DenSession {
       role: this.role,
       branch: this.branch,
       ticketHint: ticketHintFrom(this.branch),
+      attention: this.attention,
     };
   }
 

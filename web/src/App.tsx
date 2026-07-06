@@ -194,6 +194,15 @@ export function App() {
       prev.map((s) => (s.id === id ? { ...s, status: "exited" } : s)),
     );
 
+  // Selecting a session views it — clear its attention nudge optimistically
+  // (the server also clears it when the terminal re-attaches).
+  const selectSession = (id: string) => {
+    setActiveId(id);
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, attention: false } : s)),
+    );
+  };
+
   // Terminal-set title (Claude/shell) for the active session — apply unless
   // the user is mid-rename of it.
   const applyTitle = (id: string, name: string) =>
@@ -286,7 +295,13 @@ export function App() {
           prev.map((loc) => {
             const s = d.sessions.find((x) => x.id === loc.id);
             return s && editingId !== loc.id
-              ? { ...loc, name: s.name, status: s.status, color: s.color }
+              ? {
+                  ...loc,
+                  name: s.name,
+                  status: s.status,
+                  color: s.color,
+                  attention: s.attention,
+                }
               : loc;
           }),
         );
@@ -339,8 +354,8 @@ export function App() {
           return (
           <div
             key={s.id}
-            className={`session ${s.id === activeId ? "active" : ""}`}
-            onClick={() => setActiveId(s.id)}
+            className={`session ${s.id === activeId ? "active" : ""} ${s.attention ? "attn-row" : ""}`}
+            onClick={() => selectSession(s.id)}
           >
             <span
               className="dot"
@@ -370,6 +385,11 @@ export function App() {
                 title="double-click to rename"
               >
                 {s.name}
+              </span>
+            )}
+            {s.attention && (
+              <span className="attn-dot" title="waiting for you">
+                !
               </span>
             )}
             <span className="status">{s.status === "running" ? "●" : "○"}</span>

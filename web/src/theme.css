@@ -334,6 +334,34 @@ body {
   font-size: 10px;
   color: var(--ink-soft);
 }
+/* Attention nudge: a session rang the bell while you were elsewhere. */
+.attn-dot {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--pink-deep);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 16px;
+  text-align: center;
+  flex: none;
+  animation: attn-pulse 1.1s ease-in-out infinite;
+}
+.attn-dot + .status {
+  margin-left: 6px;
+}
+.session.attn-row {
+  border-color: var(--pink-deep);
+}
+@keyframes attn-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 143, 190, 0.5); }
+  50% { transform: scale(1.12); box-shadow: 0 0 0 5px rgba(255, 143, 190, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attn-dot { animation: none; }
+}
 .session-close {
   border: none;
   background: transparent;
