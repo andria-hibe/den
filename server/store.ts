@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { join, dirname } from "node:path";
+import { mkdirSync } from "node:fs";
 
 // Persisted session metadata. Live PTY processes and scrollback live in memory
 // (server/sessions.ts); this table is what survives a browser refresh or a
@@ -17,8 +18,10 @@ export interface SessionRow {
   lastActive: number;
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DEN_DB ?? join(__dirname, "..", "den.db");
+// Stable per-user location (works identically for the CLI and the packaged
+// desktop app); DEN_DB overrides it (used by tests).
+const DB_PATH = process.env.DEN_DB ?? join(homedir(), ".den", "den.db");
+mkdirSync(dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
