@@ -15,6 +15,11 @@ npm run pack           # build release/mac-arm64/Den.app (unsigned, local)
 npm run typecheck
 ```
 
+> **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
+> typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
+> `ditto` to `/Applications/Den.app` → reopen → `npm run rebuild:node`) for when
+> they say so. They control when the running app is replaced.
+
 **Native-module ABI gotcha (important):** `node-pty` and `better-sqlite3` are
 native and must match the runtime. `npm run app` / `npm run pack` /
 `electron-rebuild` build them for **Electron**; `npm run rebuild:node` builds
