@@ -4,6 +4,7 @@ import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
+import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
@@ -163,6 +164,7 @@ export function App() {
     branch?: string;
     env?: "local" | "worktree";
     name?: string;
+    notepadSeed?: string;
   }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
@@ -235,6 +237,30 @@ export function App() {
           (!!issue.ticketHint && s.ticketHint === issue.ticketHint)),
     );
 
+  // Seed the workspace notepad with a summary of the ticket, so the session
+  // starts with its context; Claude appends progress below.
+  const ticketNotesSeed = (issue: LinearIssue) => {
+    const parts = [
+      `# ${issue.identifier}: ${issue.title}`,
+      "",
+      `**State:** ${issue.state.name}  ·  **Priority:** ${issue.priorityLabel}`,
+    ];
+    if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
+    parts.push(
+      `[Open in Linear](${issue.url})`,
+      "",
+      "## Ticket",
+      "",
+      issue.description?.trim() || "_(no description)_",
+      "",
+      "---",
+      "",
+      "## Progress",
+      "",
+    );
+    return parts.join("\n");
+  };
+
   const openTicket = (issue: LinearIssue) => {
     const existing = sessionForTicket(issue);
     if (existing) {
@@ -271,6 +297,7 @@ export function App() {
       branch: issue.branchName,
       env,
       name: issue.identifier,
+      notepadSeed: ticketNotesSeed(issue),
     });
   };
 
@@ -391,7 +418,12 @@ export function App() {
           <div className="ticket-detail-body">
             <div className="ticket-detail-title">{issue.title}</div>
             {issue.description ? (
-              <div className="ticket-detail-desc">{issue.description}</div>
+              <div
+                className="ticket-detail-desc md"
+                dangerouslySetInnerHTML={{
+                  __html: renderMarkdown(issue.description),
+                }}
+              />
             ) : (
               <div className="placeholder">No description.</div>
             )}

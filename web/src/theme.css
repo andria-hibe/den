@@ -526,28 +526,30 @@ body {
   color: var(--ink-soft);
   font-style: italic;
 }
-.notepad-render h1,
-.notepad-render h2,
-.notepad-render h3,
-.notepad-render h4 {
+/* Rendered markdown (notepad + ticket description) */
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
   margin: 10px 0 6px;
   line-height: 1.25;
 }
-.notepad-render h1 { font-size: 17px; }
-.notepad-render h2 { font-size: 15px; }
-.notepad-render h3 { font-size: 13.5px; }
-.notepad-render p { margin: 6px 0; }
-.notepad-render ul { margin: 6px 0; padding-left: 20px; }
-.notepad-render li { margin: 3px 0; }
-.notepad-render a { color: var(--pink-deep); }
-.notepad-render code {
+.md h1 { font-size: 17px; }
+.md h2 { font-size: 15px; }
+.md h3 { font-size: 13.5px; }
+.md p { margin: 6px 0; }
+.md ul { margin: 6px 0; padding-left: 20px; }
+.md li { margin: 3px 0; }
+.md a { color: var(--pink-deep); }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.md code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 12px;
   background: var(--bg-rail);
   padding: 1px 5px;
   border-radius: 5px;
 }
-.notepad-render pre {
+.md pre {
   background: var(--bg-rail);
   border-radius: 8px;
   padding: 8px 10px;

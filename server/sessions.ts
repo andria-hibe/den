@@ -300,6 +300,7 @@ class SessionManager {
     resumeId?: string;
     ticket?: string;
     look?: boolean;
+    notepadSeed?: string;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -334,7 +335,7 @@ class SessionManager {
 
     // Claude workspace: main pane + shell pane + notepad.
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
-    const file = this.ensureNotepad(groupId);
+    const file = this.ensureNotepad(groupId, opts.notepadSeed);
     const instruction =
       `You're working in a project inside a tool called "den". Keep a running ` +
       `progress log for the developer at the absolute path ${file}. After each ` +
@@ -409,11 +410,11 @@ class SessionManager {
   }
 
   // --- Progress notepad ---
-  private ensureNotepad(groupId: string): string {
+  private ensureNotepad(groupId: string, seed?: string): string {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     const file = notepadPath(groupId);
     if (!existsSync(file)) {
-      writeFileSync(file, "# Progress\n\n");
+      writeFileSync(file, seed ?? "# Progress\n\n");
     }
     return file;
   }

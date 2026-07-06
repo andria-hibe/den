@@ -88,6 +88,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       look?: boolean;
       branch?: string;
       env?: WorkEnv;
+      notepadSeed?: string;
     };
     // Reuse an existing running session for the same ticket (same look/work
     // mode) so we never create duplicate sessions or branches for one issue.
