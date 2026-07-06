@@ -21,12 +21,14 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 function TerminalView({
   session,
   onExit,
+  onTitle,
 }: {
   session: SessionMeta;
   onExit: () => void;
+  onTitle: (name: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  useTerminal(hostRef, session.id, onExit);
+  useTerminal(hostRef, session.id, onExit, onTitle);
   return <div className="term-host" ref={hostRef} />;
 }
 
@@ -123,14 +125,60 @@ export function App() {
       prev.map((s) => (s.id === id ? { ...s, status: "exited" } : s)),
     );
 
+  // Terminal-set title (Claude/shell) for the active session — apply unless
+  // the user is mid-rename of it.
+  const applyTitle = (id: string, name: string) =>
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === id && editingId !== id ? { ...s, name } : s,
+      ),
+    );
+
+  // Poll so auto-titles (and exits) on background sessions reach the rail.
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try {
+        const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+        setSessions((prev) =>
+          prev.map((loc) => {
+            const s = d.sessions.find((x) => x.id === loc.id);
+            return s && editingId !== loc.id
+              ? { ...loc, name: s.name, status: s.status, color: s.color }
+              : loc;
+          }),
+        );
+      } catch {
+        // transient; try again next tick
+      }
+    }, 4000);
+    return () => clearInterval(t);
+  }, [editingId]);
+
   return (
     <div className="app">
-      <div className="topbar">
+      <div
+        className="topbar"
+        style={
+          active
+            ? {
+                background: `linear-gradient(100deg, ${active.color}, color-mix(in srgb, ${active.color}, #ffffff 48%))`,
+              }
+            : undefined
+        }
+      >
         <PixelFox size={30} />
-        <span>den</span>
-        <span style={{ opacity: 0.85, fontWeight: 500, fontSize: 12 }}>
-          your cozy Claude cockpit
-        </span>
+        <span className="wordmark">den</span>
+        {active ? (
+          <span className="topbar-title" title={active.cwd}>
+            <span className="dot" style={{ background: active.color }} />
+            {active.name}
+            <span className="topbar-kind">
+              {active.shell ? "shell" : "claude"}
+            </span>
+          </span>
+        ) : (
+          <span className="tagline">your cozy Claude cockpit</span>
+        )}
         <span
           className="status-fox"
           title={STATUS_TITLE[statusPose]}
@@ -236,6 +284,7 @@ export function App() {
               key={active.id}
               session={active}
               onExit={() => markExited(active.id)}
+              onTitle={(name) => applyTitle(active.id, name)}
             />
           </>
         ) : (

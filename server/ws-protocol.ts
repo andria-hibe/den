@@ -10,4 +10,5 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: "output"; data: string }
   | { type: "exit"; code: number | null; signal?: number }
-  | { type: "ready"; pid: number };
+  | { type: "ready"; pid: number }
+  | { type: "title"; name: string };

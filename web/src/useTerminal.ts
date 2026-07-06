@@ -13,9 +13,12 @@ export function useTerminal(
   hostRef: React.RefObject<HTMLDivElement | null>,
   sessionId: string,
   onExit?: () => void,
+  onTitle?: (name: string) => void,
 ) {
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onTitleRef = useRef(onTitle);
+  onTitleRef.current = onTitle;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -54,6 +57,7 @@ export function useTerminal(
       const msg: ServerMessage = JSON.parse(ev.data);
       if (msg.type === "output") term.write(msg.data);
       else if (msg.type === "exit") onExitRef.current?.();
+      else if (msg.type === "title") onTitleRef.current?.(msg.name);
     };
 
     const disposer = term.onData((data) => send({ type: "input", data }));

@@ -35,6 +35,9 @@ class DenSession {
   private buffer: string[] = [];
   private bufferBytes = 0;
   private listeners = new Set<Listener>();
+  /** Once the user renames, stop auto-updating the title from the terminal. */
+  titleLocked = false;
+  private oscCarry = "";
 
   constructor(
     public id: string,
@@ -73,7 +76,47 @@ class DenSession {
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
     }
+    this.maybeTitle(data);
     this.emit({ type: "output", data });
+  }
+
+  /**
+   * Terminals (incl. Claude Code) announce their title with an OSC escape:
+   * ESC ] 0|1|2 ; <title> BEL (or ST). Pick up the latest one and use it as the
+   * session name — Claude sets this once it has a sense of the topic. Skipped
+   * once the user has renamed manually (titleLocked).
+   */
+  private maybeTitle(chunk: string) {
+    // Only Claude sessions auto-title (it sets a topic-based title). Shells set
+    // the title to the cwd/command on every prompt, which just flaps — those
+    // keep their given name and can still be renamed by hand.
+    if (this.shell || this.titleLocked) return;
+    const data = this.oscCarry + chunk;
+    const re = /\x1b\][012];([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+    let m: RegExpExecArray | null;
+    let latest: string | null = null;
+    while ((m = re.exec(data))) latest = m[1];
+
+    // Carry a trailing, not-yet-terminated OSC across chunk boundaries.
+    const open = data.lastIndexOf("\x1b]");
+    this.oscCarry =
+      open !== -1 && !/[\x07]|\x1b\\/.test(data.slice(open))
+        ? data.slice(open).slice(-512)
+        : "";
+
+    if (latest === null) return;
+    const title = latest.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (title && title !== this.name) {
+      this.name = title;
+      this.lastActive = Date.now();
+      store.update(this.toRow());
+      this.emit({ type: "title", name: title });
+    }
+  }
+
+  /** Lock the title (user renamed) so the terminal can't override it. */
+  lockTitle() {
+    this.titleLocked = true;
   }
 
   private emit(msg: ServerMessage) {
@@ -192,7 +235,10 @@ class SessionManager {
   update(id: string, patch: { name?: string; color?: string }) {
     const s = this.sessions.get(id);
     if (!s) return null;
-    if (patch.name !== undefined) s.name = patch.name;
+    if (patch.name !== undefined) {
+      s.name = patch.name;
+      s.lockTitle(); // manual rename wins over terminal-set titles
+    }
     if (patch.color !== undefined) s.color = patch.color;
     s.lastActive = Date.now();
     store.update(s.toRow());
