@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { PixelFox } from "./PixelFox.tsx";
 
 interface Roots {
   home: string;
@@ -84,7 +85,9 @@ export function NewSessionDialog({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <strong>🦊 new claude session</strong>
+          <strong style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <PixelFox size={30} /> new claude session
+          </strong>
           <button className="btn-ghost" onClick={onClose} title="cancel">
             ×
           </button>

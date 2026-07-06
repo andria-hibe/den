@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
+import { PixelFox } from "./PixelFox.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -86,7 +87,8 @@ export function App() {
   return (
     <div className="app">
       <div className="topbar">
-        🦊 <span>den</span>
+        <PixelFox size={30} />
+        <span>den</span>
         <span style={{ opacity: 0.85, fontWeight: 500, fontSize: 12 }}>
           your cozy Claude cockpit
         </span>
@@ -189,8 +191,9 @@ export function App() {
             />
           </>
         ) : (
-          <div className="placeholder" style={{ margin: "auto" }}>
-            🦊 pick or spawn a session to begin
+          <div className="empty-terminal">
+            <PixelFox size={96} className="fox-bob" />
+            <div className="placeholder">pick or spawn a session to begin</div>
           </div>
         )}
       </main>

@@ -102,6 +102,26 @@ body {
   display: flex;
   flex-direction: column;
 }
+.empty-terminal {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+/* Stepped bob so `top` only ever holds integer values — a fractional offset
+   knocks the sprite off the device-pixel grid and anti-aliases (blurs) it.
+   Whole-pixel steps also read as authentic pixel-art idle motion. */
+.empty-terminal .fox-bob {
+  position: relative;
+  animation: fox-bob 1.8s steps(1, jump-end) infinite;
+}
+@keyframes fox-bob {
+  0% { top: 0; }
+  25% { top: -3px; }
+  50% { top: -5px; }
+  75% { top: -3px; }
+}
 .work {
   grid-area: work;
   padding: 14px;

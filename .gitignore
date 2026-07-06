@@ -5,3 +5,5 @@ release/
 .DS_Store
 den.db
 den.db-*
+build/app-shot*.png
+build/pixel-preview.png
