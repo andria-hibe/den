@@ -6,7 +6,7 @@ interface FileBlock {
   lines: string[];
 }
 
-function classify(line: string): string {
+export function classify(line: string): string {
   if (line.startsWith("diff --git")) return "diff-file";
   if (
     line.startsWith("index ") ||
@@ -40,6 +40,27 @@ function parseFiles(diff: string): FileBlock[] {
     }
   }
   return blocks;
+}
+
+/** A single diff hunk (e.g. the `diff_hunk` GitHub attaches to a review
+ * comment), colour-coded like the full diff view. The last line is the one the
+ * comment is anchored to, so we mark it. */
+export function DiffHunk({ hunk }: { hunk: string }) {
+  const lines = hunk.replace(/\n+$/, "").split("\n");
+  return (
+    <div className="diff-hunk-block">
+      {lines.map((line, i) => (
+        <div
+          key={i}
+          className={`diff-line ${classify(line)}${
+            i === lines.length - 1 ? " diff-anchor" : ""
+          }`}
+        >
+          {line || " "}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function DiffView({

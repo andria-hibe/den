@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { DiffView } from "./DiffView.tsx";
+import { DiffView, DiffHunk } from "./DiffView.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
 import { Fox } from "./Fox.tsx";
@@ -78,11 +78,11 @@ function notePrompt(prNumber: number, n: PrNote & { kind: string }): string {
   );
 }
 
+/** Top-level reviews and issue comments (no code anchor). */
 function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
   const notes = [
     ...detail.reviews.map((r) => ({ ...r, kind: r.state || "review" })),
     ...detail.comments.map((c) => ({ ...c, kind: "comment" })),
-    ...detail.reviewComments.map((c) => ({ ...c, kind: "line comment" })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   if (notes.length === 0)
     return <div className="placeholder">No reviews or comments yet.</div>;
@@ -95,16 +95,10 @@ function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
             <span className={`pr-note-kind ${n.kind.replace(/\s+/g, "-").toLowerCase()}`}>
               {n.kind.replace(/_/g, " ").toLowerCase()}
             </span>
-            {n.path && (
-              <span className="pr-note-loc" title={n.path}>
-                {n.path.split("/").pop()}
-                {n.line ? `:${n.line}` : ""}
-              </span>
-            )}
-            {(n.body || n.diffHunk) && (
+            {n.body && (
               <ToClaude
                 sessionId={sessionId}
-                text={notePrompt(detail.number, n)}
+                text={notePrompt(detail.number, { ...n, kind: n.kind })}
               />
             )}
           </div>
@@ -112,6 +106,54 @@ function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Inline, line-level review comments shown with the code they point at,
+ * grouped by file — a comment-focused diff view. */
+function InlineComments({
+  detail,
+  sessionId,
+}: {
+  detail: PrDetail;
+  sessionId: string;
+}) {
+  if (detail.reviewComments.length === 0) return null;
+  const byFile = new Map<string, PrNote[]>();
+  for (const c of detail.reviewComments) {
+    const key = c.path ?? "(general)";
+    (byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c);
+  }
+  return (
+    <>
+      <hr />
+      <h4>Inline comments</h4>
+      <div className="pr-inline-files">
+        {[...byFile.entries()].map(([file, notes]) => (
+          <div key={file} className="pr-inline-file">
+            <div className="pr-inline-filename" title={file}>
+              {file}
+            </div>
+            {notes.map((n, i) => (
+              <div key={i} className="pr-inline-comment">
+                {n.diffHunk && <DiffHunk hunk={n.diffHunk} />}
+                <div className="pr-note-head">
+                  <strong>{n.author}</strong>
+                  {n.line ? (
+                    <span className="pr-note-loc">line {n.line}</span>
+                  ) : null}
+                  <ToClaude
+                    sessionId={sessionId}
+                    text={notePrompt(detail.number, { ...n, kind: "line comment" })}
+                  />
+                </div>
+                {n.body && <Md text={n.body} />}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -274,6 +316,9 @@ export function PrMyView({
           <hr />
           <h4>Reviews &amp; comments</h4>
           {detail ? <Notes detail={detail} sessionId={sessionId} /> : null}
+          {detail ? (
+            <InlineComments detail={detail} sessionId={sessionId} />
+          ) : null}
         </div>
       </div>
       <Splitter
