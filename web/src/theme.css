@@ -440,6 +440,7 @@ body {
 }
 .ws-main {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -902,7 +903,110 @@ body {
   font-size: 13px;
   line-height: 1.55;
   color: var(--ink);
-  white-space: pre-wrap;
+}
+
+/* ---- GitHub PR review / my-PR views ---- */
+.pr-review,
+.pr-my {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pr-diff-wrap,
+.pr-bottom {
+  min-height: 0;
+  display: flex;
+}
+.diff-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--term-bg);
+  border-radius: 12px;
+  padding: 8px 0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.diff-line {
+  padding: 0 10px;
+  white-space: pre;
+  color: #d9cfe0;
+}
+.diff-file { color: #cdb4f6; font-weight: 700; margin-top: 8px; }
+.diff-meta { color: #8a7a95; }
+.diff-hunk { color: #7fb0d8; background: rgba(180, 216, 246, 0.08); }
+.diff-add { color: #8ee6b0; background: rgba(63, 191, 127, 0.13); }
+.diff-del { color: #ff9db0; background: rgba(255, 92, 122, 0.13); }
+
+.pr-info {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.pr-info-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.pr-info-title {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+.pr-info-scroll h4 {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+}
+.pr-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pr-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pr-note {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+}
+.pr-note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.pr-note-kind {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-rail);
+  color: var(--ink-soft);
+}
+.pr-note-kind.approved { background: var(--mint); color: #1f5a42; }
+.pr-note-kind.changes_requested { background: var(--pink); color: #7a2a45; }
+.pr-prereview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  margin: 2px 4px 12px;
+  cursor: pointer;
 }
 
 .status-fox {

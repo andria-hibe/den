@@ -4,6 +4,8 @@ import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
+import { PrDialog } from "./PrDialog.tsx";
+import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
@@ -49,6 +51,8 @@ export function App() {
     issue: LinearIssue;
     startAtWork: boolean;
   } | null>(null);
+  const [prModal, setPrModal] = useState<PullRequest | null>(null);
+  const [autoReviewPr, setAutoReviewPr] = useState<number | null>(null);
   const [runnRoot, setRunnRoot] = useState<string>("");
 
   useEffect(() => {
@@ -165,6 +169,9 @@ export function App() {
     env?: "local" | "worktree";
     name?: string;
     notepadSeed?: string;
+    view?: "review" | "mypr";
+    pr?: number;
+    prRepo?: string;
   }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
@@ -384,6 +391,54 @@ export function App() {
     );
   };
 
+  // --- GitHub PR → review / edit ---
+  const sessionForPr = (pr: PullRequest) =>
+    sessions.find(
+      (s) => s.role === "main" && s.pr === pr.number && s.prRepo === pr.repo,
+    );
+
+  const openPr = (pr: PullRequest) => {
+    const existing = sessionForPr(pr);
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    setPrModal(pr);
+  };
+
+  const reviewPr = (pr: PullRequest, opts: { preReview: boolean }) => {
+    setPrModal(null);
+    const existing = sessionForPr(pr);
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    if (opts.preReview) setAutoReviewPr(pr.number);
+    addSession({
+      view: "review",
+      pr: pr.number,
+      prRepo: pr.repo,
+      env: "worktree",
+      name: `PR #${pr.number}`,
+    });
+  };
+
+  const editMyPr = (pr: PullRequest, env: "local" | "worktree") => {
+    setPrModal(null);
+    const existing = sessionForPr(pr);
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    addSession({
+      view: "mypr",
+      pr: pr.number,
+      prRepo: pr.repo,
+      env,
+      name: `PR #${pr.number}`,
+    });
+  };
+
   // Ticket detail shown atop a "just looking" session.
   const renderTicketDetail = (ticketId: string | null) => {
     const issue = issues.find((i) => i.identifier === ticketId);
@@ -589,6 +644,37 @@ export function App() {
             </div>
             <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
+        ) : active.view === "review" && active.pr && active.prRepo ? (
+          <PrReviewView
+            key={active.id}
+            repo={active.prRepo}
+            number={active.pr}
+            autoReview={autoReviewPr === active.pr}
+            header={renderHeader(active)}
+            terminal={
+              <TerminalView
+                key={active.id}
+                session={active}
+                onExit={() => markExited(active.id)}
+                onTitle={(name) => applyTitle(active.id, name)}
+              />
+            }
+          />
+        ) : active.view === "mypr" && active.pr && active.prRepo ? (
+          <PrMyView
+            key={active.id}
+            repo={active.prRepo}
+            number={active.pr}
+            header={renderHeader(active)}
+            terminal={
+              <TerminalView
+                key={active.id}
+                session={active}
+                onExit={() => markExited(active.id)}
+                onTitle={(name) => applyTitle(active.id, name)}
+              />
+            }
+          />
         ) : active.look ? (
           <div className="look-view" ref={lookRef}>
             <div className="ws-pane" style={{ flex: `${lookFrac} 1 0` }}>
@@ -679,7 +765,7 @@ export function App() {
 
       {/* Right: work — live GitHub PRs + Linear tickets */}
       <div className="work-col" style={{ width: workW }}>
-        <WorkPanel onOpenTicket={openTicket} />
+        <WorkPanel onOpenTicket={openTicket} onOpenPr={openPr} />
       </div>
       </div>
 
@@ -704,6 +790,15 @@ export function App() {
           onClose={() => setTicketModal(null)}
           onLook={lookAtTicket}
           onWork={workOnTicket}
+        />
+      )}
+
+      {prModal && (
+        <PrDialog
+          pr={prModal}
+          onClose={() => setPrModal(null)}
+          onReview={reviewPr}
+          onEditMine={editMyPr}
         />
       )}
     </div>

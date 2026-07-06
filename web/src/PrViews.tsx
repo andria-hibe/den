@@ -1,0 +1,209 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { DiffView } from "./DiffView.tsx";
+import { renderMarkdown } from "./markdown.ts";
+import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
+import { Fox } from "./Fox.tsx";
+
+interface PrNote {
+  author: string;
+  state?: string;
+  body: string;
+  at: string;
+}
+interface PrDetail {
+  title: string;
+  url: string;
+  body: string;
+  reviews: PrNote[];
+  comments: PrNote[];
+}
+
+function usePrDetail(repo: string, number: number) {
+  const [detail, setDetail] = useState<PrDetail | null>(null);
+  useEffect(() => {
+    fetch(`/api/github/pr?repo=${encodeURIComponent(repo)}&number=${number}`)
+      .then((r) => r.json())
+      .then((d) => !d.error && setDetail(d))
+      .catch(() => {});
+  }, [repo, number]);
+  return detail;
+}
+
+function Md({ text }: { text: string }) {
+  return (
+    <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+  );
+}
+
+function Notes({ detail }: { detail: PrDetail }) {
+  const notes = [
+    ...detail.reviews.map((r) => ({ ...r, kind: r.state || "review" })),
+    ...detail.comments.map((c) => ({ ...c, kind: "comment" })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  if (notes.length === 0)
+    return <div className="placeholder">No reviews or comments yet.</div>;
+  return (
+    <div className="pr-notes">
+      {notes.map((n, i) => (
+        <div key={i} className="pr-note">
+          <div className="pr-note-head">
+            <strong>{n.author}</strong>
+            <span className={`pr-note-kind ${n.kind.toLowerCase()}`}>
+              {n.kind.replace(/_/g, " ").toLowerCase()}
+            </span>
+          </div>
+          {n.body && <Md text={n.body} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Reviewing someone else's PR: diff on top, session + description/review below. */
+export function PrReviewView({
+  repo,
+  number,
+  autoReview,
+  header,
+  terminal,
+}: {
+  repo: string;
+  number: number;
+  autoReview: boolean;
+  header: ReactNode;
+  terminal: ReactNode;
+}) {
+  const detail = usePrDetail(repo, number);
+  const [diff, setDiff] = useState<string>("");
+  const [review, setReview] = useState<string>("");
+  const [reviewing, setReviewing] = useState(false);
+  const started = useRef(false);
+  const [diffFrac, setDiffFrac] = usePersistentNumber("den.prDiffFrac", 0.55);
+  const [sessFrac, setSessFrac] = usePersistentNumber("den.prSessFrac", 0.55);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch(`/api/github/pr/diff?repo=${encodeURIComponent(repo)}&number=${number}`)
+      .then((r) => r.json())
+      .then((d) => !d.error && setDiff(d.diff ?? ""))
+      .catch(() => {});
+  }, [repo, number]);
+
+  const generate = () => {
+    if (reviewing) return;
+    setReviewing(true);
+    fetch("/api/github/pr/review", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo, number }),
+    })
+      .then((r) => r.json())
+      .then((d) => setReview(d.review || `⚠️ ${d.message || d.error || "failed"}`))
+      .catch((e) => setReview(`⚠️ ${e.message}`))
+      .finally(() => setReviewing(false));
+  };
+
+  useEffect(() => {
+    if (autoReview && !started.current) {
+      started.current = true;
+      generate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoReview]);
+
+  return (
+    <div className="pr-review" ref={rootRef}>
+      <div className="pr-diff-wrap" style={{ flex: `${diffFrac} 1 0` }}>
+        <DiffView diff={diff} />
+      </div>
+      <Splitter
+        dir="y"
+        onDrag={(d) =>
+          setDiffFrac((f) => clamp(f + d / (rootRef.current?.clientHeight ?? 1), 0.2, 0.8))
+        }
+      />
+      <div className="pr-bottom" ref={bottomRef} style={{ flex: `${1 - diffFrac} 1 0` }}>
+        <div className="ws-main" style={{ flex: `${sessFrac} 1 0` }}>
+          {header}
+          {terminal}
+        </div>
+        <Splitter
+          dir="x"
+          onDrag={(d) =>
+            setSessFrac((f) => clamp(f + d / (bottomRef.current?.clientWidth ?? 1), 0.25, 0.8))
+          }
+        />
+        <div className="ws-pane pr-info" style={{ flex: `${1 - sessFrac} 1 0` }}>
+          <div className="pr-info-scroll">
+            <div className="pr-info-title">
+              {detail?.title ?? `PR #${number}`}
+            </div>
+            <h4>Description</h4>
+            {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
+            <hr />
+            <div className="pr-review-head">
+              <h4>Claude's review</h4>
+              {!reviewing && (
+                <button className="btn notepad-save" onClick={generate}>
+                  {review ? "re-review" : "ask Claude"}
+                </button>
+              )}
+            </div>
+            {reviewing ? (
+              <div className="loading-row">
+                <Fox pose="walk" size={22} /> reviewing the diff…
+              </div>
+            ) : review ? (
+              <Md text={review} />
+            ) : (
+              <div className="placeholder">Not reviewed yet.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Your own PR: description + colleagues' reviews/comments on top, session below. */
+export function PrMyView({
+  repo,
+  number,
+  header,
+  terminal,
+}: {
+  repo: string;
+  number: number;
+  header: ReactNode;
+  terminal: ReactNode;
+}) {
+  const detail = usePrDetail(repo, number);
+  const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div className="pr-my" ref={rootRef}>
+      <div className="ws-pane pr-info" style={{ flex: `${infoFrac} 1 0` }}>
+        <div className="pr-info-scroll">
+          <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
+          <h4>Description</h4>
+          {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
+          <hr />
+          <h4>Reviews &amp; comments</h4>
+          {detail ? <Notes detail={detail} /> : null}
+        </div>
+      </div>
+      <Splitter
+        dir="y"
+        onDrag={(d) =>
+          setInfoFrac((f) => clamp(f + d / (rootRef.current?.clientHeight ?? 1), 0.15, 0.8))
+        }
+      />
+      <div className="ws-main" style={{ flex: `${1 - infoFrac} 1 0` }}>
+        {header}
+        {terminal}
+      </div>
+    </div>
+  );
+}

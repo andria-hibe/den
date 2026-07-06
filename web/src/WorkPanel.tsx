@@ -26,11 +26,22 @@ function relTime(iso: string): string {
   return `${Math.round(h / 24)}d`;
 }
 
-function PrCard({ pr }: { pr: PullRequest }) {
+function PrCard({
+  pr,
+  onOpen,
+}: {
+  pr: PullRequest;
+  onOpen: (pr: PullRequest) => void;
+}) {
   const check = CHECK_ICON[pr.checks];
   const review = REVIEW_LABEL[pr.review];
   return (
-    <a className="pr-card" href={pr.url} target="_blank" rel="noreferrer">
+    <div
+      className="pr-card ticket-card"
+      onClick={() => onOpen(pr)}
+      role="button"
+      tabIndex={0}
+    >
       <div className="pr-top">
         <span className={`pr-check ${check.cls}`} title={`checks ${pr.checks}`}>
           {check.icon}
@@ -39,6 +50,16 @@ function PrCard({ pr }: { pr: PullRequest }) {
           {pr.repo.split("/")[1] ?? pr.repo} #{pr.number}
         </span>
         {pr.isDraft && <span className="pr-badge draft">draft</span>}
+        <a
+          className="ticket-ext"
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          title="open on GitHub"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ↗
+        </a>
         <span className="pr-time">{relTime(pr.updatedAt)}</span>
       </div>
       <div className="pr-title">{pr.title}</div>
@@ -53,11 +74,19 @@ function PrCard({ pr }: { pr: PullRequest }) {
           </span>
         )}
       </div>
-    </a>
+    </div>
   );
 }
 
-function Section({ title, prs }: { title: string; prs: PullRequest[] }) {
+function Section({
+  title,
+  prs,
+  onOpenPr,
+}: {
+  title: string;
+  prs: PullRequest[];
+  onOpenPr: (pr: PullRequest) => void;
+}) {
   return (
     <div className="pr-section">
       <div className="pr-section-title">
@@ -68,7 +97,9 @@ function Section({ title, prs }: { title: string; prs: PullRequest[] }) {
           nothing here 🌿
         </div>
       ) : (
-        prs.map((pr) => <PrCard key={`${pr.repo}#${pr.number}`} pr={pr} />)
+        prs.map((pr) => (
+          <PrCard key={`${pr.repo}#${pr.number}`} pr={pr} onOpen={onOpenPr} />
+        ))
       )}
     </div>
   );
@@ -76,8 +107,10 @@ function Section({ title, prs }: { title: string; prs: PullRequest[] }) {
 
 export function WorkPanel({
   onOpenTicket,
+  onOpenPr,
 }: {
   onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
+  onOpenPr: (pr: PullRequest) => void;
 }) {
   const [data, setData] = useState<PrBuckets | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,8 +174,16 @@ export function WorkPanel({
           )}
           {data && (
             <>
-              <Section title="review requested" prs={data.reviewRequested} />
-              <Section title="my open PRs" prs={data.authored} />
+              <Section
+                title="review requested"
+                prs={data.reviewRequested}
+                onOpenPr={onOpenPr}
+              />
+              <Section
+                title="my open PRs"
+                prs={data.authored}
+                onOpenPr={onOpenPr}
+              />
             </>
           )}
         </div>
