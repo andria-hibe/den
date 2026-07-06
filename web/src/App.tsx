@@ -358,7 +358,9 @@ export function App() {
   const renderHeader = (s: SessionMeta) => (
     <div className="term-header">
       <span className="dot" style={{ background: s.color }} />
-      <strong>{s.name}</strong>
+      <strong className="term-name" title={s.name}>
+        {s.name}
+      </strong>
       <span className="swatches">
         {COLORS.map((c) => (
           <button
@@ -628,7 +630,7 @@ export function App() {
                   setEditingId(s.id);
                   setDraft(s.name);
                 }}
-                title="double-click to rename"
+                title={`${s.name}\n(double-click to rename)`}
               >
                 {s.name}
               </span>
