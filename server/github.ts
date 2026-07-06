@@ -211,6 +211,9 @@ export interface PrReviewNote {
   state?: string; // reviews only
   body: string;
   at: string;
+  path?: string; // inline review comments only
+  line?: number; // inline review comments only
+  diffHunk?: string; // inline review comments only
 }
 export interface PrDetail {
   number: number;
@@ -222,6 +225,7 @@ export interface PrDetail {
   isMine: boolean;
   reviews: PrReviewNote[];
   comments: PrReviewNote[];
+  reviewComments: PrReviewNote[]; // inline, line-level comments on the diff
 }
 
 export async function getPrDetail(repo: string, number: number): Promise<PrDetail> {
@@ -261,7 +265,43 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
       body: c.body ?? "",
       at: c.createdAt,
     })),
+    reviewComments: await getReviewComments(repo, number),
   };
+}
+
+/** Inline, line-level review comments on the diff (not returned by pr view). */
+async function getReviewComments(
+  repo: string,
+  number: number,
+): Promise<PrReviewNote[]> {
+  try {
+    const out = await gh([
+      "api",
+      "--paginate",
+      `repos/${repo}/pulls/${number}/comments`,
+    ]);
+    const arr = JSON.parse(out) as {
+      user?: { login: string };
+      body: string;
+      path?: string;
+      line?: number | null;
+      original_line?: number | null;
+      diff_hunk?: string;
+      created_at: string;
+    }[];
+    return arr
+      .filter((c) => c.body)
+      .map((c) => ({
+        author: c.user?.login ?? "?",
+        body: c.body ?? "",
+        path: c.path,
+        line: c.line ?? c.original_line ?? undefined,
+        diffHunk: c.diff_hunk,
+        at: c.created_at,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export async function getPrDiff(repo: string, number: number): Promise<string> {

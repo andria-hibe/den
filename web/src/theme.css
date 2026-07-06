@@ -1079,6 +1079,23 @@ body {
 }
 .pr-note-kind.approved { background: var(--mint); color: #1f5a42; }
 .pr-note-kind.changes_requested { background: var(--pink); color: #7a2a45; }
+.pr-note-kind.line-comment { background: var(--lilac); color: #4a3a6a; }
+.pr-note-loc {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.to-claude {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
 .pr-prereview {
   display: flex;
   align-items: center;

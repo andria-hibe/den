@@ -722,6 +722,7 @@ export function App() {
             key={active.id}
             repo={active.prRepo}
             number={active.pr}
+            sessionId={active.id}
             header={renderHeader(active)}
             terminal={
               <TerminalView

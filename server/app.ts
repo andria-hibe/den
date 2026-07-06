@@ -170,6 +170,24 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
+  // Paste text into a session's Claude prompt (bracketed paste keeps multi-line
+  // input as one entry and does not auto-submit — the user reviews then sends).
+  app.post("/api/sessions/:id/paste", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { text } = (req.body ?? {}) as { text?: string };
+    const session = sessions.get(id);
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    if (!text) {
+      reply.code(400);
+      return { error: "text_required" };
+    }
+    session.write(`\x1b[200~${text}\x1b[201~`);
+    return { ok: true };
+  });
+
   app.delete("/api/sessions/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const ok = sessions.remove(id);

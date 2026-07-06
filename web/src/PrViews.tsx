@@ -9,13 +9,18 @@ interface PrNote {
   state?: string;
   body: string;
   at: string;
+  path?: string;
+  line?: number;
+  diffHunk?: string;
 }
 interface PrDetail {
+  number: number;
   title: string;
   url: string;
   body: string;
   reviews: PrNote[];
   comments: PrNote[];
+  reviewComments: PrNote[];
 }
 
 function usePrDetail(repo: string, number: number) {
@@ -35,10 +40,49 @@ function Md({ text }: { text: string }) {
   );
 }
 
-function Notes({ detail }: { detail: PrDetail }) {
+/** Button that pastes a framed instruction into the session's Claude prompt. */
+function ToClaude({ sessionId, text }: { sessionId: string; text: string }) {
+  const [sent, setSent] = useState(false);
+  const send = () => {
+    fetch(`/api/sessions/${sessionId}/paste`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then(() => {
+        setSent(true);
+        setTimeout(() => setSent(false), 2000);
+      })
+      .catch(() => {});
+  };
+  return (
+    <button
+      className="btn to-claude"
+      onClick={send}
+      title="Paste this into Claude to action it"
+    >
+      {sent ? "✓ sent to Claude" : "→ Claude"}
+    </button>
+  );
+}
+
+/** Build the prompt Claude receives when actioning a comment. */
+function notePrompt(prNumber: number, n: PrNote & { kind: string }): string {
+  const where = n.path
+    ? ` on \`${n.path}\`${n.line ? ` (line ${n.line})` : ""}`
+    : "";
+  const hunk = n.diffHunk ? `\n\nRelevant diff:\n\`\`\`diff\n${n.diffHunk}\n\`\`\`` : "";
+  return (
+    `Please action this ${n.kind.replace(/_/g, " ").toLowerCase()} from ` +
+    `@${n.author}${where} on PR #${prNumber}:\n\n"${n.body}"${hunk}`
+  );
+}
+
+function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
   const notes = [
     ...detail.reviews.map((r) => ({ ...r, kind: r.state || "review" })),
     ...detail.comments.map((c) => ({ ...c, kind: "comment" })),
+    ...detail.reviewComments.map((c) => ({ ...c, kind: "line comment" })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   if (notes.length === 0)
     return <div className="placeholder">No reviews or comments yet.</div>;
@@ -48,9 +92,21 @@ function Notes({ detail }: { detail: PrDetail }) {
         <div key={i} className="pr-note">
           <div className="pr-note-head">
             <strong>{n.author}</strong>
-            <span className={`pr-note-kind ${n.kind.toLowerCase()}`}>
+            <span className={`pr-note-kind ${n.kind.replace(/\s+/g, "-").toLowerCase()}`}>
               {n.kind.replace(/_/g, " ").toLowerCase()}
             </span>
+            {n.path && (
+              <span className="pr-note-loc" title={n.path}>
+                {n.path.split("/").pop()}
+                {n.line ? `:${n.line}` : ""}
+              </span>
+            )}
+            {(n.body || n.diffHunk) && (
+              <ToClaude
+                sessionId={sessionId}
+                text={notePrompt(detail.number, n)}
+              />
+            )}
           </div>
           {n.body && <Md text={n.body} />}
         </div>
@@ -194,11 +250,13 @@ export function PrReviewView({
 export function PrMyView({
   repo,
   number,
+  sessionId,
   header,
   terminal,
 }: {
   repo: string;
   number: number;
+  sessionId: string;
   header: ReactNode;
   terminal: ReactNode;
 }) {
@@ -215,7 +273,7 @@ export function PrMyView({
           {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
           <hr />
           <h4>Reviews &amp; comments</h4>
-          {detail ? <Notes detail={detail} /> : null}
+          {detail ? <Notes detail={detail} sessionId={sessionId} /> : null}
         </div>
       </div>
       <Splitter
