@@ -22,7 +22,16 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   // an empty body when content-type is application/json (breaks DELETE).
   const headers = init?.body ? { "content-type": "application/json" } : undefined;
   const res = await fetch(url, { ...init, headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.message || j?.error) msg = j.message || j.error;
+    } catch {
+      // no JSON body
+    }
+    throw new Error(msg);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -53,6 +62,7 @@ export function App() {
   } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   const [autoReviewPr, setAutoReviewPr] = useState<number | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
   const [runnRoot, setRunnRoot] = useState<string>("");
 
   useEffect(() => {
@@ -148,6 +158,12 @@ export function App() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!errMsg) return;
+    const t = setTimeout(() => setErrMsg(null), 9000);
+    return () => clearTimeout(t);
+  }, [errMsg]);
+
   const active = sessions.find((s) => s.id === activeId) ?? null;
   // Sessions shown in the rail (one per workspace); sub-shells are hidden.
   const rail = sessions.filter((s) => s.role === "main");
@@ -172,15 +188,20 @@ export function App() {
     view?: "review" | "mypr";
     pr?: number;
     prRepo?: string;
+    initialPrompt?: string;
   }) => {
-    const meta = await api<SessionMeta>("/api/sessions", {
-      method: "POST",
-      body: JSON.stringify(opts),
-    });
-    // Refetch so a Claude workspace's sibling shell pane lands in state too.
-    const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
-    setSessions(d.sessions);
-    setActiveId(meta.id);
+    try {
+      const meta = await api<SessionMeta>("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify(opts),
+      });
+      // Refetch so a Claude workspace's sibling shell pane lands in state too.
+      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+      setSessions(d.sessions);
+      setActiveId(meta.id);
+    } catch (e) {
+      setErrMsg((e as Error).message);
+    }
   };
 
   const patch = async (id: string, body: { name?: string; color?: string }) => {
@@ -268,6 +289,22 @@ export function App() {
     return parts.join("\n");
   };
 
+  // Claude's first message when you start work: the ticket + a request to
+  // explain and propose before doing anything.
+  const ticketPrompt = (issue: LinearIssue) =>
+    [
+      `I'm starting work on this Linear ticket:`,
+      "",
+      `${issue.identifier}: ${issue.title}`,
+      `State: ${issue.state.name} · Priority: ${issue.priorityLabel}`,
+      "",
+      issue.description?.trim() || "(no description provided)",
+      "",
+      "Before writing any code: explain the issue in your own words and propose " +
+        "a solution or approach. Don't make changes yet — I'll decide the next " +
+        "step after your proposal.",
+    ].join("\n");
+
   const openTicket = (issue: LinearIssue) => {
     const existing = sessionForTicket(issue);
     if (existing) {
@@ -305,6 +342,7 @@ export function App() {
       env,
       name: issue.identifier,
       notepadSeed: ticketNotesSeed(issue),
+      initialPrompt: ticketPrompt(issue),
     });
   };
 
@@ -419,6 +457,7 @@ export function App() {
       pr: pr.number,
       prRepo: pr.repo,
       env: "worktree",
+      branch: pr.branch,
       name: `PR #${pr.number}`,
     });
   };
@@ -435,6 +474,7 @@ export function App() {
       pr: pr.number,
       prRepo: pr.repo,
       env,
+      branch: pr.branch,
       name: `PR #${pr.number}`,
     });
   };
@@ -800,6 +840,13 @@ export function App() {
           onReview={reviewPr}
           onEditMine={editMyPr}
         />
+      )}
+
+      {errMsg && (
+        <div className="toast" onClick={() => setErrMsg(null)}>
+          <span>⚠️ {errMsg}</span>
+          <button className="toast-x">×</button>
+        </div>
       )}
     </div>
   );

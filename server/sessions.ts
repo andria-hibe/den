@@ -316,6 +316,7 @@ class SessionManager {
     view?: "review" | "mypr";
     pr?: number;
     prRepo?: string;
+    initialPrompt?: string;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -372,6 +373,8 @@ class SessionManager {
       ...(opts.resumeId ? ["--resume", opts.resumeId] : ["-n", name]),
       "--add-dir", PROGRESS_DIR,
       "--append-system-prompt", instruction,
+      // An initial prompt (e.g. the ticket) becomes Claude's first message.
+      ...(opts.initialPrompt && !opts.resumeId ? [opts.initialPrompt] : []),
     ];
     main.branch = branch;
     main.ticket = opts.ticket ?? null;

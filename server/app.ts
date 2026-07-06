@@ -98,6 +98,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       view?: "review" | "mypr";
       pr?: number;
       prRepo?: string;
+      initialPrompt?: string;
     };
     // Reuse an existing running session for the same ticket (same look/work
     // mode) so we never create duplicate sessions or branches for one issue.
@@ -139,7 +140,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // PR review / edit: check out the PR so Claude has the code.
     if (body.pr && body.prRepo && body.env) {
       try {
-        const { cwd } = checkoutPr(roots().runn, body.prRepo, body.pr, body.env);
+        const { cwd } = checkoutPr(
+          roots().runn, body.prRepo, body.pr, body.env, body.branch,
+        );
         body.cwd = cwd;
       } catch (err) {
         reply.code(500);

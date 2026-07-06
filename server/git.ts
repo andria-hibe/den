@@ -10,6 +10,22 @@ function git(cwd: string, args: string[], timeout = 20000): string {
   }).trim();
 }
 
+/** If a branch is already checked out in a worktree, return that path. */
+function worktreeForBranch(repo: string, branch: string): string | null {
+  try {
+    const out = git(repo, ["worktree", "list", "--porcelain"]);
+    for (const block of out.split(/\n\n+/)) {
+      const lines = block.split("\n");
+      const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
+      const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
+      if (path && ref && ref.replace("refs/heads/", "") === branch) return path;
+    }
+  } catch {
+    // not a repo / no worktrees
+  }
+  return null;
+}
+
 function branchExists(repo: string, branch: string): boolean {
   try {
     git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]);
@@ -54,6 +70,11 @@ export function prepareWork(
   branch: string,
   env: WorkEnv,
 ): { cwd: string } {
+  // If the branch already lives in a worktree (e.g. Claude Code's own), reuse it
+  // rather than creating a duplicate or erroring that it's already checked out.
+  const existingWt = worktreeForBranch(repo, branch);
+  if (existingWt) return { cwd: existingWt };
+
   const exists = branchExists(repo, branch);
 
   if (env === "worktree") {
@@ -86,7 +107,13 @@ export function checkoutPr(
   ghRepo: string,
   number: number,
   env: WorkEnv,
+  branch?: string,
 ): { cwd: string } {
+  // Reuse an existing worktree for the PR's branch if there is one.
+  if (branch) {
+    const existingWt = worktreeForBranch(repoDir, branch);
+    if (existingWt) return { cwd: existingWt };
+  }
   if (env === "worktree") {
     const dir = join(repoDir, ".claude-worktrees", `pr-${number}`);
     if (!existsSync(dir)) {
