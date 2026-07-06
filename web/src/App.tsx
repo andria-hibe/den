@@ -6,6 +6,7 @@ import { NotepadPane } from "./NotepadPane.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
+import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -40,6 +41,14 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [statusPose, setStatusPose] = useState<FoxPose>("sit");
+
+  // Resizable panels (persisted).
+  const [railW, setRailW] = usePersistentNumber("den.railW", 240);
+  const [workW, setWorkW] = usePersistentNumber("den.workW", 300);
+  const [mainFrac, setMainFrac] = usePersistentNumber("den.wsMainFrac", 0.6);
+  const [shellFrac, setShellFrac] = usePersistentNumber("den.wsShellFrac", 0.5);
+  const wsRef = useRef<HTMLDivElement>(null);
+  const wsBottomRef = useRef<HTMLDivElement>(null);
 
   // The topbar fox reflects your GitHub PR health: happy when everything's
   // green, alert when a check is failing or changes were requested.
@@ -235,8 +244,9 @@ export function App() {
         </span>
       </div>
 
+      <div className="app-body">
       {/* Left: sessions */}
-      <aside className="panel rail">
+      <aside className="panel rail" style={{ width: railW }}>
         <h2>sessions</h2>
         <div className="session-list">
         {rail.map((s) => (
@@ -302,6 +312,11 @@ export function App() {
         </div>
       </aside>
 
+      <Splitter
+        dir="x"
+        onDrag={(d) => setRailW((w) => clamp(w + d, 170, 480))}
+      />
+
       {/* Center: terminal / workspace */}
       <main className="panel term-wrap">
         {!active ? (
@@ -325,8 +340,8 @@ export function App() {
             />
           </>
         ) : (
-          <div className="workspace">
-            <div className="ws-main">
+          <div className="workspace" ref={wsRef}>
+            <div className="ws-main" style={{ flex: `${mainFrac} 1 0` }}>
               {renderHeader(active)}
               <TerminalView
                 key={active.id}
@@ -335,8 +350,19 @@ export function App() {
                 onTitle={(name) => applyTitle(active.id, name)}
               />
             </div>
-            <div className="ws-bottom">
-              <div className="ws-pane ws-shell">
+            <Splitter
+              dir="y"
+              onDrag={(d) => {
+                const h = wsRef.current?.clientHeight ?? 1;
+                setMainFrac((f) => clamp(f + d / h, 0.2, 0.85));
+              }}
+            />
+            <div
+              className="ws-bottom"
+              ref={wsBottomRef}
+              style={{ flex: `${1 - mainFrac} 1 0` }}
+            >
+              <div className="ws-pane ws-shell" style={{ flex: `${shellFrac} 1 0` }}>
                 <div className="pane-label">🖥 terminal</div>
                 {shellPane ? (
                   <TerminalView
@@ -349,7 +375,14 @@ export function App() {
                   <div className="placeholder">shell ended</div>
                 )}
               </div>
-              <div className="ws-pane ws-note">
+              <Splitter
+                dir="x"
+                onDrag={(d) => {
+                  const w = wsBottomRef.current?.clientWidth ?? 1;
+                  setShellFrac((f) => clamp(f + d / w, 0.2, 0.85));
+                }}
+              />
+              <div className="ws-pane ws-note" style={{ flex: `${1 - shellFrac} 1 0` }}>
                 <NotepadPane groupId={active.groupId} />
               </div>
             </div>
@@ -357,8 +390,13 @@ export function App() {
         )}
       </main>
 
+      <Splitter dir="x" onDrag={(d) => setWorkW((w) => clamp(w - d, 220, 560))} />
+
       {/* Right: work — live GitHub PRs */}
-      <WorkPanel />
+      <div className="work-col" style={{ width: workW }}>
+        <WorkPanel />
+      </div>
+      </div>
 
       {showNew && (
         <NewSessionDialog

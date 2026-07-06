@@ -58,19 +58,68 @@ body {
 
 /* ---- Layout ---- */
 .app {
-  display: grid;
-  grid-template-columns: 240px 1fr 300px;
-  grid-template-rows: 48px 1fr;
-  grid-template-areas:
-    "topbar topbar topbar"
-    "rail   term   work";
+  display: flex;
+  flex-direction: column;
   height: 100%;
   gap: 10px;
   padding: 10px;
 }
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.work-col {
+  flex: none;
+  min-height: 0;
+  display: flex;
+}
+.work-col .work {
+  flex: 1;
+}
+
+/* Draggable dividers between panels. */
+.splitter {
+  flex: none;
+  position: relative;
+  touch-action: none;
+}
+.splitter-x {
+  width: 10px;
+  cursor: col-resize;
+}
+.splitter-y {
+  height: 10px;
+  cursor: row-resize;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 0.12s ease;
+}
+.splitter-x::after {
+  top: 50%;
+  left: 3px;
+  width: 4px;
+  height: 36px;
+  transform: translateY(-50%);
+}
+.splitter-y::after {
+  left: 50%;
+  top: 3px;
+  height: 4px;
+  width: 36px;
+  transform: translateX(-50%);
+}
+.splitter:hover::after {
+  background: var(--pink-deep);
+}
 
 .topbar {
-  grid-area: topbar;
+  flex: none;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -135,7 +184,7 @@ body {
 }
 
 .rail {
-  grid-area: rail;
+  flex: none;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -159,7 +208,8 @@ body {
   flex: 1;
 }
 .term-wrap {
-  grid-area: term;
+  flex: 1;
+  min-width: 0;
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -220,7 +270,6 @@ body {
   100% { opacity: 0; transform: translate(18px, -46px) rotate(8deg); }
 }
 .work {
-  grid-area: work;
   padding: 14px;
 }
 
@@ -351,19 +400,15 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 .ws-main {
-  flex: 3;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .ws-bottom {
-  flex: 2;
   min-height: 0;
   display: flex;
-  gap: 8px;
 }
 .ws-pane {
   flex: 1;
