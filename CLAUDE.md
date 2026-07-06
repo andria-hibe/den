@@ -42,8 +42,12 @@ WebSocket; everything else is REST.
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot).
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
-  review-requested → `isMine`), `getPrDetail` (body + reviews/comments),
-  `getPrDiff`, and `reviewPr` (headless `claude -p` fed the diff → markdown).
+  review-requested → `isMine`); `getPrDetail` (body + reviews + issue comments +
+  **inline review comments** with `path`/`line`/`diffHunk`, fetched via
+  `gh api .../pulls/N/comments` since `pr view` omits them); `getPrDiff`;
+  `reviewPr` (headless `claude -p` fed the diff → markdown, via `claudePrint`);
+  and `summarizePrDiff` (headless `claude -p` → `[{file, summary}]` JSON, one
+  line per file, for the review diff's side column).
 - `server/linear.ts` — Linear GraphQL (`@linear/sdk` not used; raw fetch).
   Assigned issues + `branchName` + `description`. Key in the settings table or
   `LINEAR_API_KEY`. **Linear = runn only.**
@@ -61,6 +65,13 @@ WebSocket; everything else is REST.
   `TicketDialog`, `PrDialog`, `PrViews` (PrReviewView/PrMyView), `DiffView`,
   `NotepadPane`, `NewSessionDialog`, `Fox`/`foxSprites` + `PixelFox`, `Splitter`,
   `useTerminal`, `markdown.ts`, `theme.css`.
+  - `DiffView.tsx` exports `classify(line)` (diff-line CSS class) + `DiffHunk`
+    (renders one `diff_hunk`, marks the anchored last line) besides `DiffView`
+    (per-file blocks: summary column left, diff right).
+  - `PrViews.tsx`: `PrReviewView` (others' PRs — diff + per-file summaries +
+    Claude review); `PrMyView` (your PRs — description, top-level `Notes`, and
+    `InlineComments`: line-level comments grouped by file, each shown with its
+    diff hunk); `ToClaude` button pastes a framed instruction into the session.
 
 ## Data model
 
@@ -100,9 +111,21 @@ to sync names/status/attention.
   to explain the issue + propose a solution before coding. Look = ticket detail
   (markdown) + a Claude pane.
 - **GitHub PR → Review / Edit**. Others' PRs: check out into a worktree, show the
-  diff + description + optional headless Claude review + a Claude session. Your
-  PRs: description + colleagues' reviews/comments + a Claude session on the
-  branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
+  diff + description + optional headless Claude review + a Claude session. The
+  review diff is grouped per file with a **left summary column** (headless Claude
+  one-liner per file) aligned to each file's block, so you can scan changes at a
+  glance. Your PRs: description + colleagues' reviews/comments + a Claude session
+  on the branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
+- **Inline comments → Claude** (your PRs). The my-PR view has an "Inline
+  comments" section: line-level review comments grouped by file, each rendered
+  **with the diff hunk it points at** (anchored line marked) so you see the code
+  it's about. Every review / comment / inline comment has a **"→ Claude"** button
+  that pastes a framed instruction (author, `file:line`, body, diff hunk) into
+  the session's Claude prompt via `POST /api/sessions/:id/paste` (bracketed
+  paste — keeps multi-line as one entry, does **not** auto-submit).
+- **Colour picker**: the workspace-header colour is a single dot button that pops
+  the swatch list on click (was always-on swatches eating header space). The
+  topbar title chip sizes to its content, ellipsis only on overflow.
 - **Reuse everywhere**: clicking a ticket/PR reuses an existing session; branches
   and worktrees (incl. Claude Code's own `.claude/worktrees/`) are reused, never
   duplicated. Error toasts surface any failure.
@@ -125,9 +148,16 @@ to sync names/status/attention.
 No automated suite yet — verification is scripted + visual:
 - Run an **isolated** server: `DEN_DB=<tmp> PORT=4399 npm run start` (node ABI).
 - Screenshot the UI by loading the URL in a headless Electron window and calling
-  `webContents.capturePage()` (see `scripts/shot.cjs`); drive clicks via
-  `executeJavaScript`. **Read the PNG back to eyeball it.** Keep window width so
-  the 2× capture stays < 2000px to avoid the harness downscaling (blurs pixels).
+  `webContents.capturePage()` (see `scripts/shot.cjs`): `SHOT_URL=... SHOT_OUT=x.png
+  npx electron scripts/shot.cjs`, then **read the PNG back to eyeball it**. Keep
+  window width so the 2× capture stays < 2000px to avoid downscaling (blurs pixels).
+- **Cheap CSS/layout check** (used a lot): write a static HTML into the scratchpad
+  that `<link>`s the real `web/src/theme.css` (via `file://`) and hand-builds the
+  component's DOM with representative data, then `shot.cjs` it. Avoids the full
+  worktree + headless-Claude cost when you only need to verify styling/layout.
+- Verify data/endpoints against **real** PRs/tickets (e.g. `getPrDetail`,
+  `summarizePrDiff`, the paste endpoint) with a short Node fetch script on an
+  isolated server — separate from the visual layout check above.
 - In this sandbox, spawning Electron/`gh`/`claude`/git needs
   `dangerouslyDisableSandbox: true`.
 - **zsh chokes on UUIDs** in `$(...)` (bad-math errors) — do multi-step API tests
@@ -141,13 +171,17 @@ No automated suite yet — verification is scripted + visual:
 1. **Sign & notarize** the app (currently unsigned `identity: null`) if it'll be
    shared; add auto-update. A couple of recent commits are unsigned (1Password
    was locked) — re-sign if desired.
-2. **My-PR (Edit) flow** is only lightly exercised — do a full click-through:
-   description+comments render, branch checks out/reuses, Claude can push changes.
+2. **My-PR (Edit) flow**: comment rendering + inline-comment diffs + "→ Claude"
+   are built & verified, but the end-to-end *edit* path (branch checks out/reuses,
+   Claude makes & pushes changes) still needs a live click-through with a push.
 3. **Feed Linear ticket status into the fox** too (topbar fox is GitHub-only).
 4. **Worktree lifecycle**: offer to remove Den-created worktrees
    (`runn/.claude-worktrees/pr-*`) when closing a session; list/adopt existing
    ones.
-5. **Post reviews back to GitHub** (`gh pr review/comment`) from the review view.
+5. **Post back to GitHub** (`gh pr review/comment`, resolve threads). The
+   "→ Claude" buttons only *hand a comment to Claude* to action locally — they
+   don't reply to or resolve the thread on GitHub. Natural next step: let Claude
+   post its response / mark the inline comment resolved from Den.
 6. **Persistence**: `view`/`ticket`/`pr` are in-memory only — persist them so the
    rail restores full context after a server restart (columns like groupId/role
    already migrate in `store.ts`).
@@ -156,8 +190,9 @@ No automated suite yet — verification is scripted + visual:
 8. **Native notifications** for attention (bell) and PR check failures.
 9. **Token awareness**: headless PR review + progress logging spend tokens — add
    visible toggles / cost hints.
-10. **Diff view**: syntax highlighting + collapsible files; **notepad**: auto-
-    scroll to newest.
+10. **Diff view**: now grouped per file with a Claude summary column (review) and
+    per-comment hunks (my-PR). Still missing: syntax highlighting + collapsible
+    files. **Notepad**: auto-scroll to newest.
 11. **Dual-ABI friction**: consider shipping prebuilt binaries for both Node and
     Electron so `dev` and `app` don't need rebuilds when switching.
 12. **Tests**: add a real suite (the scripted checks above are ad-hoc).
