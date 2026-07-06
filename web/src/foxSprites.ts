@@ -11,7 +11,7 @@ export const FOX_PALETTE: Record<string, string> = {
   p: "#ff9ec4", // pink nose / inner ear / blush
   z: "#b9a7c9", // sleepy z
   s: "#ffe08a", // sparkle
-  x: "#ff8fb0", // alert mark
+  x: "#ff5c7a", // alert mark (bold)
 };
 
 // Sitting, front 3/4, fluffy tail curled to the right. Idle / default.
@@ -84,13 +84,13 @@ const HAPPY = [
   "..DDDD....DDDD....",
 ];
 
-// Alert: a pink "!" popping up at the top-right; attentive eyes.
+// Alert: a bold "!" popping up at the top-right.
 const ALERT = [
-  "...DD.......DD.xx.",
-  "..DOOD.....DOODxx.",
-  "..DOpOD...DOpOD...",
-  "..DOOOODDDOOOODx..",
-  "..DOOOOOOOOOOOD...",
+  "...DD.......DD..xx",
+  "..DOOD.....DOOD.xx",
+  "..DOpOD...DOpOD.xx",
+  "..DOOOODDDOOOOD...",
+  "..DOOOOOOOOOOOD.xx",
   "..DOOOOOOOOOOOD...",
   ".DOOeeOOOOeeOOD...",
   ".DOOeeOOOOeeOOD...",
@@ -107,33 +107,36 @@ const ALERT = [
   "..DDDD....DDDD....",
 ];
 
-// Side view, facing right, for the walk cycle (busy / loading). Two frames.
+// Side view, facing right, for the walk cycle (busy / loading). The big
+// upswept white-tipped tail + pointy snout are the fox tells. Two frames.
 const WALK1 = [
-  "......DD.DD......",
-  "..DD.DOODOOD.....",
-  ".DooDDOOOOOOD....",
-  ".DoowDOOOeOOODD..",
-  "DooowOOOOOOOOOOp.",
-  "DoowOOOOOOOOOOOD.",
-  ".DDDOwwwwwwwwOOD.",
-  "...DOwwwwwwwwwOD.",
-  "...DOODOOODOOOD..",
-  "...DD.DOD.DOD.D..",
-  ".....DD...DD.....",
+  "..DwD........DD...",
+  ".DwwoD......DOOD..",
+  ".DwoooD....DOOOOD.",
+  "DwooooD...DOOeOOOD",
+  "DwooooD..DOOOOOOOD",
+  "DoooooD.DOOOOOOOOp",
+  ".DooooOOOOOOOOOOOD",
+  ".DDooOwwwwwwwwwOOD",
+  "...DOwwwwwwwwwwOD.",
+  "...DOODOOODOOOD...",
+  "...DOD.DOOD.DOD...",
+  "...DD....DD...DD..",
 ];
 
 const WALK2 = [
-  "......DD.DD......",
-  "..DD.DOODOOD.....",
-  ".DooDDOOOOOOD....",
-  ".DoowDOOOeOOODD..",
-  "DooowOOOOOOOOOOp.",
-  "DoowOOOOOOOOOOOD.",
-  ".DDDOwwwwwwwwOOD.",
-  "...DOwwwwwwwwwOD.",
-  "...DOODOOODOOOD..",
-  "....DODD.DODD.D..",
-  "....DD.....DD....",
+  "..DwD........DD...",
+  ".DwwoD......DOOD..",
+  ".DwoooD....DOOOOD.",
+  "DwooooD...DOOeOOOD",
+  "DwooooD..DOOOOOOOD",
+  "DoooooD.DOOOOOOOOp",
+  ".DooooOOOOOOOOOOOD",
+  ".DDooOwwwwwwwwwOOD",
+  "...DOwwwwwwwwwwOD.",
+  "...DOODOOODOOOD...",
+  "..DODD.DOOD.DDOD..",
+  "..DD.....DD....DD.",
 ];
 
 export type FoxPose = "sit" | "sleep" | "happy" | "alert" | "walk";

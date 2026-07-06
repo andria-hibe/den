@@ -13,7 +13,7 @@ const PALETTE = {
   p: "#ff9ec4", // pink nose / inner ear / blush
   z: "#b9a7c9", // sleepy z
   s: "#ffe08a", // sparkle
-  x: "#ff8fb0", // alert mark
+  x: "#ff5c7a", // alert mark (bold)
 };
 
 // --- SPRITES ---------------------------------------------------------------
@@ -62,9 +62,9 @@ function toSvg(grid, px) {
 
 // Sleeping: eyes closed (single line), little "z z z" drifting up-right.
 const SLEEP = [
-  "...DD.......DD.zzz",
-  "..DOOD.....DOOD.z.",
-  "..DOpOD...DOpODzz.",
+  "...DD.......DD....",
+  "..DOOD.....DOOD...",
+  "..DOpOD...DOpOD...",
   "..DOOOODDDOOOOD...",
   "..DOOOOOOOOOOOD...",
   "..DOOOOOOOOOOOD...",
@@ -108,16 +108,16 @@ const HAPPY = [
 
 // Alert: a pink "!" popping up at the top-right; attentive eyes.
 const ALERT = [
-  "...DD.......DD.xx.",
-  "..DOOD.....DOODxx.",
-  "..DOpOD...DOpOD...",
-  "..DOOOODDDOOOODx..",
-  "..DOOOOOOOOOOOD...",
+  "...DD.......DD..xx",
+  "..DOOD.....DOOD.xx",
+  "..DOpOD...DOpOD.xx",
+  "..DOOOODDDOOOOD...",
+  "..DOOOOOOOOOOOD.xx",
   "..DOOOOOOOOOOOD...",
   ".DOOeeOOOOeeOOD...",
   ".DOOeeOOOOeeOOD...",
   ".DOOOOOOOOOOOOD...",
-  ".DOOwwwoowwwOOD...",
+  ".DOOwwwppwwwOOD...",
   "..DOOwwwwwwOOD.DD.",
   "..DOOOOOOOOOD.DooD",
   ".DOOwwwwwwwwOODooD",
@@ -129,52 +129,55 @@ const ALERT = [
   "..DDDD....DDDD....",
 ];
 
-// Side view, facing right, for the walk cycle. Fluffy tail left, snout right.
+// Side view, facing right. Big bushy white-tipped tail (left), pointy ear +
+// snout (right) — the fox tells.
 const WALK1 = [
-  "......DD.DD......",
-  "..DD.DOODOOD.....",
-  ".DooDDOOOOOOD....",
-  ".DoowDOOOeOOODD..",
-  "DooowOOOOOOOOOOp.",
-  "DoowOOOOOOOOOOOD.",
-  ".DDDOwwwwwwwwOOD.",
-  "...DOwwwwwwwwwOD.",
-  "...DOODOOODOOOD..",
-  "...DD.DOD.DOD.D..",
-  ".....DD...DD.....",
+  "..DwD........DD...",
+  ".DwwoD......DOOD..",
+  ".DwoooD....DOOOOD.",
+  "DwooooD...DOOeOOOD",
+  "DwooooD..DOOOOOOOD",
+  "DoooooD.DOOOOOOOOp",
+  ".DooooOOOOOOOOOOOD",
+  ".DDooOwwwwwwwwwOOD",
+  "...DOwwwwwwwwwwOD.",
+  "...DOODOOODOOOD...",
+  "...DOD.DOOD.DOD...",
+  "...DD....DD...DD..",
 ];
 
 const WALK2 = [
-  "......DD.DD......",
-  "..DD.DOODOOD.....",
-  ".DooDDOOOOOOD....",
-  ".DoowDOOOeOOODD..",
-  "DooowOOOOOOOOOOp.",
-  "DoowOOOOOOOOOOOD.",
-  ".DDDOwwwwwwwwOOD.",
-  "...DOwwwwwwwwwOD.",
-  "...DOODOOODOOOD..",
-  "....DODD.DODD.D..",
-  "....DD.....DD....",
+  "..DwD........DD...",
+  ".DwwoD......DOOD..",
+  ".DwoooD....DOOOOD.",
+  "DwooooD...DOOeOOOD",
+  "DwooooD..DOOOOOOOD",
+  "DoooooD.DOOOOOOOOp",
+  ".DooooOOOOOOOOOOOD",
+  ".DDooOwwwwwwwwwOOD",
+  "...DOwwwwwwwwwwOD.",
+  "...DOODOOODOOOD...",
+  "..DODD.DOOD.DDOD..",
+  "..DD.....DD....DD.",
 ];
 
 const SPRITES = [
-  { name: "sit", grid: SIT },
-  { name: "walk1", grid: WALK1 },
-  { name: "walk2", grid: WALK2 },
+  { name: "sit (idle)", grid: SIT },
+  { name: "alert", grid: ALERT },
+  { name: "walk 1", grid: WALK1 },
+  { name: "walk 2", grid: WALK2 },
 ];
 
 app.whenReady().then(async () => {
   const cells = SPRITES.map(
     (s) =>
-      `<div style="display:flex;flex-direction:column;align-items:center;gap:10px">
-        <div>${toSvg(s.grid, 13)}</div>
-        <div>${toSvg(s.grid, 5)}</div>
-        <div style="font:14px sans-serif;color:#5b4b66">${s.name}</div>
+      `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:12px">
+        <div style="height:230px;display:flex;align-items:flex-end">${toSvg(s.grid, 11)}</div>
+        <div style="font:600 15px ui-sans-serif,sans-serif;color:#5b4b66">${s.name}</div>
       </div>`,
   ).join("");
-  const win = new BrowserWindow({ width: 960, height: 420, show: false });
-  const html = `<!doctype html><meta charset=utf8><body style="margin:0;display:flex;gap:28px;align-items:center;justify-content:center;height:420px;background:#fdf6fb">${cells}</body>`;
+  const win = new BrowserWindow({ width: 1360, height: 360, show: false });
+  const html = `<!doctype html><meta charset=utf8><body style="margin:0;display:flex;gap:24px;align-items:center;justify-content:center;height:360px;background:#fdf6fb">${cells}</body>`;
   await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
   await new Promise((r) => setTimeout(r, 400));
   const img = await win.webContents.capturePage();
