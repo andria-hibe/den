@@ -325,7 +325,7 @@ export function App() {
       cwd: runnRoot || undefined,
       ticket: issue.identifier,
       look: true,
-      name: issue.identifier,
+      name: issue.title,
     });
   };
 
@@ -340,7 +340,7 @@ export function App() {
       ticket: issue.identifier,
       branch: issue.branchName,
       env,
-      name: issue.identifier,
+      name: issue.title,
       notepadSeed: ticketNotesSeed(issue),
       initialPrompt: ticketPrompt(issue),
     });
@@ -458,7 +458,7 @@ export function App() {
       prRepo: pr.repo,
       env: "worktree",
       branch: pr.branch,
-      name: `PR #${pr.number}`,
+      name: pr.title,
     });
   };
 
@@ -475,7 +475,7 @@ export function App() {
       prRepo: pr.repo,
       env,
       branch: pr.branch,
-      name: `PR #${pr.number}`,
+      name: pr.title,
     });
   };
 

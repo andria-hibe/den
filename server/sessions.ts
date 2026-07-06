@@ -350,6 +350,8 @@ class SessionManager {
       s.view = opts.view ?? null;
       s.pr = opts.pr ?? null;
       s.prRepo = opts.prRepo ?? null;
+      // Keep the descriptive ticket/PR title — don't let the terminal retitle it.
+      if (opts.ticket || opts.pr) s.titleLocked = true;
       this.spawnSession(s);
       return s.meta();
     }
@@ -378,6 +380,8 @@ class SessionManager {
     ];
     main.branch = branch;
     main.ticket = opts.ticket ?? null;
+    // Keep the ticket title as the session name (don't let Claude retitle it).
+    if (opts.ticket) main.titleLocked = true;
     this.spawnSession(main);
 
     const term = new DenSession(
