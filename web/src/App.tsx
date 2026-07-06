@@ -575,9 +575,9 @@ export function App() {
         <PixelFox size={30} />
         <span className="wordmark">den</span>
         {active && (
-          <span className="topbar-title" title={active.cwd}>
+          <span className="topbar-title" title={active.name}>
             <span className="dot" style={{ background: active.color }} />
-            {active.name}
+            <span className="topbar-name">{active.name}</span>
             <span className="topbar-kind">
               {active.shell ? "shell" : "claude"}
             </span>
