@@ -2,11 +2,32 @@ import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
+
+/** Current git branch of a directory, or null if not a repo / detached. */
+function gitBranch(cwd: string): string | null {
+  try {
+    const out = execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
+      encoding: "utf8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return out && out !== "HEAD" ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Parse a ticket id like "fast-6115" from a branch name (for ticket/PR links). */
+function ticketHintFrom(branch: string | null): string | null {
+  const m = branch?.match(/([a-z]+-\d+)/i);
+  return m ? m[1].toLowerCase() : null;
+}
 const SCROLLBACK_CAP = 256 * 1024; // bytes of raw terminal output kept per session
 
 // Per-workspace progress notepads live here (outside the project so we never
@@ -29,6 +50,9 @@ export interface SessionMeta {
   /** Workspace grouping. A Claude workspace = a "main" pane + a "shell" pane. */
   groupId: string;
   role: "main" | "shell";
+  /** Git branch of the working dir (captured at start), and its ticket hint. */
+  branch: string | null;
+  ticketHint: string | null;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -50,6 +74,8 @@ class DenSession {
 
   /** Overrides the default spawn args (used for the main Claude of a workspace). */
   spawnArgs: string[] | null = null;
+  /** Git branch of the working dir, captured when the session starts. */
+  branch: string | null = null;
 
   constructor(
     public id: string,
@@ -181,6 +207,8 @@ class DenSession {
       lastActive: this.lastActive,
       groupId: this.groupId,
       role: this.role,
+      branch: this.branch,
+      ticketHint: ticketHintFrom(this.branch),
     };
   }
 
@@ -250,12 +278,14 @@ class SessionManager {
     const color = opts.color ?? COLORS[this.colorIdx++ % COLORS.length];
     const cwd = this.resolveCwd(opts.cwd);
     const groupId = randomUUID();
+    const branch = gitBranch(cwd);
 
     if (shell) {
       const name = opts.name ?? "shell";
       const s = new DenSession(
         groupId, name, color, cwd, true, now, now, groupId, "main",
       );
+      s.branch = branch;
       this.spawnSession(s);
       return s.meta();
     }
@@ -280,11 +310,13 @@ class SessionManager {
       "--add-dir", PROGRESS_DIR,
       "--append-system-prompt", instruction,
     ];
+    main.branch = branch;
     this.spawnSession(main);
 
     const term = new DenSession(
       randomUUID(), "terminal", color, cwd, true, now, now, groupId, "shell",
     );
+    term.branch = branch;
     this.spawnSession(term);
 
     return main.meta();

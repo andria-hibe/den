@@ -7,6 +7,8 @@ import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
 import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
+import type { PullRequest } from "../../server/github.ts";
+import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -50,8 +52,11 @@ export function App() {
   const wsRef = useRef<HTMLDivElement>(null);
   const wsBottomRef = useRef<HTMLDivElement>(null);
 
-  // The topbar fox reflects your GitHub PR health: happy when everything's
-  // green, alert when a check is failing or changes were requested.
+  // PRs + Linear issues, used both for the topbar status fox and for linking a
+  // session's branch to its ticket/PR.
+  const [prs, setPrs] = useState<PullRequest[]>([]);
+  const [issues, setIssues] = useState<LinearIssue[]>([]);
+
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -60,14 +65,14 @@ export function App() {
         if (!r.ok) return;
         const d = await r.json();
         if (!alive || d.error) return;
-        const all = [...(d.authored ?? []), ...(d.reviewRequested ?? [])];
+        const all: PullRequest[] = [...(d.authored ?? []), ...(d.reviewRequested ?? [])];
+        setPrs(all);
         const trouble = all.some(
-          (p: { checks?: string; review?: string }) =>
-            p.checks === "failing" || p.review === "changes_requested",
+          (p) => p.checks === "failing" || p.review === "changes_requested",
         );
         setStatusPose(trouble ? "alert" : all.length ? "happy" : "sit");
       } catch {
-        // leave the pose as-is
+        // leave as-is
       }
     };
     load();
@@ -77,6 +82,32 @@ export function App() {
       clearInterval(t);
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/linear/issues");
+        if (!r.ok) return; // 409 when not connected
+        const d = await r.json();
+        if (alive && d.issues) setIssues(d.issues as LinearIssue[]);
+      } catch {
+        // leave as-is
+      }
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Match a session's branch ticket hint to a PR / Linear ticket.
+  const prByHint = (hint: string | null) =>
+    hint ? prs.find((p) => p.ticketHint?.toLowerCase() === hint) : undefined;
+  const issueByHint = (hint: string | null) =>
+    hint ? issues.find((i) => i.ticketHint.toLowerCase() === hint) : undefined;
 
   const STATUS_TITLE: Record<FoxPose, string> = {
     happy: "all your PRs look happy 🎉",
@@ -186,11 +217,59 @@ export function App() {
       <span className="term-cwd" title={s.cwd}>
         {s.cwd.replace(/^\/Users\/[^/]+/, "~")}
       </span>
+      {s.branch && (
+        <span className="term-branch" title="git branch">
+          ⎇ {s.branch}
+        </span>
+      )}
+      {renderWorkLinks(s.ticketHint)}
       <span style={{ marginLeft: "auto" }}>
         {s.shell ? "shell" : "claude"} · {s.status}
       </span>
     </div>
   );
+
+  // Ticket / PR chips linking a session's branch to its work.
+  const renderWorkLinks = (hint: string | null) => {
+    const issue = issueByHint(hint);
+    const pr = prByHint(hint);
+    if (!issue && !pr) return null;
+    const check = pr
+      ? pr.checks === "passing"
+        ? "✓"
+        : pr.checks === "failing"
+          ? "✕"
+          : pr.checks === "pending"
+            ? "◐"
+            : ""
+      : "";
+    return (
+      <>
+        {issue && (
+          <a
+            className="link-chip issue"
+            href={issue.url}
+            target="_blank"
+            rel="noreferrer"
+            title={issue.title}
+          >
+            {issue.identifier}
+          </a>
+        )}
+        {pr && (
+          <a
+            className={`link-chip pr ${pr.checks}`}
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            title={pr.title}
+          >
+            PR #{pr.number} {check}
+          </a>
+        )}
+      </>
+    );
+  };
 
   // Poll so auto-titles (and exits) on background sessions reach the rail.
   useEffect(() => {
