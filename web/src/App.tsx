@@ -194,7 +194,7 @@ export function App() {
           </div>
         ))}
         {sessions.length === 0 && (
-          <div className="placeholder">no sessions yet — spawn one below 🌱</div>
+          <div className="placeholder">no sessions yet — start one below 🌱</div>
         )}
         </div>
         <div className="rail-actions">
@@ -246,7 +246,7 @@ export function App() {
               <span className="zzz z2">z</span>
               <span className="zzz z3">z</span>
             </div>
-            <div className="placeholder">the den is quiet — spawn a session 🌙</div>
+            <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
         )}
       </main>
