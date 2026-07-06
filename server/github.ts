@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
@@ -25,6 +25,8 @@ export interface PullRequest {
   review: ReviewState;
   /** Ticket id parsed from the branch (e.g. "fast-5979"), for later linking. */
   ticketHint?: string;
+  /** True for your own PRs (authored), false for others' (review-requested). */
+  isMine: boolean;
 }
 
 export interface PrBuckets {
@@ -167,6 +169,7 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
     checkCounts: checks.counts,
     review,
     ticketHint: parseTicketHint(branch),
+    isMine: false,
   };
 }
 
@@ -197,5 +200,108 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
     mapLimit(authoredRows, 6, enrich),
     mapLimit(reviewRows, 6, enrich),
   ]);
+  authored.forEach((p) => (p.isMine = true));
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
+}
+
+// --- PR detail, diff, and Claude review -------------------------------------
+
+export interface PrReviewNote {
+  author: string;
+  state?: string; // reviews only
+  body: string;
+  at: string;
+}
+export interface PrDetail {
+  number: number;
+  repo: string;
+  title: string;
+  url: string;
+  branch: string;
+  body: string;
+  isMine: boolean;
+  reviews: PrReviewNote[];
+  comments: PrReviewNote[];
+}
+
+export async function getPrDetail(repo: string, number: number): Promise<PrDetail> {
+  const out = await gh([
+    "pr", "view", String(number), "--repo", repo,
+    "--json", "number,title,url,body,headRefName,author,reviews,comments",
+  ]);
+  const j = JSON.parse(out) as {
+    number: number;
+    title: string;
+    url: string;
+    body: string;
+    headRefName: string;
+    author: { login: string };
+    reviews: { author?: { login: string }; state: string; body: string; submittedAt: string }[];
+    comments: { author?: { login: string }; body: string; createdAt: string }[];
+  };
+  const me = await viewerLogin();
+  return {
+    number: j.number,
+    repo,
+    title: j.title,
+    url: j.url,
+    branch: j.headRefName,
+    body: j.body ?? "",
+    isMine: j.author?.login === me,
+    reviews: (j.reviews ?? [])
+      .filter((r) => r.body || r.state)
+      .map((r) => ({
+        author: r.author?.login ?? "?",
+        state: r.state,
+        body: r.body ?? "",
+        at: r.submittedAt,
+      })),
+    comments: (j.comments ?? []).map((c) => ({
+      author: c.author?.login ?? "?",
+      body: c.body ?? "",
+      at: c.createdAt,
+    })),
+  };
+}
+
+export async function getPrDiff(repo: string, number: number): Promise<string> {
+  return gh(["pr", "diff", String(number), "--repo", repo]);
+}
+
+let cachedLogin: string | null = null;
+async function viewerLogin(): Promise<string> {
+  if (cachedLogin) return cachedLogin;
+  try {
+    cachedLogin = (await gh(["api", "user", "--jq", ".login"])).trim();
+  } catch {
+    cachedLogin = "";
+  }
+  return cachedLogin;
+}
+
+const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
+
+/** Ask Claude (headless) for a written review of a PR's diff. */
+export async function reviewPr(repo: string, number: number): Promise<string> {
+  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
+  const prompt =
+    "You are reviewing a GitHub pull request. The unified diff follows on " +
+    "stdin. Give a concise, skimmable code review in markdown with sections: " +
+    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. Be " +
+    "specific and reference file names. If it looks solid, say so briefly.";
+  return new Promise((resolve, reject) => {
+    const child = spawn(CLAUDE_BIN, ["-p", prompt], { timeout: 180_000 });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", reject);
+    child.on("close", (code) =>
+      code === 0
+        ? resolve(out.trim())
+        : reject(new Error(err.trim() || `claude exited ${code}`)),
+    );
+    child.stdin.write(diff);
+    child.stdin.end();
+  });
 }

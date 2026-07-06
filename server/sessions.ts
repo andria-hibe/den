@@ -59,6 +59,11 @@ export interface SessionMeta {
   ticket: string | null;
   /** A lightweight "just looking" session: ticket viewer + one Claude pane. */
   look: boolean;
+  /** Special GitHub PR layout: "review" (others' PR) or "mypr" (your own). */
+  view: "review" | "mypr" | null;
+  /** The GitHub PR this session is for (number + nameWithOwner repo). */
+  pr: number | null;
+  prRepo: string | null;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -88,6 +93,10 @@ class DenSession {
   ticket: string | null = null;
   /** Whether this is a lightweight "just looking" session. */
   look = false;
+  /** GitHub PR view mode + which PR, if this is a PR session. */
+  view: "review" | "mypr" | null = null;
+  pr: number | null = null;
+  prRepo: string | null = null;
 
   constructor(
     public id: string,
@@ -229,6 +238,9 @@ class DenSession {
       attention: this.attention,
       ticket: this.ticket,
       look: this.look,
+      view: this.view,
+      pr: this.pr,
+      prRepo: this.prRepo,
     };
   }
 
@@ -301,6 +313,9 @@ class SessionManager {
     ticket?: string;
     look?: boolean;
     notepadSeed?: string;
+    view?: "review" | "mypr";
+    pr?: number;
+    prRepo?: string;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -319,16 +334,21 @@ class SessionManager {
       return s.meta();
     }
 
-    // "Just looking": a single Claude pane (no shell/notepad) tied to a ticket.
-    if (opts.look) {
-      const name = opts.name ?? opts.ticket ?? "look";
+    // Single-pane Claude sessions: "just looking" at a ticket, or a GitHub PR
+    // review / your-own-PR view. (No shell/notepad — the layout is specialised.)
+    if (opts.look || opts.view) {
+      const name =
+        opts.name ?? opts.ticket ?? (opts.pr ? `PR #${opts.pr}` : "look");
       const s = new DenSession(
         groupId, name, color, cwd, false, now, now, groupId, "main",
       );
       s.spawnArgs = ["-n", name];
       s.branch = branch;
       s.ticket = opts.ticket ?? null;
-      s.look = true;
+      s.look = !!opts.look;
+      s.view = opts.view ?? null;
+      s.pr = opts.pr ?? null;
+      s.prRepo = opts.prRepo ?? null;
       this.spawnSession(s);
       return s.meta();
     }

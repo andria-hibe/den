@@ -5,7 +5,13 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import type { AddressInfo } from "node:net";
 import { sessions } from "./sessions.ts";
-import { getMyPullRequests, type PrBuckets } from "./github.ts";
+import {
+  getMyPullRequests,
+  getPrDetail,
+  getPrDiff,
+  reviewPr,
+  type PrBuckets,
+} from "./github.ts";
 import {
   getAssignedIssues,
   validateKey,
@@ -16,7 +22,7 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
-import { prepareWork, type WorkEnv } from "./git.ts";
+import { prepareWork, checkoutPr, type WorkEnv } from "./git.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 export interface StartOptions {
@@ -89,6 +95,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       branch?: string;
       env?: WorkEnv;
       notepadSeed?: string;
+      view?: "review" | "mypr";
+      pr?: number;
+      prRepo?: string;
     };
     // Reuse an existing running session for the same ticket (same look/work
     // mode) so we never create duplicate sessions or branches for one issue.
@@ -104,10 +113,33 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         );
       if (existing) return existing;
     }
+    // Reuse an existing session for the same PR too.
+    if (body.pr && body.prRepo) {
+      const existing = sessions
+        .list()
+        .find(
+          (m) =>
+            m.role === "main" &&
+            m.status === "running" &&
+            m.pr === body.pr &&
+            m.prRepo === body.prRepo,
+        );
+      if (existing) return existing;
+    }
     // "Work on it": set up the branch/worktree first, then open there.
     if (body.branch && body.env) {
       try {
         const { cwd } = prepareWork(roots().runn, body.branch, body.env);
+        body.cwd = cwd;
+      } catch (err) {
+        reply.code(500);
+        return { error: "git_failed", message: (err as Error).message };
+      }
+    }
+    // PR review / edit: check out the PR so Claude has the code.
+    if (body.pr && body.prRepo && body.env) {
+      try {
+        const { cwd } = checkoutPr(roots().runn, body.prRepo, body.pr, body.env);
         body.cwd = cwd;
       } catch (err) {
         reply.code(500);
@@ -172,6 +204,54 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       reply.code(502);
       return { error: "gh_failed", message: (err as Error).message };
+    }
+  });
+
+  // Single-PR detail (description + colleagues' reviews/comments).
+  app.get("/api/github/pr", async (req, reply) => {
+    const { repo, number } = req.query as { repo?: string; number?: string };
+    if (!repo || !number) {
+      reply.code(400);
+      return { error: "repo_and_number_required" };
+    }
+    try {
+      return await getPrDetail(repo, Number(number));
+    } catch (err) {
+      reply.code(502);
+      return { error: "gh_failed", message: (err as Error).message };
+    }
+  });
+
+  // Raw unified diff for a PR.
+  app.get("/api/github/pr/diff", async (req, reply) => {
+    const { repo, number } = req.query as { repo?: string; number?: string };
+    if (!repo || !number) {
+      reply.code(400);
+      return { error: "repo_and_number_required" };
+    }
+    try {
+      return { diff: await getPrDiff(repo, Number(number)) };
+    } catch (err) {
+      reply.code(502);
+      return { error: "gh_failed", message: (err as Error).message };
+    }
+  });
+
+  // Claude's written review of a PR (headless; may take a while).
+  app.post("/api/github/pr/review", async (req, reply) => {
+    const { repo, number } = (req.body ?? {}) as {
+      repo?: string;
+      number?: number;
+    };
+    if (!repo || !number) {
+      reply.code(400);
+      return { error: "repo_and_number_required" };
+    }
+    try {
+      return { review: await reviewPr(repo, number) };
+    } catch (err) {
+      reply.code(502);
+      return { error: "review_failed", message: (err as Error).message };
     }
   });
 

@@ -76,3 +76,33 @@ export function prepareWork(
   }
   return { cwd: repo };
 }
+
+/**
+ * Check out a PR (by number) so Claude has the code — for reviewing others' PRs
+ * or editing your own. Uses `gh pr checkout`, which handles forks.
+ */
+export function checkoutPr(
+  repoDir: string,
+  ghRepo: string,
+  number: number,
+  env: WorkEnv,
+): { cwd: string } {
+  if (env === "worktree") {
+    const dir = join(repoDir, ".claude-worktrees", `pr-${number}`);
+    if (!existsSync(dir)) {
+      git(repoDir, ["worktree", "add", "--detach", dir]);
+    }
+    execFileSync("gh", ["pr", "checkout", String(number), "--repo", ghRepo], {
+      cwd: dir,
+      timeout: 60000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { cwd: dir };
+  }
+  execFileSync("gh", ["pr", "checkout", String(number), "--repo", ghRepo], {
+    cwd: repoDir,
+    timeout: 60000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return { cwd: repoDir };
+}
