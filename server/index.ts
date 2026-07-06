@@ -5,12 +5,14 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import os from "node:os";
-import { spawnSession } from "./pty.ts";
+import { sessions } from "./sessions.ts";
 import { getMyPullRequests, type PrBuckets } from "./github.ts";
-import type { ClientMessage } from "./ws-protocol.ts";
+import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+sessions.hydrate();
 
 const app = Fastify({ logger: false });
 await app.register(websocket);
@@ -18,7 +20,45 @@ await app.register(websocket);
 // Health / sanity endpoint.
 app.get("/api/health", async () => ({ ok: true, home: os.homedir() }));
 
-// GitHub PRs — cached briefly since `gh` calls are relatively slow.
+// --- Sessions REST ----------------------------------------------------------
+
+app.get("/api/sessions", async () => ({ sessions: sessions.list() }));
+
+app.post("/api/sessions", async (req, reply) => {
+  const body = (req.body ?? {}) as {
+    name?: string;
+    color?: string;
+    cwd?: string;
+    shell?: boolean;
+  };
+  const meta = sessions.create(body);
+  reply.code(201);
+  return meta;
+});
+
+app.patch("/api/sessions/:id", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const body = (req.body ?? {}) as { name?: string; color?: string };
+  const meta = sessions.update(id, body);
+  if (!meta) {
+    reply.code(404);
+    return { error: "not_found" };
+  }
+  return meta;
+});
+
+app.delete("/api/sessions/:id", async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const ok = sessions.remove(id);
+  if (!ok) {
+    reply.code(404);
+    return { error: "not_found" };
+  }
+  return { ok: true };
+});
+
+// --- GitHub PRs (cached) -----------------------------------------------------
+
 const PR_TTL_MS = 30_000;
 let prCache: { at: number; data: PrBuckets } | null = null;
 app.get("/api/github/prs", async (req, reply) => {
@@ -36,21 +76,28 @@ app.get("/api/github/prs", async (req, reply) => {
   }
 });
 
-/**
- * Terminal WebSocket. Query params:
- *   name  — session display name (passed to `claude -n`)
- *   cwd   — working directory for the session
- *   shell — "1" to spawn a plain shell instead of claude (debug)
- */
+// --- Terminal WebSocket: attach to an existing session by id ----------------
+
 app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   const url = new URL(req.url, "http://localhost");
-  const name = url.searchParams.get("name") ?? "session";
-  const cwd = url.searchParams.get("cwd") ?? os.homedir();
-  const shell = url.searchParams.get("shell") === "1";
+  const id = url.searchParams.get("id");
+  const session = id ? sessions.get(id) : undefined;
 
-  const session = spawnSession({ name, cwd, shell }, (msg) => {
+  const send = (msg: ServerMessage) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
-  });
+  };
+
+  if (!session) {
+    send({ type: "exit", code: null });
+    socket.close();
+    return;
+  }
+
+  // Attach atomically: capture scrollback + register listener in one tick.
+  const { scrollback, detach } = session.attach(send);
+  send({ type: "ready", pid: session.meta().pid ?? 0 });
+  if (scrollback) send({ type: "output", data: scrollback });
+  if (session.status === "exited") send({ type: "exit", code: null });
 
   socket.on("message", (raw: Buffer) => {
     let msg: ClientMessage;
@@ -59,10 +106,11 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
     } catch {
       return;
     }
-    session.handle(msg);
+    if (msg.type === "input") session.write(msg.data);
+    else if (msg.type === "resize") session.resize(msg.cols, msg.rows);
   });
 
-  socket.on("close", () => session.dispose());
+  socket.on("close", () => detach());
 });
 
 // Serve the built web app in production (dev uses the Vite server + proxy).

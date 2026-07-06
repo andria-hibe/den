@@ -159,6 +159,56 @@ body {
   font-size: 10px;
   color: var(--ink-soft);
 }
+.session-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.session:hover .session-close {
+  opacity: 1;
+}
+.session-close:hover {
+  color: var(--pink-deep);
+  background: var(--bg);
+}
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--pink-deep);
+  border-radius: 6px;
+  padding: 1px 5px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* colour swatches in the terminal header */
+.swatches {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+}
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.swatch.on {
+  border-color: var(--ink-soft);
+  transform: scale(1.15);
+}
 
 /* ---- Terminal ---- */
 .term-header {
