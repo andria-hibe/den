@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LinearData, LinearIssue } from "../../server/linear.ts";
+import { Fox } from "./Fox.tsx";
 
 const PRIORITY_CLASS: Record<number, string> = {
   1: "prio-urgent",
@@ -161,7 +162,11 @@ export function LinearSection() {
         </span>
       </div>
 
-      {connected === null && <div className="placeholder">…</div>}
+      {connected === null && (
+        <div className="loading-row">
+          <Fox pose="walk" size={20} /> checking…
+        </div>
+      )}
       {connected === false && <ConnectForm onConnected={() => loadIssues(true)} />}
       {connected && error && <div className="browser-error">⚠️ {error}</div>}
       {connected &&

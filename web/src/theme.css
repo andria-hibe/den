@@ -510,6 +510,21 @@ body {
   padding: 4px;
 }
 
+.status-fox {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+}
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 6px;
+}
+
 .term-cwd {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 11px;

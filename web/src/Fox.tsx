@@ -1,31 +1,14 @@
-import { useMemo } from "react";
-import { FOX_PALETTE, FOX_SPRITES, type FoxPose } from "./foxSprites.ts";
+import { useEffect, useMemo, useState } from "react";
+import { FOX_PALETTE, FOX_FRAMES, type FoxPose } from "./foxSprites.ts";
 
-// Renders a full-body fox pose. The sprite is painted to a native-resolution
-// canvas (1px per cell) and scaled up as an <img> with image-rendering:pixelated
-// — nearest-neighbour scaling stays perfectly crisp regardless of sub-pixel
-// position, animation, or compositing (inline SVG blurs when offset by a
-// fractional pixel, e.g. under flex-centering or a bob animation).
-export function Fox({
-  pose = "sit",
-  size = 96,
-  className,
-}: {
-  pose?: FoxPose;
-  size?: number;
-  className?: string;
-}) {
-  const grid = FOX_SPRITES[pose];
+function rasterize(grid: string[]): { src: string; cols: number; rows: number } {
   const cols = Math.max(...grid.map((r) => r.length));
   const rows = grid.length;
-  const scale = Math.max(1, Math.round(size / rows));
-
-  const src = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = cols;
-    canvas.height = rows;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
+  const canvas = document.createElement("canvas");
+  canvas.width = cols;
+  canvas.height = rows;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
     grid.forEach((row, y) => {
       [...row].forEach((ch, x) => {
         const fill = FOX_PALETTE[ch];
@@ -35,8 +18,37 @@ export function Fox({
         }
       });
     });
-    return canvas.toDataURL();
-  }, [grid, cols, rows]);
+  }
+  return { src: canvas.toDataURL(), cols, rows };
+}
+
+// Renders a full-body fox pose. Multi-frame poses (walk) animate. Sprites are
+// painted to a native-res canvas and scaled up with image-rendering:pixelated,
+// so they stay crisp regardless of sub-pixel position/animation/compositing.
+export function Fox({
+  pose = "sit",
+  size = 96,
+  className,
+}: {
+  pose?: FoxPose;
+  size?: number;
+  className?: string;
+}) {
+  const frames = useMemo(() => FOX_FRAMES[pose].map(rasterize), [pose]);
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    setFrame(0);
+    if (frames.length < 2) return;
+    const id = setInterval(
+      () => setFrame((f) => (f + 1) % frames.length),
+      220,
+    );
+    return () => clearInterval(id);
+  }, [frames]);
+
+  const { src, cols, rows } = frames[frame] ?? frames[0];
+  const scale = Math.max(1, Math.round(size / rows));
 
   return (
     <img

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { PrBuckets, PullRequest } from "../../server/github.ts";
 import { LinearSection } from "./LinearPanel.tsx";
+import { Fox } from "./Fox.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -129,7 +130,11 @@ export function WorkPanel() {
             </span>
           </div>
           {error && <div className="browser-error">⚠️ {error}</div>}
-          {!data && !error && <div className="placeholder">loading your PRs…</div>}
+          {!data && !error && (
+            <div className="loading-row">
+              <Fox pose="walk" size={22} /> loading your PRs…
+            </div>
+          )}
           {data && (
             <>
               <Section title="review requested" prs={data.reviewRequested} />

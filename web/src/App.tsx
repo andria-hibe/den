@@ -4,6 +4,7 @@ import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
+import type { FoxPose } from "./foxSprites.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -35,6 +36,43 @@ export function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [statusPose, setStatusPose] = useState<FoxPose>("sit");
+
+  // The topbar fox reflects your GitHub PR health: happy when everything's
+  // green, alert when a check is failing or changes were requested.
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/github/prs");
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!alive || d.error) return;
+        const all = [...(d.authored ?? []), ...(d.reviewRequested ?? [])];
+        const trouble = all.some(
+          (p: { checks?: string; review?: string }) =>
+            p.checks === "failing" || p.review === "changes_requested",
+        );
+        setStatusPose(trouble ? "alert" : all.length ? "happy" : "sit");
+      } catch {
+        // leave the pose as-is
+      }
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  const STATUS_TITLE: Record<FoxPose, string> = {
+    happy: "all your PRs look happy 🎉",
+    alert: "a PR needs a look — failing check or changes requested",
+    sit: "no open PRs right now",
+    sleep: "",
+    walk: "",
+  };
 
   useEffect(() => {
     api<{ sessions: SessionMeta[] }>("/api/sessions")
@@ -92,6 +130,13 @@ export function App() {
         <span>den</span>
         <span style={{ opacity: 0.85, fontWeight: 500, fontSize: 12 }}>
           your cozy Claude cockpit
+        </span>
+        <span
+          className="status-fox"
+          title={STATUS_TITLE[statusPose]}
+          aria-label={STATUS_TITLE[statusPose]}
+        >
+          <Fox pose={statusPose} size={38} />
         </span>
       </div>
 
@@ -195,8 +240,8 @@ export function App() {
           </>
         ) : (
           <div className="empty-terminal">
-            <Fox pose="sit" size={150} className="fox-bob" />
-            <div className="placeholder">pick or spawn a session to begin</div>
+            <Fox pose="sleep" size={150} className="fox-bob" />
+            <div className="placeholder">the den is quiet — spawn a session 🌙</div>
           </div>
         )}
       </main>
