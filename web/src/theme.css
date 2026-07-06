@@ -1220,6 +1220,25 @@ body {
   line-height: 1;
 }
 
+/* The far-left brand fox doubles as the "edit den" button. Understated by
+   default (it reads as the logo), lifts + highlights on hover to invite a click. */
+.brand-fox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+  padding: 3px;
+  margin: -3px;
+  border-radius: 9px;
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+.brand-fox:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
 .status-fox {
   margin-left: auto;
   display: flex;

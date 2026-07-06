@@ -67,11 +67,15 @@ export function App() {
   // Collapse the colour picker whenever we switch sessions.
   useEffect(() => setColorPickerOpen(false), [activeId]);
   const [runnRoot, setRunnRoot] = useState<string>("");
+  const [denRoot, setDenRoot] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/fs/roots")
       .then((r) => r.json())
-      .then((d) => setRunnRoot(d.runn ?? ""))
+      .then((d) => {
+        setRunnRoot(d.runn ?? "");
+        setDenRoot(d.den ?? "");
+      })
       .catch(() => {});
   }, []);
 
@@ -350,6 +354,53 @@ export function App() {
     });
   };
 
+  // --- Edit den itself (self-editing workspace) ---
+  // A normal 3-pane Claude workspace rooted in den's own source, with a handover
+  // seeded into the notepad. The sentinel ticket gives us race-safe reuse (one
+  // editor at a time) + a locked, descriptive title.
+  const DEN_TICKET = "den:self-edit";
+
+  const denNotesSeed = (root: string) =>
+    `# Editing den — handover\n\n` +
+    `You're working on **den itself** — the source of the very app this session ` +
+    `is running inside.\nRepo: \`${root}\`\n\n` +
+    `## Orient\n` +
+    `- Read \`CLAUDE.md\` first: architecture, features, conventions, gotchas.\n` +
+    `- Dev loop: \`npm run dev\` (needs the Node ABI — \`npm run rebuild:node\`).\n` +
+    `- **Do NOT repackage/reinstall the app** (\`npm run pack\`) unless andria ` +
+    `explicitly asks.\n` +
+    `- Verify with an isolated server + screenshots (see CLAUDE.md).\n\n` +
+    `## Progress\n_(Claude keeps timestamped notes below as it works.)_\n`;
+
+  const denPrompt =
+    `You're now working on **den itself** — the source of the very app this ` +
+    `session is running inside (this is its repo). First read ./CLAUDE.md to get ` +
+    `oriented on the architecture, conventions, and gotchas, then tell me briefly ` +
+    `that you're ready. Important: do NOT run \`npm run pack\` or reinstall/reopen ` +
+    `the app unless I explicitly ask — I control when the running app is replaced. ` +
+    `Then wait for me to tell you what to change.`;
+
+  const openDenEditor = () => {
+    if (!denRoot) {
+      setErrMsg("couldn't locate the den source repo");
+      return;
+    }
+    const existing = sessions.find(
+      (s) => s.role === "main" && s.status === "running" && s.ticket === DEN_TICKET,
+    );
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    addSession({
+      cwd: denRoot,
+      ticket: DEN_TICKET,
+      name: "🦊 edit den",
+      notepadSeed: denNotesSeed(denRoot),
+      initialPrompt: denPrompt,
+    });
+  };
+
   // Terminal-set title (Claude/shell) for the active session — apply unless
   // the user is mid-rename of it.
   const applyTitle = (id: string, name: string) =>
@@ -588,7 +639,18 @@ export function App() {
             : undefined
         }
       >
-        <PixelFox size={30} />
+        {denRoot ? (
+          <button
+            className="brand-fox"
+            onClick={openDenEditor}
+            title="edit den — open a Claude session to change this app"
+            aria-label="edit den"
+          >
+            <PixelFox size={30} />
+          </button>
+        ) : (
+          <PixelFox size={30} />
+        )}
         <span className="wordmark">den</span>
         {active && (
           <span className="topbar-title" title={active.name}>

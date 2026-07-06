@@ -25,7 +25,33 @@ export function roots() {
     work: join(documents, "work"),
     runn: join(documents, "work", "runn"),
     projects: join(documents, "projects"),
+    den: denRepo(),
   };
+}
+
+/**
+ * The den *source* repo, for the "edit den" self-editing session. NOT the
+ * packaged /Applications/Den.app (editing that is useless) — the checkout you
+ * actually develop in. Prefers $DEN_REPO, then the usual location, then the dev
+ * cwd; only returns a path that actually looks like the den source.
+ */
+export function denRepo(): string | null {
+  const candidates = [
+    process.env.DEN_REPO,
+    join(HOME, "Documents", "projects", "den"),
+    process.cwd(),
+  ].filter(Boolean) as string[];
+  for (const c of candidates) {
+    const r = resolve(c);
+    if (
+      within(r) &&
+      existsSync(join(r, "server", "app.ts")) &&
+      existsSync(join(r, "package.json"))
+    ) {
+      return r;
+    }
+  }
+  return null;
 }
 
 export function isDir(p: string): boolean {
