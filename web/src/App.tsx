@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
+import { NotepadPane } from "./NotepadPane.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
@@ -80,20 +81,32 @@ export function App() {
     api<{ sessions: SessionMeta[] }>("/api/sessions")
       .then((d) => {
         setSessions(d.sessions);
-        const running = d.sessions.find((s) => s.status === "running");
-        setActiveId((running ?? d.sessions[0])?.id ?? null);
+        const mains = d.sessions.filter((s) => s.role === "main");
+        const running = mains.find((s) => s.status === "running");
+        setActiveId((running ?? mains[0])?.id ?? null);
       })
       .catch(() => {});
   }, []);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
+  // Sessions shown in the rail (one per workspace); sub-shells are hidden.
+  const rail = sessions.filter((s) => s.role === "main");
+  // For a Claude workspace, its sibling shell pane.
+  const shellPane =
+    active && !active.shell
+      ? sessions.find(
+          (s) => s.groupId === active.groupId && s.role === "shell",
+        )
+      : null;
 
   const addSession = async (opts: { shell?: boolean; cwd?: string }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
       body: JSON.stringify(opts),
     });
-    setSessions((prev) => [...prev, meta]);
+    // Refetch so a Claude workspace's sibling shell pane lands in state too.
+    const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+    setSessions(d.sessions);
     setActiveId(meta.id);
   };
 
@@ -102,14 +115,26 @@ export function App() {
       method: "PATCH",
       body: JSON.stringify(body),
     });
-    setSessions((prev) => prev.map((s) => (s.id === id ? meta : s)));
+    // A recolour applies to the whole workspace server-side; mirror that.
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === meta.id
+          ? meta
+          : body.color !== undefined && s.groupId === meta.groupId
+            ? { ...s, color: body.color }
+            : s,
+      ),
+    );
   };
 
   const closeSession = async (id: string) => {
+    const groupId = sessions.find((s) => s.id === id)?.groupId;
     await api(`/api/sessions/${id}`, { method: "DELETE" });
     setSessions((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      if (activeId === id) setActiveId(next[next.length - 1]?.id ?? null);
+      const next = prev.filter((s) => s.groupId !== groupId);
+      if (activeId === id) {
+        setActiveId(next.find((s) => s.role === "main")?.id ?? null);
+      }
       return next;
     });
   };
@@ -133,6 +158,30 @@ export function App() {
         s.id === id && editingId !== id ? { ...s, name } : s,
       ),
     );
+
+  const renderHeader = (s: SessionMeta) => (
+    <div className="term-header">
+      <span className="dot" style={{ background: s.color }} />
+      <strong>{s.name}</strong>
+      <span className="swatches">
+        {COLORS.map((c) => (
+          <button
+            key={c}
+            className={`swatch ${c === s.color ? "on" : ""}`}
+            style={{ background: c }}
+            title="recolour"
+            onClick={() => patch(s.id, { color: c })}
+          />
+        ))}
+      </span>
+      <span className="term-cwd" title={s.cwd}>
+        {s.cwd.replace(/^\/Users\/[^/]+/, "~")}
+      </span>
+      <span style={{ marginLeft: "auto" }}>
+        {s.shell ? "shell" : "claude"} · {s.status}
+      </span>
+    </div>
+  );
 
   // Poll so auto-titles (and exits) on background sessions reach the rail.
   useEffect(() => {
@@ -190,7 +239,7 @@ export function App() {
       <aside className="panel rail">
         <h2>sessions</h2>
         <div className="session-list">
-        {sessions.map((s) => (
+        {rail.map((s) => (
           <div
             key={s.id}
             className={`session ${s.id === activeId ? "active" : ""}`}
@@ -239,7 +288,7 @@ export function App() {
             </button>
           </div>
         ))}
-        {sessions.length === 0 && (
+        {rail.length === 0 && (
           <div className="placeholder">no sessions yet — start one below 🌱</div>
         )}
         </div>
@@ -253,39 +302,9 @@ export function App() {
         </div>
       </aside>
 
-      {/* Center: terminal */}
+      {/* Center: terminal / workspace */}
       <main className="panel term-wrap">
-        {active ? (
-          <>
-            <div className="term-header">
-              <span className="dot" style={{ background: active.color }} />
-              <strong>{active.name}</strong>
-              <span className="swatches">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    className={`swatch ${c === active.color ? "on" : ""}`}
-                    style={{ background: c }}
-                    title="recolour"
-                    onClick={() => patch(active.id, { color: c })}
-                  />
-                ))}
-              </span>
-              <span className="term-cwd" title={active.cwd}>
-                {active.cwd.replace(/^\/Users\/[^/]+/, "~")}
-              </span>
-              <span style={{ marginLeft: "auto" }}>
-                {active.shell ? "shell" : "claude"} · {active.status}
-              </span>
-            </div>
-            <TerminalView
-              key={active.id}
-              session={active}
-              onExit={() => markExited(active.id)}
-              onTitle={(name) => applyTitle(active.id, name)}
-            />
-          </>
-        ) : (
+        {!active ? (
           <div className="empty-terminal">
             <div className="sleep-fox">
               <Fox pose="sleep" size={150} className="fox-bob" />
@@ -294,6 +313,46 @@ export function App() {
               <span className="zzz z3">z</span>
             </div>
             <div className="placeholder">the den is quiet — start a session 🌙</div>
+          </div>
+        ) : active.shell ? (
+          <>
+            {renderHeader(active)}
+            <TerminalView
+              key={active.id}
+              session={active}
+              onExit={() => markExited(active.id)}
+              onTitle={(name) => applyTitle(active.id, name)}
+            />
+          </>
+        ) : (
+          <div className="workspace">
+            <div className="ws-main">
+              {renderHeader(active)}
+              <TerminalView
+                key={active.id}
+                session={active}
+                onExit={() => markExited(active.id)}
+                onTitle={(name) => applyTitle(active.id, name)}
+              />
+            </div>
+            <div className="ws-bottom">
+              <div className="ws-pane ws-shell">
+                <div className="pane-label">🖥 terminal</div>
+                {shellPane ? (
+                  <TerminalView
+                    key={shellPane.id}
+                    session={shellPane}
+                    onExit={() => markExited(shellPane.id)}
+                    onTitle={() => {}}
+                  />
+                ) : (
+                  <div className="placeholder">shell ended</div>
+                )}
+              </div>
+              <div className="ws-pane ws-note">
+                <NotepadPane groupId={active.groupId} />
+              </div>
+            </div>
           </div>
         )}
       </main>

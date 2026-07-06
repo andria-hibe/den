@@ -16,6 +16,9 @@ export interface SessionRow {
   status: string; // "running" | "exited"
   createdAt: number;
   lastActive: number;
+  /** Workspace grouping: a Claude session groups a main pane + a shell pane. */
+  groupId: string;
+  role: string; // "main" | "shell"
 }
 
 // Stable per-user location (works identically for the CLI and the packaged
@@ -43,10 +46,19 @@ db.exec(`
   );
 `);
 
+// Migrate older DBs that predate workspace grouping.
+for (const col of ["groupId TEXT", "role TEXT"]) {
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
+  } catch {
+    // column already exists
+  }
+}
+
 const stmts = {
   insert: db.prepare(
-    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive)
-     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive)`,
+    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role)
+     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role)`,
   ),
   all: db.prepare(`SELECT * FROM sessions ORDER BY createdAt ASC`),
   update: db.prepare(

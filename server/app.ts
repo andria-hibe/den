@@ -109,6 +109,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true };
   });
 
+  // --- Workspace progress notepad ---
+  app.get("/api/notepad/:groupId", async (req) => {
+    const { groupId } = req.params as { groupId: string };
+    return { content: sessions.readNotepad(groupId) };
+  });
+
+  app.put("/api/notepad/:groupId", async (req) => {
+    const { groupId } = req.params as { groupId: string };
+    const { content } = (req.body ?? {}) as { content?: string };
+    sessions.writeNotepad(groupId, content ?? "");
+    return { ok: true };
+  });
+
   // --- GitHub PRs (cached) ---
   const PR_TTL_MS = 30_000;
   let prCache: { at: number; data: PrBuckets } | null = null;

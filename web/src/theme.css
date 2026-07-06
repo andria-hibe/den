@@ -345,6 +345,90 @@ body {
   padding: 8px;
 }
 
+/* ---- Claude workspace: main pane on top, shell + notepad below ---- */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-main {
+  flex: 3;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-bottom {
+  flex: 2;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+}
+.ws-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+  padding: 2px 4px 6px;
+}
+
+/* Progress notepad */
+.notepad {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.notepad-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 6px;
+}
+.notepad-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+}
+.notepad-dirty {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--pink-deep);
+}
+.notepad-save {
+  margin-left: auto;
+  padding: 3px 12px;
+  font-size: 11px;
+}
+.notepad-body {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--ink);
+  padding: 10px 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.notepad-body:focus {
+  outline: none;
+  border-color: var(--pink-deep);
+}
+
 /* ---- Buttons ---- */
 /* Default = soft neutral. Primary (pink) = main action. Ghost-outline = subtle. */
 .btn {

@@ -1,13 +1,19 @@
 import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 const SCROLLBACK_CAP = 256 * 1024; // bytes of raw terminal output kept per session
+
+// Per-workspace progress notepads live here (outside the project so we never
+// pollute a repo). The main Claude is granted write access to this dir.
+const PROGRESS_DIR = join(os.homedir(), ".den", "progress");
+export const notepadPath = (groupId: string) =>
+  join(PROGRESS_DIR, `${groupId}.md`);
 
 /** Metadata shape sent to the web app. */
 export interface SessionMeta {
@@ -20,6 +26,9 @@ export interface SessionMeta {
   pid: number | null;
   createdAt: number;
   lastActive: number;
+  /** Workspace grouping. A Claude workspace = a "main" pane + a "shell" pane. */
+  groupId: string;
+  role: "main" | "shell";
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -39,6 +48,9 @@ class DenSession {
   titleLocked = false;
   private oscCarry = "";
 
+  /** Overrides the default spawn args (used for the main Claude of a workspace). */
+  spawnArgs: string[] | null = null;
+
   constructor(
     public id: string,
     public name: string,
@@ -47,12 +59,14 @@ class DenSession {
     public shell: boolean,
     public createdAt: number,
     public lastActive: number,
+    public groupId: string,
+    public role: "main" | "shell",
   ) {}
 
   spawn() {
     const loginShell = process.env.SHELL ?? "/bin/zsh";
     const file = this.shell ? loginShell : CLAUDE_BIN;
-    const args = this.shell ? [] : ["-n", this.name];
+    const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
     const term = pty.spawn(file, args, {
       name: "xterm-color",
       cols: 80,
@@ -165,6 +179,8 @@ class DenSession {
       pid: this.term?.pid ?? null,
       createdAt: this.createdAt,
       lastActive: this.lastActive,
+      groupId: this.groupId,
+      role: this.role,
     };
   }
 
@@ -179,6 +195,8 @@ class DenSession {
       status: this.status,
       createdAt: this.createdAt,
       lastActive: this.lastActive,
+      groupId: this.groupId,
+      role: this.role,
     };
   }
 }
@@ -201,27 +219,75 @@ class SessionManager {
         row.shell === 1,
         row.createdAt,
         row.lastActive,
+        row.groupId ?? row.id,
+        (row.role as "main" | "shell") ?? "main",
       );
       s.status = "exited";
       this.sessions.set(s.id, s);
     }
   }
 
+  private resolveCwd(cwd?: string) {
+    const documents = join(os.homedir(), "Documents");
+    return cwd || (existsSync(documents) ? documents : os.homedir());
+  }
+
+  private spawnSession(s: DenSession) {
+    s.spawn();
+    this.sessions.set(s.id, s);
+    store.insert(s.toRow());
+  }
+
+  /**
+   * Create a workspace and return its "main" session.
+   * - shell: a single plain terminal (main pane only).
+   * - claude: a main Claude pane + a sibling shell pane in the same folder, plus
+   *   a progress notepad the main Claude is told to keep.
+   */
   create(opts: { name?: string; color?: string; cwd?: string; shell?: boolean }) {
-    const id = randomUUID();
     const now = Date.now();
     const shell = opts.shell ?? false;
-    const name = opts.name ?? (shell ? "shell" : `den-${this.sessions.size + 1}`);
     const color = opts.color ?? COLORS[this.colorIdx++ % COLORS.length];
-    // Default to ~/Documents (falling back to home) so sessions start somewhere
-    // useful; the New Session dialog usually passes an explicit cwd.
-    const documents = join(os.homedir(), "Documents");
-    const cwd = opts.cwd || (existsSync(documents) ? documents : os.homedir());
-    const s = new DenSession(id, name, color, cwd, shell, now, now);
-    s.spawn();
-    this.sessions.set(id, s);
-    store.insert(s.toRow());
-    return s.meta();
+    const cwd = this.resolveCwd(opts.cwd);
+    const groupId = randomUUID();
+
+    if (shell) {
+      const name = opts.name ?? "shell";
+      const s = new DenSession(
+        groupId, name, color, cwd, true, now, now, groupId, "main",
+      );
+      this.spawnSession(s);
+      return s.meta();
+    }
+
+    // Claude workspace: main pane + shell pane + notepad.
+    const name = opts.name ?? `den-${this.sessions.size + 1}`;
+    const file = this.ensureNotepad(groupId);
+    const instruction =
+      `You're working in a project inside a tool called "den". Keep a running ` +
+      `progress log for the developer at the absolute path ${file}. After each ` +
+      `meaningful step — a decision, an edit, a completed task, or a blocker — ` +
+      `append a short timestamped bullet to that file describing what you did. ` +
+      `Keep entries concise and skimmable and never delete earlier ones. This ` +
+      `file is shown to the developer in a side notepad; don't mention this ` +
+      `logging in your replies.`;
+
+    const main = new DenSession(
+      randomUUID(), name, color, cwd, false, now, now, groupId, "main",
+    );
+    main.spawnArgs = [
+      "-n", name,
+      "--add-dir", PROGRESS_DIR,
+      "--append-system-prompt", instruction,
+    ];
+    this.spawnSession(main);
+
+    const term = new DenSession(
+      randomUUID(), "terminal", color, cwd, true, now, now, groupId, "shell",
+    );
+    this.spawnSession(term);
+
+    return main.meta();
   }
 
   get(id: string) {
@@ -239,19 +305,58 @@ class SessionManager {
       s.name = patch.name;
       s.lockTitle(); // manual rename wins over terminal-set titles
     }
-    if (patch.color !== undefined) s.color = patch.color;
+    // Recolour the whole workspace so panes stay visually grouped.
+    if (patch.color !== undefined) {
+      for (const other of this.sessions.values()) {
+        if (other.groupId === s.groupId) {
+          other.color = patch.color;
+          store.update(other.toRow());
+        }
+      }
+    }
     s.lastActive = Date.now();
     store.update(s.toRow());
     return s.meta();
   }
 
+  /** Remove the whole workspace the given session belongs to. */
   remove(id: string) {
     const s = this.sessions.get(id);
     if (!s) return false;
-    s.kill();
-    this.sessions.delete(id);
-    store.delete(id);
+    for (const other of [...this.sessions.values()]) {
+      if (other.groupId === s.groupId) {
+        other.kill();
+        this.sessions.delete(other.id);
+        store.delete(other.id);
+      }
+    }
     return true;
+  }
+
+  // --- Progress notepad ---
+  private ensureNotepad(groupId: string): string {
+    mkdirSync(PROGRESS_DIR, { recursive: true });
+    const file = notepadPath(groupId);
+    if (!existsSync(file)) {
+      writeFileSync(
+        file,
+        "# Progress\n\n_den keeps a running log here as the session works — you can edit and save it too._\n\n",
+      );
+    }
+    return file;
+  }
+
+  readNotepad(groupId: string): string {
+    try {
+      return readFileSync(notepadPath(groupId), "utf8");
+    } catch {
+      return "";
+    }
+  }
+
+  writeNotepad(groupId: string, content: string) {
+    mkdirSync(PROGRESS_DIR, { recursive: true });
+    writeFileSync(notepadPath(groupId), content);
   }
 }
 
