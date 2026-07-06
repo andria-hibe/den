@@ -16,6 +16,8 @@
     "rebuild:node": "npm rebuild node-pty better-sqlite3 && node scripts/fix-pty.mjs",
     "app": "npm run rebuild:electron && npm run build && npm run build:electron && electron .",
     "app:run": "npm run build && npm run build:electron && electron .",
+    "pack": "npm run build && npm run build:electron && electron-builder --dir",
+    "dist": "npm run build && npm run build:electron && electron-builder",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "start": "tsx server/index.ts"
   },
@@ -38,6 +40,7 @@
     "@xterm/xterm": "^5.5.0",
     "concurrently": "^9.1.0",
     "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "esbuild": "^0.24.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

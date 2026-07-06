@@ -1,11 +1,30 @@
 import { app, BrowserWindow, shell } from "electron";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { startServer, type RunningServer } from "../server/app.ts";
 
 // Bundled to dist/electron/main.cjs (esbuild), so __dirname is dist/electron.
 let server: RunningServer | null = null;
 
+// A double-clicked macOS app inherits a minimal PATH that omits Homebrew, nvm,
+// ~/.local/bin, etc. — so `claude` and `gh` wouldn't be found. Pull the real
+// PATH from an interactive login shell.
+function fixPath() {
+  if (process.platform === "win32") return;
+  try {
+    const shellBin = process.env.SHELL || "/bin/zsh";
+    const out = execFileSync(shellBin, ["-lic", 'echo -n "$PATH"'], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    if (out && out.includes("/")) process.env.PATH = out.trim();
+  } catch {
+    // keep the inherited PATH
+  }
+}
+
 async function boot() {
+  fixPath();
   const webDir = app.isPackaged
     ? join(process.resourcesPath, "web")
     : join(__dirname, "..", "web"); // dist/electron -> dist/web

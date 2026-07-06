@@ -1,0 +1,20 @@
+appId: io.den.app
+productName: Den
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/electron/**
+  - package.json
+extraResources:
+  - from: dist/web
+    to: web
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/better-sqlite3/**"
+mac:
+  target:
+    - target: dir
+  category: public.app-category.developer-tools
+  # Local personal build — no code signing / notarization.
+  identity: null
