@@ -74,7 +74,11 @@ function Section({ title, prs }: { title: string; prs: PullRequest[] }) {
   );
 }
 
-export function WorkPanel() {
+export function WorkPanel({
+  onOpenTicket,
+}: {
+  onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
+}) {
   const [data, setData] = useState<PrBuckets | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,7 +112,7 @@ export function WorkPanel() {
       </div>
 
       <div className="pr-scroll">
-        <LinearSection />
+        <LinearSection onOpenTicket={onOpenTicket} />
 
         <div className="pr-section">
           <div className="pr-section-title">

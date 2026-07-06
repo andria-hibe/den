@@ -16,6 +16,7 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
+import { prepareWork, type WorkEnv } from "./git.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 export interface StartOptions {
@@ -83,7 +84,35 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       cwd?: string;
       shell?: boolean;
       resumeId?: string;
+      ticket?: string;
+      look?: boolean;
+      branch?: string;
+      env?: WorkEnv;
     };
+    // Reuse an existing running session for the same ticket (same look/work
+    // mode) so we never create duplicate sessions or branches for one issue.
+    if (body.ticket) {
+      const existing = sessions
+        .list()
+        .find(
+          (m) =>
+            m.role === "main" &&
+            m.status === "running" &&
+            m.ticket === body.ticket &&
+            !!m.look === !!body.look,
+        );
+      if (existing) return existing;
+    }
+    // "Work on it": set up the branch/worktree first, then open there.
+    if (body.branch && body.env) {
+      try {
+        const { cwd } = prepareWork(roots().runn, body.branch, body.env);
+        body.cwd = cwd;
+      } catch (err) {
+        reply.code(500);
+        return { error: "git_failed", message: (err as Error).message };
+      }
+    }
     if (body.cwd && !isDir(body.cwd)) {
       reply.code(400);
       return { error: "bad_cwd" };

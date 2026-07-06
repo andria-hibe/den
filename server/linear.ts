@@ -12,6 +12,7 @@ export interface LinearIssue {
   priority: number; // 0 none, 1 urgent, 2 high, 3 medium, 4 low
   priorityLabel: string;
   branchName?: string;
+  description?: string;
   state: { name: string; type: string; color: string };
   project?: string;
   updatedAt: string;
@@ -87,6 +88,7 @@ interface RawIssue {
   url: string;
   priority: number;
   branchName?: string | null;
+  description?: string | null;
   updatedAt: string;
   state: { name: string; type: string; color: string };
   project?: { name: string } | null;
@@ -109,6 +111,7 @@ export async function getAssignedIssues(): Promise<LinearData> {
             url
             priority
             branchName
+            description
             updatedAt
             state { name type color }
             project { name }
@@ -129,6 +132,7 @@ export async function getAssignedIssues(): Promise<LinearData> {
       priority: n.priority,
       priorityLabel: PRIORITY_LABELS[n.priority] ?? "none",
       branchName: n.branchName ?? undefined,
+      description: n.description ?? undefined,
       state: n.state,
       project: n.project?.name,
       updatedAt: n.updatedAt,

@@ -17,9 +17,20 @@ function relTime(iso: string): string {
   return `${Math.round(h / 24)}d`;
 }
 
-function IssueCard({ issue }: { issue: LinearIssue }) {
+function IssueCard({
+  issue,
+  onOpen,
+}: {
+  issue: LinearIssue;
+  onOpen: (issue: LinearIssue) => void;
+}) {
   return (
-    <a className="pr-card" href={issue.url} target="_blank" rel="noreferrer">
+    <div
+      className="pr-card ticket-card"
+      onClick={() => onOpen(issue)}
+      role="button"
+      tabIndex={0}
+    >
       <div className="pr-top">
         <span
           className="state-dot"
@@ -32,6 +43,16 @@ function IssueCard({ issue }: { issue: LinearIssue }) {
             {issue.priorityLabel}
           </span>
         )}
+        <a
+          className="ticket-ext"
+          href={issue.url}
+          target="_blank"
+          rel="noreferrer"
+          title="open in Linear"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ↗
+        </a>
         <span className="pr-time">{relTime(issue.updatedAt)}</span>
       </div>
       <div className="pr-title">{issue.title}</div>
@@ -39,7 +60,7 @@ function IssueCard({ issue }: { issue: LinearIssue }) {
         <span className="issue-state">{issue.state.name}</span>
         {issue.project && <span className="pr-badge">{issue.project}</span>}
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -90,7 +111,11 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
   );
 }
 
-export function LinearSection() {
+export function LinearSection({
+  onOpenTicket,
+}: {
+  onOpenTicket: (issue: LinearIssue) => void;
+}) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [data, setData] = useState<LinearData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +201,9 @@ export function LinearSection() {
             no active tickets 🌿
           </div>
         ) : (
-          data.issues.map((i) => <IssueCard key={i.identifier} issue={i} />)
+          data.issues.map((i) => (
+            <IssueCard key={i.identifier} issue={i} onOpen={onOpenTicket} />
+          ))
         ))}
     </div>
   );

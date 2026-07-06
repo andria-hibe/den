@@ -3,6 +3,7 @@ import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
+import { TicketDialog } from "./TicketDialog.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
@@ -43,14 +44,28 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [statusPose, setStatusPose] = useState<FoxPose>("sit");
+  const [ticketModal, setTicketModal] = useState<{
+    issue: LinearIssue;
+    startAtWork: boolean;
+  } | null>(null);
+  const [runnRoot, setRunnRoot] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/fs/roots")
+      .then((r) => r.json())
+      .then((d) => setRunnRoot(d.runn ?? ""))
+      .catch(() => {});
+  }, []);
 
   // Resizable panels (persisted).
   const [railW, setRailW] = usePersistentNumber("den.railW", 240);
   const [workW, setWorkW] = usePersistentNumber("den.workW", 300);
   const [mainFrac, setMainFrac] = usePersistentNumber("den.wsMainFrac", 0.6);
   const [shellFrac, setShellFrac] = usePersistentNumber("den.wsShellFrac", 0.5);
+  const [lookFrac, setLookFrac] = usePersistentNumber("den.lookFrac", 0.42);
   const wsRef = useRef<HTMLDivElement>(null);
   const wsBottomRef = useRef<HTMLDivElement>(null);
+  const lookRef = useRef<HTMLDivElement>(null);
 
   // PRs + Linear issues, used both for the topbar status fox and for linking a
   // session's branch to its ticket/PR.
@@ -143,6 +158,11 @@ export function App() {
     shell?: boolean;
     cwd?: string;
     resumeId?: string;
+    ticket?: string;
+    look?: boolean;
+    branch?: string;
+    env?: "local" | "worktree";
+    name?: string;
   }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
@@ -201,6 +221,57 @@ export function App() {
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, attention: false } : s)),
     );
+  };
+
+  // --- Linear ticket → look / work ---
+  // Reuse an existing session for the ticket (by explicit ticket or branch hint)
+  // so we never spin up duplicate sessions/branches for the same issue.
+  const sessionForTicket = (issue: LinearIssue, opts?: { work?: boolean }) =>
+    sessions.find(
+      (s) =>
+        s.role === "main" &&
+        (opts?.work ? !s.look : true) &&
+        (s.ticket === issue.identifier ||
+          (!!issue.ticketHint && s.ticketHint === issue.ticketHint)),
+    );
+
+  const openTicket = (issue: LinearIssue) => {
+    const existing = sessionForTicket(issue);
+    if (existing) {
+      selectSession(existing.id); // already open — just switch to it
+      return;
+    }
+    setTicketModal({ issue, startAtWork: false });
+  };
+
+  const lookAtTicket = (issue: LinearIssue) => {
+    setTicketModal(null);
+    const existing = sessionForTicket(issue);
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    addSession({
+      cwd: runnRoot || undefined,
+      ticket: issue.identifier,
+      look: true,
+      name: issue.identifier,
+    });
+  };
+
+  const workOnTicket = (issue: LinearIssue, env: "local" | "worktree") => {
+    setTicketModal(null);
+    const existing = sessionForTicket(issue, { work: true });
+    if (existing) {
+      selectSession(existing.id); // reuse the working session/branch
+      return;
+    }
+    addSession({
+      ticket: issue.identifier,
+      branch: issue.branchName,
+      env,
+      name: issue.identifier,
+    });
   };
 
   // Terminal-set title (Claude/shell) for the active session — apply unless
@@ -283,6 +354,54 @@ export function App() {
           </a>
         )}
       </>
+    );
+  };
+
+  // Ticket detail shown atop a "just looking" session.
+  const renderTicketDetail = (ticketId: string | null) => {
+    const issue = issues.find((i) => i.identifier === ticketId);
+    return (
+      <div className="ticket-detail">
+        <div className="ticket-detail-head">
+          {issue && (
+            <span className="state-dot" style={{ background: issue.state.color }} />
+          )}
+          <strong>{ticketId}</strong>
+          {issue && <span className="issue-state">{issue.state.name}</span>}
+          {issue && (
+            <a
+              className="link-chip issue"
+              href={issue.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Linear ↗
+            </a>
+          )}
+          <button
+            className="btn btn-primary"
+            style={{ marginLeft: "auto" }}
+            disabled={!issue}
+            onClick={() => issue && setTicketModal({ issue, startAtWork: true })}
+          >
+            work on it
+          </button>
+        </div>
+        {issue ? (
+          <div className="ticket-detail-body">
+            <div className="ticket-detail-title">{issue.title}</div>
+            {issue.description ? (
+              <div className="ticket-detail-desc">{issue.description}</div>
+            ) : (
+              <div className="placeholder">No description.</div>
+            )}
+          </div>
+        ) : (
+          <div className="placeholder" style={{ padding: 12 }}>
+            Ticket details aren't in your assigned list right now.
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -438,6 +557,31 @@ export function App() {
             </div>
             <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
+        ) : active.look ? (
+          <div className="look-view" ref={lookRef}>
+            <div className="ws-pane" style={{ flex: `${lookFrac} 1 0` }}>
+              {renderTicketDetail(active.ticket)}
+            </div>
+            <Splitter
+              dir="y"
+              onDrag={(d) => {
+                const h = lookRef.current?.clientHeight ?? 1;
+                setLookFrac((f) => clamp(f + d / h, 0.15, 0.8));
+              }}
+            />
+            <div
+              className="ws-main"
+              style={{ flex: `${1 - lookFrac} 1 0` }}
+            >
+              {renderHeader(active)}
+              <TerminalView
+                key={active.id}
+                session={active}
+                onExit={() => markExited(active.id)}
+                onTitle={(name) => applyTitle(active.id, name)}
+              />
+            </div>
+          </div>
         ) : active.shell ? (
           <>
             {renderHeader(active)}
@@ -501,9 +645,9 @@ export function App() {
 
       <Splitter dir="x" onDrag={(d) => setWorkW((w) => clamp(w - d, 220, 560))} />
 
-      {/* Right: work — live GitHub PRs */}
+      {/* Right: work — live GitHub PRs + Linear tickets */}
       <div className="work-col" style={{ width: workW }}>
-        <WorkPanel />
+        <WorkPanel onOpenTicket={openTicket} />
       </div>
       </div>
 
@@ -518,6 +662,16 @@ export function App() {
             setShowNew(false);
             addSession({ cwd, resumeId });
           }}
+        />
+      )}
+
+      {ticketModal && (
+        <TicketDialog
+          issue={ticketModal.issue}
+          startAtWork={ticketModal.startAtWork}
+          onClose={() => setTicketModal(null)}
+          onLook={lookAtTicket}
+          onWork={workOnTicket}
         />
       )}
     </div>

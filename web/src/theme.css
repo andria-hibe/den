@@ -816,6 +816,92 @@ body {
   gap: 8px;
   padding: 4px;
 }
+.ticket-card {
+  cursor: pointer;
+}
+.ticket-ext {
+  margin-left: auto;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 13px;
+}
+.ticket-ext:hover {
+  color: var(--pink-deep);
+}
+.ticket-card .pr-time {
+  margin-left: 8px;
+}
+
+/* Ticket dialog */
+.ticket-summary {
+  padding: 2px 4px 14px;
+}
+.ticket-summary-title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.ticket-summary-meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+.ticket-branch {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 4px 12px;
+}
+.ticket-branch code {
+  font-family: ui-monospace, Menlo, monospace;
+  background: var(--bg-rail);
+  padding: 2px 6px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+/* Look view: ticket detail on top, a Claude session below */
+.look-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ticket-detail {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  overflow: hidden;
+}
+.ticket-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.ticket-detail-head strong {
+  font-size: 14px;
+}
+.ticket-detail-body {
+  overflow-y: auto;
+  padding-top: 10px;
+}
+.ticket-detail-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+.ticket-detail-desc {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
 
 .status-fox {
   margin-left: auto;

@@ -55,6 +55,10 @@ export interface SessionMeta {
   ticketHint: string | null;
   /** The session rang the bell while unwatched — it wants your attention. */
   attention: boolean;
+  /** Linear ticket this workspace is for (identifier, e.g. "FAST-6115"). */
+  ticket: string | null;
+  /** A lightweight "just looking" session: ticket viewer + one Claude pane. */
+  look: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -80,6 +84,10 @@ class DenSession {
   spawnArgs: string[] | null = null;
   /** Git branch of the working dir, captured when the session starts. */
   branch: string | null = null;
+  /** Linear ticket identifier this workspace is for, if any. */
+  ticket: string | null = null;
+  /** Whether this is a lightweight "just looking" session. */
+  look = false;
 
   constructor(
     public id: string,
@@ -219,6 +227,8 @@ class DenSession {
       branch: this.branch,
       ticketHint: ticketHintFrom(this.branch),
       attention: this.attention,
+      ticket: this.ticket,
+      look: this.look,
     };
   }
 
@@ -288,6 +298,8 @@ class SessionManager {
     cwd?: string;
     shell?: boolean;
     resumeId?: string;
+    ticket?: string;
+    look?: boolean;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -302,6 +314,20 @@ class SessionManager {
         groupId, name, color, cwd, true, now, now, groupId, "main",
       );
       s.branch = branch;
+      this.spawnSession(s);
+      return s.meta();
+    }
+
+    // "Just looking": a single Claude pane (no shell/notepad) tied to a ticket.
+    if (opts.look) {
+      const name = opts.name ?? opts.ticket ?? "look";
+      const s = new DenSession(
+        groupId, name, color, cwd, false, now, now, groupId, "main",
+      );
+      s.spawnArgs = ["-n", name];
+      s.branch = branch;
+      s.ticket = opts.ticket ?? null;
+      s.look = true;
       this.spawnSession(s);
       return s.meta();
     }
@@ -327,6 +353,7 @@ class SessionManager {
       "--append-system-prompt", instruction,
     ];
     main.branch = branch;
+    main.ticket = opts.ticket ?? null;
     this.spawnSession(main);
 
     const term = new DenSession(
