@@ -1,0 +1,178 @@
+import { useCallback, useEffect, useState } from "react";
+import type { LinearData, LinearIssue } from "../../server/linear.ts";
+
+const PRIORITY_CLASS: Record<number, string> = {
+  1: "prio-urgent",
+  2: "prio-high",
+  3: "prio-medium",
+  4: "prio-low",
+};
+
+function relTime(iso: string): string {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.round(h / 24)}d`;
+}
+
+function IssueCard({ issue }: { issue: LinearIssue }) {
+  return (
+    <a className="pr-card" href={issue.url} target="_blank" rel="noreferrer">
+      <div className="pr-top">
+        <span
+          className="state-dot"
+          style={{ background: issue.state.color }}
+          title={issue.state.name}
+        />
+        <span className="pr-repo">{issue.identifier}</span>
+        {issue.priority > 0 && (
+          <span className={`pr-badge ${PRIORITY_CLASS[issue.priority]}`}>
+            {issue.priorityLabel}
+          </span>
+        )}
+        <span className="pr-time">{relTime(issue.updatedAt)}</span>
+      </div>
+      <div className="pr-title">{issue.title}</div>
+      <div className="pr-meta">
+        <span className="issue-state">{issue.state.name}</span>
+        {issue.project && <span className="pr-badge">{issue.project}</span>}
+      </div>
+    </a>
+  );
+}
+
+function ConnectForm({ onConnected }: { onConnected: () => void }) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const connect = async () => {
+    if (!key.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/linear/key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: key.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      setKey("");
+      onConnected();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="linear-connect">
+      <div className="placeholder" style={{ padding: "2px 4px" }}>
+        Paste a Linear personal API key (Read scope is enough).
+      </div>
+      <input
+        className="path-input"
+        type="password"
+        placeholder="lin_api_…"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && connect()}
+      />
+      <button className="btn btn-primary" onClick={connect} disabled={busy}>
+        {busy ? "connecting…" : "connect linear"}
+      </button>
+      {error && <div className="browser-error">⚠️ {error}</div>}
+    </div>
+  );
+}
+
+export function LinearSection() {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [data, setData] = useState<LinearData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadIssues = useCallback(async (refresh = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/linear/issues${refresh ? "?refresh=1" : ""}`);
+      if (res.status === 409) {
+        setConnected(false);
+        return;
+      }
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      setData(d);
+      setConnected(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/linear/status")
+      .then((r) => r.json())
+      .then((s) => {
+        setConnected(s.connected);
+        if (s.connected) loadIssues();
+      })
+      .catch(() => setConnected(false));
+  }, [loadIssues]);
+
+  useEffect(() => {
+    if (!connected) return;
+    const t = setInterval(() => loadIssues(), 60_000);
+    return () => clearInterval(t);
+  }, [connected, loadIssues]);
+
+  const disconnect = async () => {
+    await fetch("/api/linear/key", { method: "DELETE" });
+    setData(null);
+    setConnected(false);
+  };
+
+  return (
+    <div className="pr-section">
+      <div className="pr-section-title">
+        <span>linear</span>
+        {connected && data && <span className="pr-count">{data.issues.length}</span>}
+        <span style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
+          {connected && (
+            <>
+              <button
+                className="btn-ghost"
+                onClick={() => loadIssues(true)}
+                disabled={loading}
+                title="refresh"
+              >
+                {loading ? "…" : "↻"}
+              </button>
+              <button className="btn-ghost" onClick={disconnect} title="disconnect">
+                ⏻
+              </button>
+            </>
+          )}
+        </span>
+      </div>
+
+      {connected === null && <div className="placeholder">…</div>}
+      {connected === false && <ConnectForm onConnected={() => loadIssues(true)} />}
+      {connected && error && <div className="browser-error">⚠️ {error}</div>}
+      {connected &&
+        data &&
+        (data.issues.length === 0 ? (
+          <div className="placeholder" style={{ padding: "4px 6px" }}>
+            no active tickets 🌿
+          </div>
+        ) : (
+          data.issues.map((i) => <IssueCard key={i.identifier} issue={i} />)
+        ))}
+    </div>
+  );
+}

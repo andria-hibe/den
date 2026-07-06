@@ -6,6 +6,14 @@ import os from "node:os";
 import type { AddressInfo } from "node:net";
 import { sessions } from "./sessions.ts";
 import { getMyPullRequests, type PrBuckets } from "./github.ts";
+import {
+  getAssignedIssues,
+  validateKey,
+  setKey,
+  clearKey,
+  hasKey,
+  type LinearData,
+} from "./linear.ts";
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
@@ -116,6 +124,54 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       reply.code(502);
       return { error: "gh_failed", message: (err as Error).message };
+    }
+  });
+
+  // --- Linear (cached) ---
+  app.get("/api/linear/status", async () => ({ connected: hasKey() }));
+
+  app.post("/api/linear/key", async (req, reply) => {
+    const { key } = (req.body ?? {}) as { key?: string };
+    if (!key || !key.trim()) {
+      reply.code(400);
+      return { error: "key_required" };
+    }
+    try {
+      const viewer = await validateKey(key.trim());
+      setKey(key.trim());
+      linearCache = null;
+      return { connected: true, viewer };
+    } catch (err) {
+      reply.code(401);
+      return { error: (err as Error).message };
+    }
+  });
+
+  app.delete("/api/linear/key", async () => {
+    clearKey();
+    linearCache = null;
+    return { connected: false };
+  });
+
+  const LINEAR_TTL_MS = 30_000;
+  let linearCache: { at: number; data: LinearData } | null = null;
+  app.get("/api/linear/issues", async (req, reply) => {
+    if (!hasKey()) {
+      reply.code(409);
+      return { error: "not_connected" };
+    }
+    const fresh = (req.query as { refresh?: string })?.refresh === "1";
+    if (!fresh && linearCache && Date.now() - linearCache.at < LINEAR_TTL_MS) {
+      return linearCache.data;
+    }
+    try {
+      const data = await getAssignedIssues();
+      linearCache = { at: Date.now(), data };
+      return data;
+    } catch (err) {
+      const msg = (err as Error).message;
+      reply.code(msg === "unauthorized" ? 401 : 502);
+      return { error: msg };
     }
   });
 

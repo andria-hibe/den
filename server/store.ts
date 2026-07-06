@@ -37,6 +37,10 @@ db.exec(`
     createdAt INTEGER NOT NULL,
     lastActive INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 const stmts = {
@@ -53,6 +57,12 @@ const stmts = {
   markAllExited: db.prepare(
     `UPDATE sessions SET status='exited' WHERE status='running'`,
   ),
+  getSetting: db.prepare(`SELECT value FROM settings WHERE key=?`),
+  setSetting: db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+  ),
+  deleteSetting: db.prepare(`DELETE FROM settings WHERE key=?`),
 };
 
 export const store = {
@@ -71,5 +81,15 @@ export const store = {
   /** On boot, any session marked running is stale (its PTY is gone). */
   markAllExited() {
     stmts.markAllExited.run();
+  },
+  getSetting(key: string): string | null {
+    const row = stmts.getSetting.get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  },
+  setSetting(key: string, value: string) {
+    stmts.setSetting.run(key, value);
+  },
+  deleteSetting(key: string) {
+    stmts.deleteSetting.run(key);
   },
 };

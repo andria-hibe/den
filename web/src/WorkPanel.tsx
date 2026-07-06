@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type { PrBuckets, PullRequest } from "../../server/github.ts";
+import { LinearSection } from "./LinearPanel.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -102,29 +103,41 @@ export function WorkPanel() {
   return (
     <aside className="panel work">
       <div className="work-head">
-        <h2 style={{ margin: 0 }}>github</h2>
-        <button
-          className="btn-ghost"
-          onClick={() => load(true)}
-          disabled={loading}
-          title="refresh"
-        >
-          {loading ? "…" : "↻"}
-        </button>
+        <h2 style={{ margin: 0 }}>work</h2>
       </div>
 
-      {error && <div className="placeholder">⚠️ {error}</div>}
-      {!data && !error && <div className="placeholder">loading your PRs…</div>}
+      <div className="pr-scroll">
+        <LinearSection />
 
-      {data && (
-        <div className="pr-scroll">
-          <Section title="review requested" prs={data.reviewRequested} />
-          <Section title="my open PRs" prs={data.authored} />
-          <div className="linear-soon placeholder">
-            🌱 Linear tickets coming next
+        <div className="pr-section">
+          <div className="pr-section-title">
+            <span>github</span>
+            {data && (
+              <span className="pr-count">
+                {data.reviewRequested.length + data.authored.length}
+              </span>
+            )}
+            <span style={{ marginLeft: "auto" }}>
+              <button
+                className="btn-ghost"
+                onClick={() => load(true)}
+                disabled={loading}
+                title="refresh"
+              >
+                {loading ? "…" : "↻"}
+              </button>
+            </span>
           </div>
+          {error && <div className="browser-error">⚠️ {error}</div>}
+          {!data && !error && <div className="placeholder">loading your PRs…</div>}
+          {data && (
+            <>
+              <Section title="review requested" prs={data.reviewRequested} />
+              <Section title="my open PRs" prs={data.authored} />
+            </>
+          )}
         </div>
-      )}
+      </div>
     </aside>
   );
 }

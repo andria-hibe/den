@@ -67,7 +67,7 @@ npm run dev            # server on :4321, web on :5173 — open the latter
 ## Roadmap
 
 - **v1** — ✅ GitHub PR panel · ✅ persistent multi-session manager
-  (rename/recolour, scrollback on switch) · ⬜ Linear ticket panel.
+  (rename/recolour, scrollback on switch) · ✅ Linear ticket panel.
 - **v2** — workspace linking (ticket ↔ worktree ↔ PR ↔ session), quick actions.
 - **v3** — notifications, pixel-art polish, optional Tauri desktop packaging.
 
