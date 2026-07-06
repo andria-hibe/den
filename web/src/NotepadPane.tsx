@@ -1,17 +1,82 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Shows the workspace progress log (which the main Claude keeps). Auto-refreshes
-// from the file unless you're editing; you can edit and Save it back.
+// --- Minimal, safe markdown -> HTML (headings, lists, bold/italic/code, links).
+// Content is escaped first, so the rendered HTML can't inject markup.
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inline(s: string) {
+  return s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noreferrer">$1</a>',
+    );
+}
+function renderMarkdown(md: string): string {
+  const lines = escapeHtml(md).split("\n");
+  let html = "";
+  let inCode = false;
+  let inList = false;
+  const closeList = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+  for (const raw of lines) {
+    if (raw.trim().startsWith("```")) {
+      if (inCode) {
+        html += "</pre>";
+        inCode = false;
+      } else {
+        closeList();
+        html += "<pre>";
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      html += raw + "\n";
+      continue;
+    }
+    const heading = raw.match(/^(#{1,4})\s+(.*)$/);
+    const bullet = raw.match(/^\s*[-*]\s+(.*)$/);
+    if (heading) {
+      closeList();
+      const lvl = heading[1].length;
+      html += `<h${lvl}>${inline(heading[2])}</h${lvl}>`;
+    } else if (bullet) {
+      if (!inList) {
+        html += "<ul>";
+        inList = true;
+      }
+      html += `<li>${inline(bullet[1])}</li>`;
+    } else if (raw.trim() === "") {
+      closeList();
+    } else {
+      closeList();
+      html += `<p>${inline(raw)}</p>`;
+    }
+  }
+  if (inCode) html += "</pre>";
+  closeList();
+  return html;
+}
+
+// Progress log for a workspace. Renders markdown in view mode; edit + save.
 export function NotepadPane({ groupId }: { groupId: string }) {
   const [content, setContent] = useState("");
+  const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const dirtyRef = useRef(false);
-  dirtyRef.current = dirty;
+  const busyRef = useRef(false);
+  busyRef.current = editing || dirty;
 
   const refresh = useCallback(async () => {
-    // Don't clobber unsaved edits.
-    if (dirtyRef.current) return;
+    if (busyRef.current) return; // don't clobber an in-progress edit
     try {
       const res = await fetch(`/api/notepad/${groupId}`);
       const d = await res.json();
@@ -22,6 +87,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   }, [groupId]);
 
   useEffect(() => {
+    setEditing(false);
     setDirty(false);
     refresh();
     const t = setInterval(refresh, 3000);
@@ -37,6 +103,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
         body: JSON.stringify({ content }),
       });
       setDirty(false);
+      setEditing(false);
     } finally {
       setSaving(false);
     }
@@ -47,24 +114,47 @@ export function NotepadPane({ groupId }: { groupId: string }) {
       <div className="notepad-head">
         <span className="notepad-title">📝 progress</span>
         {dirty && <span className="notepad-dirty">unsaved</span>}
-        <button
-          className="btn notepad-save"
-          onClick={save}
-          disabled={!dirty || saving}
-        >
-          {saving ? "saving…" : "save"}
-        </button>
+        {editing ? (
+          <button className="btn notepad-save" onClick={save} disabled={saving}>
+            {saving ? "saving…" : "save"}
+          </button>
+        ) : (
+          <button
+            className="btn notepad-save"
+            onClick={() => setEditing(true)}
+            title="edit the log"
+          >
+            edit
+          </button>
+        )}
       </div>
-      <textarea
-        className="notepad-body"
-        value={content}
-        spellCheck={false}
-        onChange={(e) => {
-          setContent(e.target.value);
-          setDirty(true);
-        }}
-        placeholder="The main Claude keeps its progress log here as it works…"
-      />
+      {editing ? (
+        <textarea
+          className="notepad-body"
+          value={content}
+          spellCheck={false}
+          autoFocus
+          onChange={(e) => {
+            setContent(e.target.value);
+            setDirty(true);
+          }}
+          placeholder="The main Claude keeps its progress log here as it works…"
+        />
+      ) : content.trim() ? (
+        <div
+          className="notepad-render"
+          onDoubleClick={() => setEditing(true)}
+          title="double-click to edit"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+        />
+      ) : (
+        <div
+          className="notepad-render notepad-empty"
+          onDoubleClick={() => setEditing(true)}
+        >
+          No progress logged yet.
+        </div>
+      )}
     </div>
   );
 }

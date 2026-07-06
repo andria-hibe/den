@@ -370,10 +370,7 @@ class SessionManager {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     const file = notepadPath(groupId);
     if (!existsSync(file)) {
-      writeFileSync(
-        file,
-        "# Progress\n\n_den keeps a running log here as the session works — you can edit and save it too._\n\n",
-      );
+      writeFileSync(file, "# Progress\n\n");
     }
     return file;
   }
