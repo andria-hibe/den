@@ -99,15 +99,19 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
+  font-weight: 800;
   font-size: 14px;
   max-width: 46%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  padding: 4px 12px;
+  padding: 5px 13px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.4);
+  /* Solid chip + dark text so the title stands off any pastel tint. */
+  color: #2e2333;
+  background: #fffafd;
+  border: 1.5px solid rgba(90, 60, 90, 0.18);
+  box-shadow: 0 1px 4px rgba(90, 60, 90, 0.18);
 }
 .topbar-title .dot {
   width: 11px;
