@@ -286,6 +286,7 @@ body {
 .session {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
@@ -293,6 +294,14 @@ body {
   border: 2px solid transparent;
   margin-bottom: 8px;
   transition: transform 0.08s ease;
+}
+.session-links {
+  flex-basis: 100%;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-left: 22px;
+  margin-top: -2px;
 }
 .session:hover {
   transform: translateY(-1px);

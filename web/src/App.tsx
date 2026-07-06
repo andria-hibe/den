@@ -252,6 +252,7 @@ export function App() {
             target="_blank"
             rel="noreferrer"
             title={issue.title}
+            onClick={(e) => e.stopPropagation()}
           >
             {issue.identifier}
           </a>
@@ -263,6 +264,7 @@ export function App() {
             target="_blank"
             rel="noreferrer"
             title={pr.title}
+            onClick={(e) => e.stopPropagation()}
           >
             PR #{pr.number} {check}
           </a>
@@ -328,7 +330,9 @@ export function App() {
       <aside className="panel rail" style={{ width: railW }}>
         <h2>sessions</h2>
         <div className="session-list">
-        {rail.map((s) => (
+        {rail.map((s) => {
+          const links = renderWorkLinks(s.ticketHint);
+          return (
           <div
             key={s.id}
             className={`session ${s.id === activeId ? "active" : ""}`}
@@ -375,8 +379,10 @@ export function App() {
             >
               ×
             </button>
+            {links && <span className="session-links">{links}</span>}
           </div>
-        ))}
+          );
+        })}
         {rail.length === 0 && (
           <div className="placeholder">no sessions yet — start one below 🌱</div>
         )}
