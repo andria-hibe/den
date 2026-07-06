@@ -139,7 +139,11 @@ export function App() {
         )
       : null;
 
-  const addSession = async (opts: { shell?: boolean; cwd?: string }) => {
+  const addSession = async (opts: {
+    shell?: boolean;
+    cwd?: string;
+    resumeId?: string;
+  }) => {
     const meta = await api<SessionMeta>("/api/sessions", {
       method: "POST",
       body: JSON.stringify(opts),
@@ -489,6 +493,10 @@ export function App() {
           onCreate={(cwd) => {
             setShowNew(false);
             addSession({ cwd });
+          }}
+          onResume={(cwd, resumeId) => {
+            setShowNew(false);
+            addSession({ cwd, resumeId });
           }}
         />
       )}

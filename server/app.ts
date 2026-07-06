@@ -15,6 +15,7 @@ import {
   type LinearData,
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
+import { listPastSessions } from "./discover.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 export interface StartOptions {
@@ -72,12 +73,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // --- Sessions REST ---
   app.get("/api/sessions", async () => ({ sessions: sessions.list() }));
 
+  // Past Claude sessions on disk, for resuming.
+  app.get("/api/sessions/past", async () => ({ sessions: listPastSessions() }));
+
   app.post("/api/sessions", async (req, reply) => {
     const body = (req.body ?? {}) as {
       name?: string;
       color?: string;
       cwd?: string;
       shell?: boolean;
+      resumeId?: string;
     };
     if (body.cwd && !isDir(body.cwd)) {
       reply.code(400);

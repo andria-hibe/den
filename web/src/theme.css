@@ -997,6 +997,39 @@ body {
   color: #234a63;
   font-weight: 700;
 }
+.choose-card.resume:hover {
+  border-color: var(--mint);
+}
+.resume-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.resume-row:hover {
+  background: var(--bg-rail);
+}
+.resume-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resume-meta {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-family: ui-monospace, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .dir-tag {
   margin-left: auto;
   font-size: 10px;

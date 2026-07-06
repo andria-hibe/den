@@ -13,16 +13,25 @@ interface Listing {
   parent: string | null;
   dirs: { name: string; path: string }[];
 }
-type Mode = "work" | "personal" | "other";
+type Mode = "work" | "personal" | "other" | "resume";
+interface PastSession {
+  sessionId: string;
+  cwd: string;
+  title: string;
+  updatedAt: number;
+}
 
 export function NewSessionDialog({
   onCreate,
+  onResume,
   onClose,
 }: {
   onCreate: (cwd: string) => void;
+  onResume: (cwd: string, resumeId: string) => void;
   onClose: () => void;
 }) {
   const [roots, setRoots] = useState<Roots | null>(null);
+  const [past, setPast] = useState<PastSession[] | null>(null);
   const [mode, setMode] = useState<Mode | null>(null);
   const [path, setPath] = useState("");
   const [listing, setListing] = useState<Listing | null>(null);
@@ -58,12 +67,30 @@ export function NewSessionDialog({
   );
 
   const choose = (m: Mode) => {
-    if (!roots) return;
     setMode(m);
+    if (m === "resume") {
+      setPast(null);
+      fetch("/api/sessions/past")
+        .then((r) => r.json())
+        .then((d) => setPast(d.sessions ?? []))
+        .catch(() => setPast([]));
+      return;
+    }
+    if (!roots) return;
     const start =
       m === "work" ? roots.runn : m === "personal" ? roots.projects : roots.documents;
     navigate(start);
   };
+
+  const relTime = (ms: number) => {
+    const m = Math.round((Date.now() - ms) / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.round(h / 24)}d ago`;
+  };
+  const shortPath = (p: string) =>
+    roots && p.startsWith(roots.home) ? "~" + p.slice(roots.home.length) : p;
 
   const createFolder = async () => {
     if (!newName.trim()) return;
@@ -119,6 +146,45 @@ export function NewSessionDialog({
                 <div className="choose-sub">type a path or start in Documents</div>
               </div>
             </button>
+            <button className="choose-card resume" onClick={() => choose("resume")}>
+              <div className="choose-emoji">⏳</div>
+              <div className="choose-text">
+                <div className="choose-title">Resume</div>
+                <div className="choose-sub">pick up a past Claude session</div>
+              </div>
+            </button>
+          </div>
+        ) : mode === "resume" ? (
+          <div className="browser">
+            <div className="browser-bar">
+              <button className="btn-ghost" onClick={() => setMode(null)} title="back">
+                ‹
+              </button>
+              <span className="path-input" style={{ display: "flex", alignItems: "center" }}>
+                resume a past session
+              </span>
+            </div>
+            <div className="browser-list">
+              {past === null && <div className="placeholder" style={{ padding: 8 }}>loading…</div>}
+              {past?.length === 0 && (
+                <div className="placeholder" style={{ padding: 8 }}>
+                  no past sessions found
+                </div>
+              )}
+              {past?.map((p) => (
+                <button
+                  key={p.sessionId}
+                  className="resume-row"
+                  onClick={() => onResume(p.cwd, p.sessionId)}
+                  title={p.cwd}
+                >
+                  <div className="resume-title">{p.title}</div>
+                  <div className="resume-meta">
+                    {shortPath(p.cwd)} · {relTime(p.updatedAt)}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="browser">

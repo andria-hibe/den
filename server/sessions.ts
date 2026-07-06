@@ -272,7 +272,13 @@ class SessionManager {
    * - claude: a main Claude pane + a sibling shell pane in the same folder, plus
    *   a progress notepad the main Claude is told to keep.
    */
-  create(opts: { name?: string; color?: string; cwd?: string; shell?: boolean }) {
+  create(opts: {
+    name?: string;
+    color?: string;
+    cwd?: string;
+    shell?: boolean;
+    resumeId?: string;
+  }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
     const color = opts.color ?? COLORS[this.colorIdx++ % COLORS.length];
@@ -306,7 +312,7 @@ class SessionManager {
       randomUUID(), name, color, cwd, false, now, now, groupId, "main",
     );
     main.spawnArgs = [
-      "-n", name,
+      ...(opts.resumeId ? ["--resume", opts.resumeId] : ["-n", name]),
       "--add-dir", PROGRESS_DIR,
       "--append-system-prompt", instruction,
     ];
