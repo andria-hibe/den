@@ -168,7 +168,7 @@ export function App() {
       >
         <PixelFox size={30} />
         <span className="wordmark">den</span>
-        {active ? (
+        {active && (
           <span className="topbar-title" title={active.cwd}>
             <span className="dot" style={{ background: active.color }} />
             {active.name}
@@ -176,8 +176,6 @@ export function App() {
               {active.shell ? "shell" : "claude"}
             </span>
           </span>
-        ) : (
-          <span className="tagline">your cozy Claude cockpit</span>
         )}
         <span
           className="status-fox"
