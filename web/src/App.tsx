@@ -237,6 +237,23 @@ export function App() {
     );
   };
 
+  // Re-spawn an exited session's PTY in place (keeps cwd/name/branch/ticket/PR).
+  // The terminal is keyed by `id:status`, so flipping to running remounts it and
+  // reconnects to the fresh process.
+  const restartSession = async (id: string) => {
+    try {
+      const meta = await api<SessionMeta>(`/api/sessions/${id}/restart`, {
+        method: "POST",
+      });
+      setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
+      setActiveId(meta.id);
+    } catch (e) {
+      // 409 cannot_restart just means it's already running (e.g. a double-click);
+      // that's benign, so don't nag with a toast.
+      if ((e as Error).message !== "cannot_restart") setErrMsg((e as Error).message);
+    }
+  };
+
   const closeSession = async (id: string) => {
     const groupId = sessions.find((s) => s.id === id)?.groupId;
     await api(`/api/sessions/${id}`, { method: "DELETE" });
@@ -506,7 +523,23 @@ export function App() {
         </span>
       )}
       {renderWorkLinks(s.ticketHint)}
-      <span style={{ marginLeft: "auto" }}>
+      <span
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        {s.status === "exited" && (
+          <button
+            className="btn btn-ghost-outline restart-btn"
+            onClick={() => restartSession(s.id)}
+            title="restart this session"
+          >
+            ↻ restart
+          </button>
+        )}
         {s.shell ? "shell" : "claude"} · {s.status}
       </span>
     </div>
@@ -858,6 +891,18 @@ export function App() {
               </span>
             )}
             <span className="status">{s.status === "running" ? "●" : "○"}</span>
+            {s.status === "exited" && (
+              <button
+                className="session-restart"
+                title="restart session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  restartSession(s.id);
+                }}
+              >
+                ↻
+              </button>
+            )}
             <button
               className="session-close"
               title="close session"
@@ -912,7 +957,7 @@ export function App() {
             header={renderHeader(active)}
             terminal={
               <TerminalView
-                key={active.id}
+                key={`${active.id}:${active.status}`}
                 session={active}
                 onExit={() => markExited(active.id)}
                 onTitle={(name) => applyTitle(active.id, name)}
@@ -928,7 +973,7 @@ export function App() {
             header={renderHeader(active)}
             terminal={
               <TerminalView
-                key={active.id}
+                key={`${active.id}:${active.status}`}
                 session={active}
                 onExit={() => markExited(active.id)}
                 onTitle={(name) => applyTitle(active.id, name)}
@@ -953,7 +998,7 @@ export function App() {
             >
               {renderHeader(active)}
               <TerminalView
-                key={active.id}
+                key={`${active.id}:${active.status}`}
                 session={active}
                 onExit={() => markExited(active.id)}
                 onTitle={(name) => applyTitle(active.id, name)}
@@ -964,7 +1009,7 @@ export function App() {
           <>
             {renderHeader(active)}
             <TerminalView
-              key={active.id}
+              key={`${active.id}:${active.status}`}
               session={active}
               onExit={() => markExited(active.id)}
               onTitle={(name) => applyTitle(active.id, name)}
@@ -975,7 +1020,7 @@ export function App() {
             <div className="ws-main" style={{ flex: `${mainFrac} 1 0` }}>
               {renderHeader(active)}
               <TerminalView
-                key={active.id}
+                key={`${active.id}:${active.status}`}
                 session={active}
                 onExit={() => markExited(active.id)}
                 onTitle={(name) => applyTitle(active.id, name)}
@@ -1034,7 +1079,7 @@ export function App() {
                 </div>
                 {activeShell ? (
                   <TerminalView
-                    key={activeShell.id}
+                    key={`${activeShell.id}:${activeShell.status}`}
                     session={activeShell}
                     onExit={() => markExited(activeShell.id)}
                     onTitle={() => {}}

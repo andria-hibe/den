@@ -190,6 +190,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
+  // Re-spawn an exited session's PTY (e.g. after den was closed/reopened).
+  app.post("/api/sessions/:id/restart", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const meta = sessions.restart(id);
+    if (!meta) {
+      reply.code(409);
+      return { error: "cannot_restart" };
+    }
+    return meta;
+  });
+
   app.patch("/api/sessions/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { name?: string; color?: string };

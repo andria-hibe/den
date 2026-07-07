@@ -122,6 +122,18 @@ adds a shell-role pane to a group; `removeOne(id)` (route `DELETE …?scope=one`
 closes a single pane, refusing "main". The frontend tracks the active tab per
 group in a `shellTab` map.
 
+Restarting exited sessions: `sessions.restart(id)` (route `POST /api/sessions/:id/restart`)
+re-spawns an exited session's PTY in place, keeping its cwd/name/colour/branch/
+ticket/PR context. Claude args are **rebuilt** from the persisted context
+(`restartArgs` — a workspace main keeps its `--add-dir`/progress-notepad wiring;
+look/PR panes get `-n name`), so restart never re-injects the one-time initial
+prompt, and it works even after a server restart wiped the in-memory `spawnArgs`.
+The scrollback is cleared (fresh process). The frontend keys each `TerminalView`
+by `` `${id}:${status}` `` so the flip to "running" remounts it and reconnects to
+the new PTY; restart buttons (`↻`) appear on exited rail rows + in the workspace
+header. This is the answer to "live PTYs don't survive a restart" — the row comes
+back exited, and one click revives it.
+
 ## Features (all built + committed on `master`)
 
 - Multi-session cockpit: create/rename(double-click)/recolour/close; persistent;

@@ -46,6 +46,21 @@ export const notepadPath = (groupId: string) => {
   return join(PROGRESS_DIR, `${groupId}.md`);
 };
 
+/** The system-prompt instruction telling the main Claude to log progress to its
+ * workspace notepad. Shared by create() and restart() so a restarted workspace
+ * keeps its progress-logging wiring. */
+function progressInstruction(file: string): string {
+  return (
+    `You're working in a project inside a tool called "den". Keep a running ` +
+    `progress log for the developer at the absolute path ${file}. After each ` +
+    `meaningful step — a decision, an edit, a completed task, or a blocker — ` +
+    `append a short timestamped bullet to that file describing what you did. ` +
+    `Keep entries concise and skimmable and never delete earlier ones. This ` +
+    `file is shown to the developer in a side notepad; don't mention this ` +
+    `logging in your replies.`
+  );
+}
+
 /** Metadata shape sent to the web app. */
 export interface SessionMeta {
   id: string;
@@ -303,6 +318,13 @@ class DenSession {
     this.bufferBytes = text.length;
   }
 
+  /** Drop the scrollback (used on restart — the re-spawned process starts fresh). */
+  clearBuffer() {
+    this.buffer = [];
+    this.bufferBytes = 0;
+    this.scrollbackDirty = true;
+  }
+
   /** Write the current scrollback to the store if it changed since last flush. */
   persistScrollback() {
     if (!this.scrollbackDirty) return;
@@ -443,14 +465,7 @@ class SessionManager {
     // Claude workspace: main pane + shell pane + notepad.
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
     const file = this.ensureNotepad(groupId, opts.notepadSeed);
-    const instruction =
-      `You're working in a project inside a tool called "den". Keep a running ` +
-      `progress log for the developer at the absolute path ${file}. After each ` +
-      `meaningful step — a decision, an edit, a completed task, or a blocker — ` +
-      `append a short timestamped bullet to that file describing what you did. ` +
-      `Keep entries concise and skimmable and never delete earlier ones. This ` +
-      `file is shown to the developer in a side notepad; don't mention this ` +
-      `logging in your replies.`;
+    const instruction = progressInstruction(file);
 
     const main = new DenSession(
       randomUUID(), name, color, cwd, false, now, now, groupId, "main",
@@ -495,6 +510,41 @@ class SessionManager {
     term.branch = sibling.branch;
     this.spawnSession(term);
     return term.meta();
+  }
+
+  /**
+   * Re-spawn an exited session's PTY in place, keeping its cwd/name/colour/
+   * branch/ticket/PR context — so an exited pane (e.g. after den was closed and
+   * reopened, when live PTYs don't survive) can be brought back to life without
+   * losing its identity. Args are rebuilt from the persisted context rather than
+   * reused, so restart never re-injects a one-time initial prompt. Returns the
+   * refreshed meta, or null if the session is unknown or already running.
+   */
+  restart(id: string): SessionMeta | null {
+    const s = this.sessions.get(id);
+    if (!s || s.status === "running") return null;
+    // Rebuild claude args from context (shells fall back to the login shell).
+    s.spawnArgs = s.shell ? null : this.restartArgs(s);
+    s.clearBuffer(); // fresh terminal — the exited scrollback was just history
+    s.spawn();
+    store.update(s.toRow());
+    return s.meta();
+  }
+
+  /** Claude spawn args for a restart, rebuilt from the session's context. A
+   * workspace main keeps its progress-notepad wiring; look/PR panes just get a
+   * named session. (No initial prompt — that's a one-time create-only thing.) */
+  private restartArgs(s: DenSession): string[] {
+    if (s.role === "main" && !s.look && !s.view) {
+      mkdirSync(PROGRESS_DIR, { recursive: true });
+      const file = notepadPath(s.groupId);
+      return [
+        "-n", s.name,
+        "--add-dir", PROGRESS_DIR,
+        "--append-system-prompt", progressInstruction(file),
+      ];
+    }
+    return ["-n", s.name];
   }
 
   get(id: string) {

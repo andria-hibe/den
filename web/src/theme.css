@@ -480,6 +480,32 @@ body {
   color: var(--pink-deep);
   background: var(--bg);
 }
+/* Restart an exited session — kept visible (not hover-only) so it's easy to
+   find on a dead session, unlike the close button. */
+.session-restart {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 6px;
+  opacity: 0.7;
+  transition: opacity 0.1s ease, color 0.1s ease;
+}
+.session:hover .session-restart {
+  opacity: 1;
+}
+.session-restart:hover {
+  color: var(--pink-deep);
+  background: var(--bg);
+}
+.restart-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
 .rename-input {
   flex: 1;
   min-width: 0;
