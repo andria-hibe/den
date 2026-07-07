@@ -23,6 +23,15 @@ const MOD =
     ? "⌘"
     : "Ctrl";
 
+// The full cast of topbar foxes, for the click-to-open status popover.
+const FOX_POSES: { pose: FoxPose; label: string; note: string }[] = [
+  { pose: "sit", label: "Sit", note: "idle — open PRs, nothing urgent" },
+  { pose: "happy", label: "Happy", note: "all your PRs look healthy" },
+  { pose: "alert", label: "Alert", note: "a PR, a review, or Linear needs you" },
+  { pose: "walk", label: "Walk", note: "busy — shown while loading" },
+  { pose: "sleep", label: "Sleep", note: "empty — the den is quiet" },
+];
+
 function relTime(iso: string): string {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (m < 1) return "just now";
@@ -128,6 +137,9 @@ export function App() {
   const [linearNotifs, setLinearNotifs] = useState(0);
   // groupId → the shell-tab id currently shown in that workspace's shell pane.
   const [shellTab, setShellTab] = useState<Record<string, string>>({});
+  // Click the topbar fox to open a popover showing the whole cast.
+  const [foxPopOpen, setFoxPopOpen] = useState(false);
+  const foxPopRef = useRef<HTMLSpanElement>(null);
   const [ticketModal, setTicketModal] = useState<{
     issue: LinearIssue;
     startAtWork: boolean;
@@ -227,6 +239,23 @@ export function App() {
     else if (prCount > 0) setStatusPose("happy");
     else setStatusPose("sit");
   }, [prNeedsMe, prCount, linearNotifs]);
+
+  // Close the fox popover on an outside click or Escape.
+  useEffect(() => {
+    if (!foxPopOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!foxPopRef.current?.contains(e.target as Node)) setFoxPopOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFoxPopOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [foxPopOpen]);
 
   // Match a session's branch ticket hint to a PR / Linear ticket.
   const prByHint = (hint: string | null) =>
@@ -866,12 +895,40 @@ export function App() {
             </span>
           </span>
         )}
-        <span
-          className="status-fox"
-          title={STATUS_TITLE[statusPose]}
-          aria-label={STATUS_TITLE[statusPose]}
-        >
-          <Fox pose={statusPose} size={38} />
+        <span className="status-fox-wrap" ref={foxPopRef}>
+          <button
+            className="status-fox"
+            title={STATUS_TITLE[statusPose]}
+            aria-label={`Status: ${STATUS_TITLE[statusPose]} — click to see all foxes`}
+            aria-expanded={foxPopOpen}
+            onClick={() => setFoxPopOpen((o) => !o)}
+          >
+            <Fox pose={statusPose} size={38} />
+          </button>
+          {foxPopOpen && (
+            <div className="fox-pop" role="dialog" aria-label="den's foxes">
+              <div className="fox-pop-title">den's foxes</div>
+              <div className="fox-pop-grid">
+                {FOX_POSES.map(({ pose, label, note }) => (
+                  <div
+                    key={pose}
+                    className={`fox-pop-item${pose === statusPose ? " current" : ""}`}
+                  >
+                    <div className="fox-pop-stage">
+                      <Fox pose={pose} size={52} />
+                    </div>
+                    <div className="fox-pop-name">
+                      {label}
+                      {pose === statusPose && (
+                        <span className="fox-pop-now">now</span>
+                      )}
+                    </div>
+                    <div className="fox-pop-note">{note}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </span>
       </div>
 

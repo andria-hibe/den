@@ -1457,11 +1457,97 @@ body {
   background: rgba(255, 255, 255, 0.4);
   transform: translateY(-1px);
 }
-.status-fox {
+.status-fox-wrap {
   margin-left: auto;
+  position: relative;
   display: flex;
   align-items: center;
-  padding-right: 4px;
+}
+.status-fox {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px 2px 2px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.status-fox:hover {
+  transform: translateY(-1px) scale(1.05);
+  background: rgba(255, 255, 255, 0.35);
+}
+.fox-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  width: 220px;
+  padding: 12px 14px 14px;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.fox-pop-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+.fox-pop-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fox-pop-item {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+}
+.fox-pop-item.current {
+  background: var(--bg-rail);
+  border-color: var(--pink);
+}
+.fox-pop-stage {
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fox-pop-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  align-self: end;
+}
+.fox-pop-now {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #fff;
+  background: var(--pink-deep);
+  padding: 1px 5px;
+  border-radius: 999px;
+}
+.fox-pop-note {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.35;
+  align-self: start;
 }
 .loading-row {
   display: flex;
