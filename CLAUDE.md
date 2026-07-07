@@ -13,6 +13,9 @@ npm run dev            # browser dev: server :4321 + Vite :5173 (open :5173)  �
 npm run app            # launch as an Electron app (rebuilds native for Electron first)
 npm run pack           # build release/mac-arm64/Den.app (unsigned, local)
 npm run typecheck
+npm run lint           # eslint (flat config; non-type-checked)
+npm test               # vitest (server + web pure logic)
+npm run check          # typecheck + lint + test — run before committing
 ```
 
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
@@ -68,7 +71,18 @@ WebSocket; everything else is REST.
   (documents / work / **runn** / projects).
 - `web/src/App.tsx` — the whole UI: 3-column flex layout, session rail, center
   (terminal / 3-pane claude workspace / look / PR review / my-PR), work panel,
-  all dialogs + handlers. Big file; most wiring lives here.
+  all dialogs + handlers. Still the largest file, but the cross-cutting concerns
+  now live in their own modules (below).
+- `web/src/WorkData.tsx` — **single source of truth** for GitHub PRs + Linear
+  issues. A `WorkDataProvider` (mounted in `main.tsx`) polls each endpoint **once**
+  (60s) and shares it via `useWorkData()`; App (fox + linking), `WorkPanel`, and
+  `LinearSection` all read from it, so they never drift out of phase. Previously
+  each polled independently (four loops for two resources).
+- `web/src/` hooks/helpers extracted from App: `useRovingFocus` (arrow-key focus
+  ring), `useKeyboardShortcuts` (Cmd/Ctrl+N/T/W/1–9), `useNotifications` (native
+  OS notifications on attention/PR transitions), `foxPose.ts` (pure
+  `deriveFoxPose` + the pose cast/titles), `TerminalView`, `TicketComments`,
+  `api.ts` (the fetch wrapper). Each is small and unit-testable where pure.
 - `web/src/` components: `WorkPanel` (Linear + GitHub cards), `LinearPanel`,
   `TicketDialog`, `PrDialog`, `PrViews` (PrReviewView/PrMyView), `DiffView`,
   `NotepadPane`, `NewSessionDialog`, `Fox`/`foxSprites` + `PixelFox`, `Splitter`,
@@ -208,8 +222,30 @@ group in a `shellTab` map.
 - **runn workspace** has its own Claude rules/setup — always work inside runn
   (`~/Documents/work/runn`) or a worktree of it for Linear/PR work.
 
+### Security posture (server is loopback-only)
+The server can spawn shells and touch files under `$HOME`, so it is treated as a
+local control plane, not a public API:
+- **`server/security.ts`** — an `onRequest` hook rejects any request whose `Host`
+  isn't loopback (blocks DNS-rebinding) or whose `Origin`, when present, isn't
+  loopback (blocks cross-site WebSocket/fetch hijacking). Applies to REST **and**
+  the terminal WS upgrade. Missing `Origin` (non-browser / navigations) is allowed.
+- Shell-outs use `execFile`/`spawn` with **arg arrays** (never a shell string);
+  `git.ts` validates branch names (`isValidBranch`) so a leading dash can't be
+  read as a flag; `fs.ts` `within()` realpaths the nearest existing ancestor so a
+  symlink inside `$HOME` can't escape it; notepad `groupId` is validated
+  (`isValidGroupId`) against traversal.
+- The Linear key lives only in `~/.den/den.db` (gitignored) or `$LINEAR_API_KEY`;
+  it's never returned to the client or logged. Errors are sanitized before
+  reaching the client (`server/log.ts` `logWarn` keeps details server-side).
+- Electron: `sandbox:true`, `contextIsolation:true`, navigation pinned to the app
+  origin, and only `http(s)` URLs reach `shell.openExternal`.
+
 ### Verifying changes (how this project has been tested)
-No automated suite yet — verification is scripted + visual:
+`npm run check` (typecheck + eslint + vitest) is the automated gate. **Tests**
+live next to their source as `*.test.ts` (`server/*.test.ts`, `web/*.test.ts`)
+and cover the pure, rule-heavy logic — the loopback guard, PR attention rules,
+branch validation, path sandbox, title tidy, fox pose. Keep new pure logic
+testable (export it) and add a case. Beyond that, verification is scripted + visual:
 - Run an **isolated** server: `DEN_DB=<tmp> PORT=4399 npm run start` (node ABI).
 - Screenshot the UI by loading the URL in a headless Electron window and calling
   `webContents.capturePage()` (see `scripts/shot.cjs`): `SHOT_URL=... SHOT_OUT=x.png
@@ -270,7 +306,10 @@ No automated suite yet — verification is scripted + visual:
    Edit/View/appMenu roles, drops the Cmd+W "Close Window" accelerator). Still
    open: window-state memory; maybe a menu-bar mode. **NB in dev-browser Cmd+W
    still closes the tab** — only the packaged app frees it.
-8. **Native notifications** for attention (bell) and PR check failures.
+8. ~~**Native notifications** for attention (bell) and PR check failures.~~
+   **Done** — `web/src/useNotifications.ts` fires OS notifications on
+   *transitions* (a background session ringing the bell; a PR newly needing you),
+   seeding startup state silently so a launch never spams.
 9. **Token awareness**: headless PR review + progress logging spend tokens — add
    visible toggles / cost hints.
 10. **Diff view**: now grouped per file with a Claude summary column (review) and
@@ -278,6 +317,12 @@ No automated suite yet — verification is scripted + visual:
     files. **Notepad**: auto-scroll to newest.
 11. **Dual-ABI friction**: consider shipping prebuilt binaries for both Node and
     Electron so `dev` and `app` don't need rebuilds when switching.
-12. **Tests**: add a real suite (the scripted checks above are ad-hoc).
+12. ~~**Tests**: add a real suite.~~ **Started** — vitest covers the pure logic
+    (`npm test`, 40 cases). Still ad-hoc for UI/integration; consider a
+    Playwright/headless-Electron smoke path next.
+13. **Scrollback persistence** — the terminal ring is now flushed to a sqlite
+    `scrollback` column (every 5s while dirty + on exit) and restored on
+    `hydrate()`, so a restart replays recent output instead of an empty pane.
+    Live PTYs still don't survive a restart (sessions return `exited`).
 
 Full narrative history is in the git log; user-facing run notes in `README.md`.
