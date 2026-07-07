@@ -582,6 +582,77 @@ body {
   padding: 2px 4px 6px;
 }
 
+/* Shell-pane tab strip (multiple terminals per workspace) */
+.shell-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 6px;
+  flex-wrap: wrap;
+}
+.shell-tabs .pane-label {
+  padding: 0 2px 0 0;
+}
+.shell-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  background: var(--bg-rail);
+  border: 1.5px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  padding: 3px 8px;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+.shell-tab:hover {
+  color: var(--ink);
+}
+.shell-tab.active {
+  color: var(--ink);
+  background: var(--bg-panel);
+  border-bottom-color: var(--bg-panel);
+}
+.shell-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mint);
+  flex: none;
+}
+.shell-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 0 0 1px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.shell-tab-close:hover {
+  color: var(--pink-deep);
+}
+.shell-tab-add {
+  border: 1.5px dashed var(--border);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.shell-tab-add:hover {
+  color: var(--ink);
+  border-color: var(--pink);
+}
+
 /* Progress notepad */
 .notepad {
   flex: 1;

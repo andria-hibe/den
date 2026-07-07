@@ -160,6 +160,23 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
+  // Add another shell pane (tab) to the workspace the given session belongs to.
+  app.post("/api/sessions/:id/shell", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const session = sessions.get(id);
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const meta = sessions.addShell(session.groupId);
+    if (!meta) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    reply.code(201);
+    return meta;
+  });
+
   app.patch("/api/sessions/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { name?: string; color?: string };
@@ -191,7 +208,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.delete("/api/sessions/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const ok = sessions.remove(id);
+    // ?scope=one closes just this pane (a shell tab); default closes the whole
+    // workspace the session belongs to.
+    const scope = (req.query as { scope?: string })?.scope;
+    const ok =
+      scope === "one" ? sessions.removeOne(id) : sessions.remove(id);
     if (!ok) {
       reply.code(404);
       return { error: "not_found" };

@@ -126,6 +126,8 @@ export function App() {
   const [prNeedsMe, setPrNeedsMe] = useState(false);
   const [prCount, setPrCount] = useState(0);
   const [linearNotifs, setLinearNotifs] = useState(0);
+  // groupId → the shell-tab id currently shown in that workspace's shell pane.
+  const [shellTab, setShellTab] = useState<Record<string, string>>({});
   const [ticketModal, setTicketModal] = useState<{
     issue: LinearIssue;
     startAtWork: boolean;
@@ -261,13 +263,18 @@ export function App() {
   const active = sessions.find((s) => s.id === activeId) ?? null;
   // Sessions shown in the rail (one per workspace); sub-shells are hidden.
   const rail = sessions.filter((s) => s.role === "main");
-  // For a Claude workspace, its sibling shell pane.
-  const shellPane =
+  // A Claude workspace can hold several shell panes (tabs). Which tab is active
+  // is tracked per group; falls back to the first shell when unset/closed.
+  const groupShells =
     active && !active.shell
-      ? sessions.find(
+      ? sessions.filter(
           (s) => s.groupId === active.groupId && s.role === "shell",
         )
-      : null;
+      : [];
+  const activeShell =
+    groupShells.find((s) => s.id === shellTab[active?.groupId ?? ""]) ??
+    groupShells[0] ??
+    null;
 
   const addSession = async (opts: {
     shell?: boolean;
@@ -325,6 +332,43 @@ export function App() {
       }
       return next;
     });
+  };
+
+  // Add another shell tab to the given workspace and switch to it. Refetches
+  // the full list (the 4s poll only merges existing rows, never adds new ones).
+  const addShellTab = async (anyIdInGroup: string, groupId: string) => {
+    try {
+      const meta = await api<SessionMeta>(
+        `/api/sessions/${anyIdInGroup}/shell`,
+        { method: "POST" },
+      );
+      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+      setSessions(d.sessions);
+      setShellTab((m) => ({ ...m, [groupId]: meta.id }));
+    } catch (e) {
+      setErrMsg((e as Error).message);
+    }
+  };
+
+  // Close a single shell tab (leaves the rest of the workspace intact).
+  const closeShellTab = async (shellId: string, groupId: string) => {
+    try {
+      await api(`/api/sessions/${shellId}?scope=one`, { method: "DELETE" });
+      setSessions((prev) => {
+        const next = prev.filter((s) => s.id !== shellId);
+        // If the closed tab was active, fall back to another shell in the group.
+        setShellTab((m) => {
+          if (m[groupId] !== shellId) return m;
+          const fallback = next.find(
+            (s) => s.groupId === groupId && s.role === "shell",
+          );
+          return { ...m, [groupId]: fallback?.id ?? "" };
+        });
+        return next;
+      });
+    } catch (e) {
+      setErrMsg((e as Error).message);
+    }
   };
 
   const commitRename = (id: string) => {
@@ -1016,16 +1060,55 @@ export function App() {
               style={{ flex: `${1 - mainFrac} 1 0` }}
             >
               <div className="ws-pane ws-shell" style={{ flex: `${shellFrac} 1 0` }}>
-                <div className="pane-label">🖥 terminal</div>
-                {shellPane ? (
+                <div className="shell-tabs">
+                  <span className="pane-label">🖥</span>
+                  {groupShells.map((sh, i) => (
+                    <span
+                      key={sh.id}
+                      className={`shell-tab${sh.id === activeShell?.id ? " active" : ""}`}
+                      onClick={() =>
+                        setShellTab((m) => ({ ...m, [active.groupId]: sh.id }))
+                      }
+                      title={`terminal ${i + 1}`}
+                    >
+                      <span
+                        className="shell-tab-dot"
+                        style={{ opacity: sh.status === "exited" ? 0.4 : 1 }}
+                      />
+                      term {i + 1}
+                      {groupShells.length > 1 && (
+                        <button
+                          className="shell-tab-close"
+                          title="close terminal"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeShellTab(sh.id, active.groupId);
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                  <button
+                    className="shell-tab-add"
+                    title="new terminal tab"
+                    onClick={() => addShellTab(active.id, active.groupId)}
+                  >
+                    +
+                  </button>
+                </div>
+                {activeShell ? (
                   <TerminalView
-                    key={shellPane.id}
-                    session={shellPane}
-                    onExit={() => markExited(shellPane.id)}
+                    key={activeShell.id}
+                    session={activeShell}
+                    onExit={() => markExited(activeShell.id)}
                     onTitle={() => {}}
                   />
                 ) : (
-                  <div className="placeholder">shell ended</div>
+                  <div className="placeholder">
+                    no terminal — click + to open one
+                  </div>
                 )}
               </div>
               <Splitter

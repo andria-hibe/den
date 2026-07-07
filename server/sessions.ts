@@ -407,6 +407,26 @@ class SessionManager {
     return main.meta();
   }
 
+  /**
+   * Add another shell pane to an existing workspace (a new "shell" tab). The
+   * new terminal inherits the group's cwd / colour / branch. Returns its meta,
+   * or null if the group has no sessions.
+   */
+  addShell(groupId: string): SessionMeta | null {
+    const sibling = [...this.sessions.values()].find(
+      (s) => s.groupId === groupId,
+    );
+    if (!sibling) return null;
+    const now = Date.now();
+    const term = new DenSession(
+      randomUUID(), "terminal", sibling.color, sibling.cwd, true, now, now,
+      groupId, "shell",
+    );
+    term.branch = sibling.branch;
+    this.spawnSession(term);
+    return term.meta();
+  }
+
   get(id: string) {
     return this.sessions.get(id);
   }
@@ -434,6 +454,20 @@ class SessionManager {
     s.lastActive = Date.now();
     store.update(s.toRow());
     return s.meta();
+  }
+
+  /**
+   * Remove a single session (one shell tab), leaving the rest of its workspace
+   * intact. Refuses to remove a "main" pane — closing that means closing the
+   * whole workspace (use remove()). Returns false if not found / not allowed.
+   */
+  removeOne(id: string) {
+    const s = this.sessions.get(id);
+    if (!s || s.role !== "shell") return false;
+    s.kill();
+    this.sessions.delete(id);
+    store.delete(id);
+    return true;
   }
 
   /** Remove the whole workspace the given session belongs to. */
