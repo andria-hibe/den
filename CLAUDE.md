@@ -169,8 +169,9 @@ group in a `shellTab` map.
   one-liner per file) aligned to each file's block, so you can scan changes at a
   glance. Your PRs: description + colleagues' reviews/comments + a Claude session
   on the branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
-- **Inline comments → Claude** (your PRs). The my-PR view has an "Inline
-  comments" section: line-level review comments grouped by file, each rendered
+- **Inline comments → Claude** (your PRs). The my-PR info pane has **two tabs**
+  (`PrMyView`): *Description & comments* (description + top-level reviews/comments)
+  and *Inline comments* — line-level review comments grouped by file, each rendered
   **with the diff hunk it points at** (anchored line marked) so you see the code
   it's about. Every review / comment / inline comment has a **"→ Claude"** button
   that pastes a framed instruction (author, `file:line`, body, diff hunk) into
@@ -188,6 +189,11 @@ group in a `shellTab` map.
 
 - **Pixel art**: render via canvas + `image-rendering: pixelated` at an *integer*
   pixel scale; animate with `steps()` (fractional transforms/offsets blur it).
+- **xterm FitAddon + padding**: never put padding on the element xterm is opened
+  into (the one FitAddon measures). FitAddon reads `getComputedStyle(host).height`,
+  which under `box-sizing:border-box` *includes* padding, so it fits one row too
+  many and `overflow:hidden` clips the last line. Padding/background/rounding live
+  on `.term-host-wrap`; the inner `.term-host` (fit target) stays padding-free.
 - **OSC titles**: parsed only for claude panes (shells retitle to cwd/command and
   flap). Ticket/PR sessions lock the title so it stays descriptive.
 - **git commits sign via 1Password** (`commit.gpgsign=true`, ssh). If it's locked

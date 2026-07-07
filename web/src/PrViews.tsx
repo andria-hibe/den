@@ -118,17 +118,15 @@ function InlineComments({
   detail: PrDetail;
   sessionId: string;
 }) {
-  if (detail.reviewComments.length === 0) return null;
+  if (detail.reviewComments.length === 0)
+    return <div className="placeholder">No inline comments.</div>;
   const byFile = new Map<string, PrNote[]>();
   for (const c of detail.reviewComments) {
     const key = c.path ?? "(general)";
     (byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c);
   }
   return (
-    <>
-      <hr />
-      <h4>Inline comments</h4>
-      <div className="pr-inline-files">
+    <div className="pr-inline-files">
         {[...byFile.entries()].map(([file, notes]) => (
           <div key={file} className="pr-inline-file">
             <div className="pr-inline-filename" title={file}>
@@ -152,8 +150,7 @@ function InlineComments({
             ))}
           </div>
         ))}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -304,21 +301,48 @@ export function PrMyView({
 }) {
   const detail = usePrDetail(repo, number);
   const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
+  const [tab, setTab] = useState<"overview" | "inline">("overview");
   const rootRef = useRef<HTMLDivElement>(null);
+  const inlineCount = detail?.reviewComments.length ?? 0;
 
   return (
     <div className="pr-my" ref={rootRef}>
       <div className="ws-pane pr-info" style={{ flex: `${infoFrac} 1 0` }}>
-        <div className="pr-info-scroll">
+        <div className="pr-info-head">
           <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
-          <h4>Description</h4>
-          {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
-          <hr />
-          <h4>Reviews &amp; comments</h4>
-          {detail ? <Notes detail={detail} sessionId={sessionId} /> : null}
-          {detail ? (
+          <div className="ticket-look-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "overview"}
+              className={`look-tab${tab === "overview" ? " active" : ""}`}
+              onClick={() => setTab("overview")}
+            >
+              Description &amp; comments
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "inline"}
+              className={`look-tab${tab === "inline" ? " active" : ""}`}
+              onClick={() => setTab("inline")}
+            >
+              Inline comments{inlineCount ? ` (${inlineCount})` : ""}
+            </button>
+          </div>
+        </div>
+        <div className="pr-info-scroll">
+          {!detail ? (
+            <div className="placeholder">loading…</div>
+          ) : tab === "overview" ? (
+            <>
+              <h4>Description</h4>
+              <Md text={detail.body || "_(no description)_"} />
+              <hr />
+              <h4>Reviews &amp; comments</h4>
+              <Notes detail={detail} sessionId={sessionId} />
+            </>
+          ) : (
             <InlineComments detail={detail} sessionId={sessionId} />
-          ) : null}
+          )}
         </div>
       </div>
       <Splitter

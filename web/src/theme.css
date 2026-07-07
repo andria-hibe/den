@@ -540,13 +540,23 @@ body {
   white-space: nowrap;
   color: var(--ink);
 }
-.term-host {
+.term-host-wrap {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  display: flex;
   border-radius: 12px;
   overflow: hidden;
   background: var(--term-bg);
   padding: 8px;
+}
+/* The element xterm is opened into + FitAddon measures. Keep it padding-free so
+   FitAddon's getComputedStyle(host).height (border-box) equals the real content
+   height — otherwise it fits one row too many and the last line is clipped. */
+.term-host {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* ---- Claude workspace: main pane on top, shell + notepad below ---- */
@@ -1296,9 +1306,17 @@ body {
   border-radius: 12px;
   background: var(--bg-panel);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pr-info-head {
+  flex: none;
+  padding: 10px 12px 0;
 }
 .pr-info-scroll {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 10px 12px;
 }
