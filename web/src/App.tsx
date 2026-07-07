@@ -8,7 +8,7 @@ import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
-import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
+import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
 import { TicketComments } from "./TicketComments.tsx";
@@ -21,7 +21,19 @@ import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
-const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
+// 9 pastels spread across the hue wheel so sessions stay easy to tell apart.
+// Keep this in sync with server/sessions.ts (auto-assign cycles the same list).
+const COLORS = [
+  "#ffb2d8", // pink
+  "#ffcaa3", // peach
+  "#f7e79c", // yellow
+  "#c9e9a0", // lime
+  "#a5e6c4", // mint
+  "#a2dfe8", // aqua
+  "#abc9f6", // sky
+  "#bcb8f6", // periwinkle
+  "#d7b3f4", // violet
+];
 
 // Modifier symbol shown in the shortcuts hint (⌘ on macOS, Ctrl elsewhere).
 const MOD =
@@ -51,9 +63,12 @@ export function App() {
   });
   // groupId → the shell-tab id currently shown in that workspace's shell pane.
   const [shellTab, setShellTab] = useState<Record<string, string>>({});
-  // Ticket "look" view: which tab (description vs comments) is showing.
-  const [lookTab, setLookTab] = useState<"description" | "comments">(
+  // Ticket "look" view: which tab (description vs comments) is showing —
+  // remembered across sessions + restarts.
+  const [lookTab, setLookTab] = usePersistentString(
+    "den.lookTab",
     "description",
+    ["description", "comments"] as const,
   );
   // Click the topbar fox to open a popover showing the whole cast.
   const [foxPopOpen, setFoxPopOpen] = useState(false);

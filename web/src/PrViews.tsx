@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DiffView, DiffHunk } from "./DiffView.tsx";
 import { renderMarkdown } from "./markdown.ts";
-import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
+import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
 import { Fox } from "./Fox.tsx";
 
 interface PrNote {
@@ -301,7 +301,11 @@ export function PrMyView({
 }) {
   const detail = usePrDetail(repo, number);
   const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
-  const [tab, setTab] = useState<"overview" | "inline">("overview");
+  // Remembered across session switches + restarts (my-PR view is keyed-remounted).
+  const [tab, setTab] = usePersistentString("den.myPrTab", "overview", [
+    "overview",
+    "inline",
+  ] as const);
   const rootRef = useRef<HTMLDivElement>(null);
   const inlineCount = detail?.reviewComments.length ?? 0;
 

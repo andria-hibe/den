@@ -311,7 +311,19 @@ class DenSession {
   }
 }
 
-const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
+// 9 pastels spread across the hue wheel (kept in sync with web/src/App.tsx's
+// picker). New sessions cycle through these for an easy-to-distinguish colour.
+const COLORS = [
+  "#ffb2d8", // pink
+  "#ffcaa3", // peach
+  "#f7e79c", // yellow
+  "#c9e9a0", // lime
+  "#a5e6c4", // mint
+  "#a2dfe8", // aqua
+  "#abc9f6", // sky
+  "#bcb8f6", // periwinkle
+  "#d7b3f4", // violet
+];
 
 // How often to flush changed scrollback to the store. A crash loses at most
 // this much recent output; keeping it coarse avoids constant disk writes.

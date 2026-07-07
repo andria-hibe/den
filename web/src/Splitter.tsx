@@ -13,6 +13,25 @@ export function usePersistentNumber(key: string, initial: number) {
   return [value, setValue] as const;
 }
 
+/**
+ * A string (union) that persists to localStorage — used to remember which tab a
+ * view was on. `allowed` guards against a stale value from an older build.
+ */
+export function usePersistentString<T extends string>(
+  key: string,
+  initial: T,
+  allowed: readonly T[],
+) {
+  const [value, setValue] = useState<T>(() => {
+    const stored = localStorage.getItem(key) as T | null;
+    return stored && allowed.includes(stored) ? stored : initial;
+  });
+  useEffect(() => {
+    localStorage.setItem(key, value);
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
 export const clamp = (n: number, min: number, max: number) =>
   Math.min(max, Math.max(min, n));
 
