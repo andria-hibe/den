@@ -1,7 +1,7 @@
 import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
@@ -594,12 +594,21 @@ class SessionManager {
   remove(id: string) {
     const s = this.sessions.get(id);
     if (!s) return false;
+    const groupId = s.groupId;
     for (const other of [...this.sessions.values()]) {
-      if (other.groupId === s.groupId) {
+      if (other.groupId === groupId) {
         other.kill();
         this.sessions.delete(other.id);
         store.delete(other.id);
       }
+    }
+    // The progress notepad is scoped to this workspace — closing the workspace
+    // deletes it too, so ~/.den/progress doesn't fill with orphaned notes. (Mere
+    // exit/restart keeps it, since the session lives on and can be revived.)
+    try {
+      rmSync(notepadPath(groupId), { force: true });
+    } catch {
+      // invalid id / already gone — nothing to clean up
     }
     return true;
   }

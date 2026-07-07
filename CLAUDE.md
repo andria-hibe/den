@@ -105,6 +105,10 @@ WebSocket; everything else is REST.
 A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
 - **Claude workspace** = a `main` claude pane + **one or more `shell` panes**
   (same group, shown as tabs) + a progress notepad at `~/.den/progress/<groupId>.md`.
+  The notepad is scoped to the workspace: kept across exit/restart, but **deleted
+  when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill
+  with orphans. (The "edit den" workspace seeds it empty — its handover lives in
+  the initial Claude prompt, not the notepad.)
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
   `review` (others' PR), `mypr` (your PR), or a ticket-look. They also carry
