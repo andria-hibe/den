@@ -350,15 +350,20 @@ body {
   100% { opacity: 0; transform: translate(18px, -46px) rotate(8deg); }
 }
 /* Same sleeping-fox idle in the compact status popover, scaled to fit so the
-   z's stay near the fox's head instead of drifting into the row above. */
-.fox-pop .zzz { font-size: 9px; animation-name: z-drift-mini; }
-.fox-pop .zzz.z2 { font-size: 11px; }
-.fox-pop .zzz.z3 { font-size: 13px; }
+   z's stay near the fox's head instead of drifting into the row above. Given a
+   glow + a little more size so they read clearly against the panel. */
+.fox-pop .zzz {
+  font-size: 13px;
+  animation-name: z-drift-mini;
+  text-shadow: 0 0 6px var(--lilac), 0 1px 1px rgba(40, 25, 55, 0.4);
+}
+.fox-pop .zzz.z2 { font-size: 16px; }
+.fox-pop .zzz.z3 { font-size: 20px; }
 @keyframes z-drift-mini {
   0% { opacity: 0; transform: translate(0, 0) rotate(-8deg); }
-  15% { opacity: 1; }
-  70% { opacity: 1; }
-  100% { opacity: 0; transform: translate(8px, -20px) rotate(8deg); }
+  18% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translate(9px, -22px) rotate(8deg); }
 }
 .work {
   padding: 14px;
