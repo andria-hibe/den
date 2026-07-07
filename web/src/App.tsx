@@ -408,7 +408,8 @@ export function App() {
       cwd: runnRoot || undefined,
       ticket: issue.identifier,
       look: true,
-      name: `${issue.identifier}: ${issue.title}`,
+      // Ticket id is shown by the chip, so keep the title to just the summary.
+      name: issue.title,
     });
   };
 
@@ -423,7 +424,7 @@ export function App() {
       ticket: issue.identifier,
       branch: issue.branchName,
       env,
-      name: `${issue.identifier}: ${issue.title}`,
+      name: issue.title,
       notepadSeed: ticketNotesSeed(issue),
       initialPrompt: ticketPrompt(issue),
     });
@@ -522,7 +523,7 @@ export function App() {
           ⎇ {s.branch}
         </span>
       )}
-      {renderWorkLinks(s.ticketHint)}
+      {renderWorkLinks(s)}
       <span
         style={{
           marginLeft: "auto",
@@ -545,46 +546,73 @@ export function App() {
     </div>
   );
 
-  // Ticket / PR chips linking a session's branch to its work.
-  const renderWorkLinks = (hint: string | null) => {
-    const issue = issueByHint(hint);
-    const pr = prByHint(hint);
-    if (!issue && !pr) return null;
-    const check = pr
-      ? pr.checks === "passing"
+  // Ticket / PR chips for a session. The session's *explicit* link (the ticket
+  // or PR it was opened for) wins — that's what makes the chip correct per
+  // session. Only sessions that were never linked to one explicitly fall back to
+  // matching their branch's ticket hint against your open work.
+  const renderWorkLinks = (s: SessionMeta) => {
+    // A real Linear identifier looks like ABC-123 (skips sentinels like
+    // "den:self-edit").
+    const explicitTicket =
+      s.ticket && /^[A-Za-z]+-\d+$/.test(s.ticket) ? s.ticket : null;
+    const issue = explicitTicket
+      ? issues.find((i) => i.identifier === explicitTicket)
+      : issueByHint(s.ticketHint);
+    const pr =
+      s.pr && s.prRepo
+        ? prs.find((p) => p.number === s.pr && p.repo === s.prRepo)
+        : prByHint(s.ticketHint);
+
+    // Show the id/number even if the item isn't in your current lists (merged,
+    // closed, someone else's) — a chip without a link, so it's still correct.
+    const ticketId = issue?.identifier ?? explicitTicket;
+    const prNum = pr?.number ?? (s.pr && s.prRepo ? s.pr : null);
+    if (!ticketId && !prNum) return null;
+
+    const check =
+      pr?.checks === "passing"
         ? "✓"
-        : pr.checks === "failing"
+        : pr?.checks === "failing"
           ? "✕"
-          : pr.checks === "pending"
+          : pr?.checks === "pending"
             ? "◐"
-            : ""
-      : "";
+            : "";
     return (
       <>
-        {issue && (
-          <a
-            className="link-chip issue"
-            href={issue.url}
-            target="_blank"
-            rel="noreferrer"
-            title={issue.title}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {issue.identifier}
-          </a>
-        )}
-        {pr && (
-          <a
-            className={`link-chip pr ${pr.checks}`}
-            href={pr.url}
-            target="_blank"
-            rel="noreferrer"
-            title={pr.title}
-            onClick={(e) => e.stopPropagation()}
-          >
-            PR #{pr.number} {check}
-          </a>
-        )}
+        {ticketId &&
+          (issue ? (
+            <a
+              className="link-chip issue"
+              href={issue.url}
+              target="_blank"
+              rel="noreferrer"
+              title={issue.title}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {ticketId}
+            </a>
+          ) : (
+            <span className="link-chip issue" title="linked ticket">
+              {ticketId}
+            </span>
+          ))}
+        {prNum &&
+          (pr ? (
+            <a
+              className={`link-chip pr ${pr.checks}`}
+              href={pr.url}
+              target="_blank"
+              rel="noreferrer"
+              title={pr.title}
+              onClick={(e) => e.stopPropagation()}
+            >
+              PR #{prNum} {check}
+            </a>
+          ) : (
+            <span className="link-chip pr" title="linked PR">
+              PR #{prNum}
+            </span>
+          ))}
       </>
     );
   };
@@ -618,7 +646,8 @@ export function App() {
       prRepo: pr.repo,
       env: "worktree",
       branch: pr.branch,
-      name: `PR #${pr.number}: ${pr.title}`,
+      // PR number is shown by the chip, so keep the title to just the summary.
+      name: pr.title,
     });
   };
 
@@ -635,7 +664,7 @@ export function App() {
       prRepo: pr.repo,
       env,
       branch: pr.branch,
-      name: `PR #${pr.number}: ${pr.title}`,
+      name: pr.title,
     });
   };
 
@@ -847,7 +876,7 @@ export function App() {
         <h2>sessions</h2>
         <div className="session-list">
         {rail.map((s) => {
-          const links = renderWorkLinks(s.ticketHint);
+          const links = renderWorkLinks(s);
           return (
           <div
             key={s.id}
