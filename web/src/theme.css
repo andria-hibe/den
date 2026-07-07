@@ -304,7 +304,7 @@ body {
 /* Stepped bob so `top` only ever holds integer values — a fractional offset
    knocks the sprite off the device-pixel grid and anti-aliases (blurs) it.
    Whole-pixel steps also read as authentic pixel-art idle motion. */
-.empty-terminal .fox-bob {
+.fox-bob {
   position: relative;
   animation: fox-bob 1.8s steps(1, jump-end) infinite;
 }
@@ -348,6 +348,17 @@ body {
   15% { opacity: 1; }
   70% { opacity: 1; }
   100% { opacity: 0; transform: translate(18px, -46px) rotate(8deg); }
+}
+/* Same sleeping-fox idle in the compact status popover, scaled to fit so the
+   z's stay near the fox's head instead of drifting into the row above. */
+.fox-pop .zzz { font-size: 9px; animation-name: z-drift-mini; }
+.fox-pop .zzz.z2 { font-size: 11px; }
+.fox-pop .zzz.z3 { font-size: 13px; }
+@keyframes z-drift-mini {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-8deg); }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(8px, -20px) rotate(8deg); }
 }
 .work {
   padding: 14px;

@@ -1078,7 +1078,16 @@ export function App() {
                     className={`fox-pop-item${pose === statusPose ? " current" : ""}`}
                   >
                     <div className="fox-pop-stage">
-                      <Fox pose={pose} size={52} />
+                      {pose === "sleep" ? (
+                        <span className="sleep-fox">
+                          <Fox pose="sleep" size={52} className="fox-bob" />
+                          <span className="zzz z1">z</span>
+                          <span className="zzz z2">z</span>
+                          <span className="zzz z3">z</span>
+                        </span>
+                      ) : (
+                        <Fox pose={pose} size={52} />
+                      )}
                     </div>
                     <div className="fox-pop-name">
                       {label}
