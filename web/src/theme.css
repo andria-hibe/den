@@ -126,9 +126,9 @@ body {
   padding: 0 14px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  /* Default (no active session) — the house colours. When a session is active,
-     App tints this with the session's colour inline. */
-  background: linear-gradient(90deg, var(--pink), var(--lilac));
+  /* Default (no active session) — the house colours: pastel pink → pastel blue.
+     When a session is active, App tints this with the session's colour inline. */
+  background: linear-gradient(90deg, var(--pink), var(--sky));
   /* Dark ink reads on every pastel tint (white would vanish on the light ones). */
   color: #4a3a52;
   border-radius: 14px;
