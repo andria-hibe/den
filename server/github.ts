@@ -222,9 +222,11 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
   // A review-requested PR needs attention simply because you owe a review —
   // whether it's a first review or a re-review after they addressed your notes
   // (GitHub re-adds you as a requested reviewer, so it lands in this bucket
-  // either way). Its own CI status is irrelevant to you.
+  // either way). Its own CI status is irrelevant to you. But once the PR is
+  // already approved (its overall reviewDecision), you no longer owe a review —
+  // drop the urgent styling even if you're still nominally a requested reviewer.
   reviewRequested.forEach((p) => {
-    p.needsAttention = !p.isDraft;
+    p.needsAttention = !p.isDraft && p.review !== "approved";
     p.attentionReason = p.needsAttention ? "your review is requested" : undefined;
   });
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };

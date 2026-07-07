@@ -12,7 +12,7 @@ import { Fox } from "./Fox.tsx";
 import type { FoxPose } from "./foxSprites.ts";
 import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
 import type { PullRequest } from "../../server/github.ts";
-import type { LinearIssue } from "../../server/linear.ts";
+import type { LinearIssue, LinearComment } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -22,6 +22,65 @@ const MOD =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)
     ? "⌘"
     : "Ctrl";
+
+function relTime(iso: string): string {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+// Comments on a Linear ticket, shown in the read-only "look" view. Fetches
+// lazily per ticket; stays quiet (renders nothing) on error or when empty.
+function TicketComments({ ticketId }: { ticketId: string }) {
+  const [comments, setComments] = useState<LinearComment[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setComments(null);
+    setFailed(false);
+    fetch(`/api/linear/comments?id=${encodeURIComponent(ticketId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        if (d.error) setFailed(true);
+        else setComments((d.comments ?? []) as LinearComment[]);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [ticketId]);
+
+  if (failed) return null;
+  if (comments === null)
+    return <div className="ticket-comments-note">loading comments…</div>;
+  if (comments.length === 0)
+    return <div className="ticket-comments-note">No comments yet.</div>;
+
+  return (
+    <div className="ticket-comments">
+      <div className="ticket-comments-head">
+        Comments <span className="pr-count">{comments.length}</span>
+      </div>
+      {comments.map((c, i) => (
+        <div className="ticket-comment" key={i}>
+          <div className="ticket-comment-meta">
+            <strong>{c.author}</strong>
+            <span className="ticket-comment-time">{relTime(c.at)}</span>
+          </div>
+          <div
+            className="md"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(c.body) }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   // Only set a JSON content-type when there's actually a body — Fastify rejects
@@ -62,6 +121,11 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [statusPose, setStatusPose] = useState<FoxPose>("sit");
+  // Inputs to the topbar fox: PRs needing me / total open PRs / unread Linear
+  // notifications. The pose is derived from all three (see effect below).
+  const [prNeedsMe, setPrNeedsMe] = useState(false);
+  const [prCount, setPrCount] = useState(0);
+  const [linearNotifs, setLinearNotifs] = useState(0);
   const [ticketModal, setTicketModal] = useState<{
     issue: LinearIssue;
     startAtWork: boolean;
@@ -112,9 +176,11 @@ export function App() {
         setPrs(all);
         // The fox only reacts to PRs that need *my* action: my own PRs failing
         // CI or with changes requested, or reviews I owe. A PR I'm reviewing
-        // failing its CI is the author's problem, so it doesn't count.
-        const needsMe = all.some((p) => p.needsAttention);
-        setStatusPose(needsMe ? "alert" : all.length ? "happy" : "sit");
+        // failing its CI is the author's problem, so it doesn't count. (An
+        // already-approved review-requested PR no longer counts either — the
+        // server clears its needsAttention.)
+        setPrNeedsMe(all.some((p) => p.needsAttention));
+        setPrCount(all.length);
       } catch {
         // leave as-is
       }
@@ -134,7 +200,11 @@ export function App() {
         const r = await fetch("/api/linear/issues");
         if (!r.ok) return; // 409 when not connected
         const d = await r.json();
-        if (alive && d.issues) setIssues(d.issues as LinearIssue[]);
+        if (!alive) return;
+        if (d.issues) setIssues(d.issues as LinearIssue[]);
+        // Unread Linear notifications nudge the fox to alert (see pose effect).
+        if (typeof d.unreadNotifications === "number")
+          setLinearNotifs(d.unreadNotifications);
       } catch {
         // leave as-is
       }
@@ -147,6 +217,15 @@ export function App() {
     };
   }, []);
 
+  // Topbar fox pose, derived from every attention source: alert if a PR needs
+  // me OR I have unread Linear notifications; else happy if any PRs are open;
+  // else sit. (Linear notifications only nudge — click into the Linear app.)
+  useEffect(() => {
+    if (prNeedsMe || linearNotifs > 0) setStatusPose("alert");
+    else if (prCount > 0) setStatusPose("happy");
+    else setStatusPose("sit");
+  }, [prNeedsMe, prCount, linearNotifs]);
+
   // Match a session's branch ticket hint to a PR / Linear ticket.
   const prByHint = (hint: string | null) =>
     hint ? prs.find((p) => p.ticketHint?.toLowerCase() === hint) : undefined;
@@ -155,7 +234,8 @@ export function App() {
 
   const STATUS_TITLE: Record<FoxPose, string> = {
     happy: "all your PRs look happy 🎉",
-    alert: "something needs you — a PR to fix or a review you owe",
+    alert:
+      "something needs you — a PR to fix, a review you owe, or Linear notifications",
     sit: "no open PRs right now",
     sleep: "",
     walk: "",
@@ -654,6 +734,7 @@ export function App() {
             Ticket details aren't in your assigned list right now.
           </div>
         )}
+        {ticketId && <TicketComments ticketId={ticketId} />}
       </div>
     );
   };

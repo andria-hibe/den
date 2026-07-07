@@ -15,6 +15,7 @@ import {
 } from "./github.ts";
 import {
   getAssignedIssues,
+  getIssueComments,
   validateKey,
   setKey,
   clearKey,
@@ -336,6 +337,25 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       const data = await getAssignedIssues();
       linearCache = { at: Date.now(), data };
       return data;
+    } catch (err) {
+      const msg = (err as Error).message;
+      reply.code(msg === "unauthorized" ? 401 : 502);
+      return { error: msg };
+    }
+  });
+
+  app.get("/api/linear/comments", async (req, reply) => {
+    if (!hasKey()) {
+      reply.code(409);
+      return { error: "not_connected" };
+    }
+    const id = (req.query as { id?: string })?.id;
+    if (!id) {
+      reply.code(400);
+      return { error: "id_required" };
+    }
+    try {
+      return { comments: await getIssueComments(id) };
     } catch (err) {
       const msg = (err as Error).message;
       reply.code(msg === "unauthorized" ? 401 : 502);

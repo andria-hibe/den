@@ -163,11 +163,42 @@ export function LinearSection({
     setConnected(false);
   };
 
+  // Where to send you when you click the notifications nudge: your Linear
+  // workspace inbox, derived from any issue URL (…/<workspace>/issue/…), else
+  // the Linear app root.
+  const inboxHref = (() => {
+    const u = data?.issues[0]?.url;
+    if (!u) return "https://linear.app";
+    try {
+      const parsed = new URL(u);
+      const slug = parsed.pathname.split("/").filter(Boolean)[0];
+      return slug ? `${parsed.origin}/${slug}/inbox` : parsed.origin;
+    } catch {
+      return "https://linear.app";
+    }
+  })();
+  const notifs = data?.unreadNotifications ?? 0;
+
   return (
     <div className="pr-section">
       <div className="pr-section-title">
         <span>linear</span>
         {connected && data && <span className="pr-count">{data.issues.length}</span>}
+        {connected && notifs > 0 && (
+          <a
+            className="linear-notif"
+            href={inboxHref}
+            target="_blank"
+            rel="noreferrer"
+            title={`${notifs} unread Linear notification${
+              notifs === 1 ? "" : "s"
+            } — open Linear to check`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="linear-notif-bang">!</span>
+            {notifs}
+          </a>
+        )}
         <span style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
           {connected && (
             <>

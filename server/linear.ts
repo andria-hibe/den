@@ -24,7 +24,15 @@ export interface LinearData {
   connected: true;
   viewer: string;
   issues: LinearIssue[];
+  /** Count of the viewer's unread, unarchived Linear notifications (inbox). */
+  unreadNotifications: number;
   fetchedAt: string;
+}
+
+export interface LinearComment {
+  author: string;
+  body: string;
+  at: string;
 }
 
 // --- Key management ---------------------------------------------------------
@@ -100,6 +108,7 @@ export async function getAssignedIssues(): Promise<LinearData> {
 
   const data = await graphql<{
     viewer: { name: string; assignedIssues: { nodes: RawIssue[] } };
+    notifications: { nodes: { readAt: string | null; archivedAt: string | null }[] };
   }>(
     `query {
       viewer {
@@ -117,6 +126,9 @@ export async function getAssignedIssues(): Promise<LinearData> {
             project { name }
           }
         }
+      }
+      notifications(first: 100) {
+        nodes { readAt archivedAt }
       }
     }`,
     key,
@@ -144,10 +156,62 @@ export async function getAssignedIssues(): Promise<LinearData> {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
 
+  const unreadNotifications = (data.notifications?.nodes ?? []).filter(
+    (n) => !n.readAt && !n.archivedAt,
+  ).length;
+
   return {
     connected: true,
     viewer: data.viewer.name,
     issues,
+    unreadNotifications,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+interface RawComment {
+  body: string;
+  createdAt: string;
+  user?: { name?: string; displayName?: string } | null;
+  // Integrations / Linear's own agents post as a botActor, not a user.
+  botActor?: { name?: string } | null;
+}
+
+/** Comments on a single issue (by identifier, e.g. "FAST-6115"), oldest first. */
+export async function getIssueComments(
+  identifier: string,
+): Promise<LinearComment[]> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const m = identifier.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  if (!m) return [];
+  const teamKey = m[1].toUpperCase();
+  const number = Number(m[2]);
+
+  const data = await graphql<{
+    issues: { nodes: { comments: { nodes: RawComment[] } }[] };
+  }>(
+    `query {
+      issues(filter: { number: { eq: ${number} }, team: { key: { eq: "${teamKey}" } } }, first: 1) {
+        nodes {
+          comments(first: 100) {
+            nodes { body createdAt user { name displayName } botActor { name } }
+          }
+        }
+      }
+    }`,
+    key,
+  );
+
+  const node = data.issues.nodes[0];
+  if (!node) return [];
+  return node.comments.nodes
+    .filter((c) => c.body?.trim())
+    .map((c) => ({
+      author:
+        c.user?.displayName ?? c.user?.name ?? c.botActor?.name ?? "someone",
+      body: c.body,
+      at: c.createdAt,
+    }))
+    .sort((a, b) => a.at.localeCompare(b.at));
 }
