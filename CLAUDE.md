@@ -51,8 +51,10 @@ WebSocket; everything else is REST.
   survive a restart (marked exited on boot).
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
   review-requested → `isMine`); `getPrDetail` (body + reviews + issue comments +
-  **inline review comments** with `path`/`line`/`diffHunk`, fetched via
-  `gh api .../pulls/N/comments` since `pr view` omits them); `getPrDiff`;
+  **inline review comments** with `path`/`line`/`diffHunk` + a `resolved` flag,
+  fetched via `gh api graphql` **reviewThreads** — the thread carries
+  `isResolved`, which the REST comments endpoint omits, so the my-PR UI can hide
+  resolved comments); `getPrDiff`;
   `reviewPr` (headless `claude -p` fed the diff → markdown, via `claudePrint`);
   and `summarizePrDiff` (headless `claude -p` → `[{file, summary}]` JSON, one
   line per file, for the review diff's side column).
@@ -93,7 +95,10 @@ WebSocket; everything else is REST.
   - `PrViews.tsx`: `PrReviewView` (others' PRs — diff + per-file summaries +
     Claude review); `PrMyView` (your PRs — description, top-level `Notes`, and
     `InlineComments`: line-level comments grouped by file, each shown with its
-    diff hunk); `ToClaude` button pastes a framed instruction into the session.
+    diff hunk — **resolved threads are hidden by default** behind a "show N
+    resolved" toggle so the tab focuses on what still needs action); `ToClaude`
+    button pastes a framed instruction into the session. The tab you're on
+    (Description&comments / Inline) persists via `usePersistentString`.
 
 ## Data model
 

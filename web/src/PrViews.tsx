@@ -12,6 +12,8 @@ interface PrNote {
   path?: string;
   line?: number;
   diffHunk?: string;
+  resolved?: boolean;
+  outdated?: boolean;
 }
 interface PrDetail {
   number: number;
@@ -118,28 +120,57 @@ function InlineComments({
   detail: PrDetail;
   sessionId: string;
 }) {
-  if (detail.reviewComments.length === 0)
+  // Resolved threads are hidden by default so the tab shows what still needs
+  // action; a toggle reveals them (dimmed, badged) so nothing is lost.
+  const [showResolved, setShowResolved] = useState(false);
+  const all = detail.reviewComments;
+  if (all.length === 0)
     return <div className="placeholder">No inline comments.</div>;
+  const resolvedCount = all.filter((c) => c.resolved).length;
+  const shown = showResolved ? all : all.filter((c) => !c.resolved);
+
   const byFile = new Map<string, PrNote[]>();
-  for (const c of detail.reviewComments) {
+  for (const c of shown) {
     const key = c.path ?? "(general)";
     (byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c);
   }
+
   return (
     <div className="pr-inline-files">
-        {[...byFile.entries()].map(([file, notes]) => (
+      {resolvedCount > 0 && (
+        <button
+          className="btn resolved-toggle"
+          onClick={() => setShowResolved((v) => !v)}
+        >
+          {showResolved
+            ? `hide ${resolvedCount} resolved`
+            : `show ${resolvedCount} resolved`}
+        </button>
+      )}
+      {shown.length === 0 ? (
+        <div className="placeholder">All inline comments resolved 🎉</div>
+      ) : (
+        [...byFile.entries()].map(([file, notes]) => (
           <div key={file} className="pr-inline-file">
             <div className="pr-inline-filename" title={file}>
               {file}
             </div>
             {notes.map((n, i) => (
-              <div key={i} className="pr-inline-comment">
+              <div
+                key={i}
+                className={`pr-inline-comment${n.resolved ? " resolved" : ""}`}
+              >
                 {n.diffHunk && <DiffHunk hunk={n.diffHunk} />}
                 <div className="pr-note-head">
                   <strong>{n.author}</strong>
                   {n.line ? (
                     <span className="pr-note-loc">line {n.line}</span>
                   ) : null}
+                  {n.resolved && (
+                    <span className="pr-note-resolved" title="thread resolved">
+                      resolved
+                    </span>
+                  )}
                   <ToClaude
                     sessionId={sessionId}
                     text={notePrompt(detail.number, { ...n, kind: "line comment" })}
@@ -149,7 +180,8 @@ function InlineComments({
               </div>
             ))}
           </div>
-        ))}
+        ))
+      )}
     </div>
   );
 }

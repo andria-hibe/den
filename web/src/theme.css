@@ -1436,6 +1436,31 @@ body {
 .pr-inline-comment .md {
   padding: 4px 10px 10px;
 }
+/* Resolved inline threads: hidden by default, revealed dimmed + badged. */
+.resolved-toggle {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 3px 10px;
+  background: var(--bg-rail);
+  color: var(--ink-soft);
+}
+.pr-note-resolved {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--mint);
+  color: #1f5a42;
+}
+.pr-inline-comment.resolved {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.pr-inline-comment.resolved:hover {
+  opacity: 1;
+}
 .diff-hunk-block {
   background: var(--term-bg);
   overflow-x: auto;

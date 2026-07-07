@@ -264,6 +264,9 @@ export interface PrReviewNote {
   path?: string; // inline review comments only
   line?: number; // inline review comments only
   diffHunk?: string; // inline review comments only
+  /** Inline comments only: the review thread was marked resolved / is outdated. */
+  resolved?: boolean;
+  outdated?: boolean;
 }
 export interface PrDetail {
   number: number;
@@ -319,36 +322,73 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
   };
 }
 
-/** Inline, line-level review comments on the diff (not returned by pr view). */
+// Inline, line-level review comments on the diff (not returned by pr view).
+// Fetched via GraphQL review *threads* rather than the REST comments endpoint,
+// because only the thread carries `isResolved` — which we need so the UI can
+// hide comments that have already been resolved.
+const REVIEW_THREADS_QUERY =
+  `query($owner:String!,$name:String!,$number:Int!){` +
+  `repository(owner:$owner,name:$name){pullRequest(number:$number){` +
+  `reviewThreads(first:100){nodes{isResolved isOutdated ` +
+  `comments(first:50){nodes{author{login} body path line originalLine diffHunk createdAt}}}}}}}`;
+
+interface RawThreadComment {
+  author?: { login: string } | null;
+  body: string;
+  path?: string | null;
+  line?: number | null;
+  originalLine?: number | null;
+  diffHunk?: string | null;
+  createdAt: string;
+}
+
 async function getReviewComments(
   repo: string,
   number: number,
 ): Promise<PrReviewNote[]> {
+  const [owner, name] = repo.split("/");
+  if (!owner || !name) return [];
   try {
     const out = await gh([
-      "api",
-      "--paginate",
-      `repos/${repo}/pulls/${number}/comments`,
+      "api", "graphql",
+      "-f", `query=${REVIEW_THREADS_QUERY}`,
+      "-F", `owner=${owner}`,
+      "-F", `name=${name}`,
+      "-F", `number=${number}`,
     ]);
-    const arr = JSON.parse(out) as {
-      user?: { login: string };
-      body: string;
-      path?: string;
-      line?: number | null;
-      original_line?: number | null;
-      diff_hunk?: string;
-      created_at: string;
-    }[];
-    return arr
-      .filter((c) => c.body)
-      .map((c) => ({
-        author: c.user?.login ?? "?",
-        body: c.body ?? "",
-        path: c.path,
-        line: c.line ?? c.original_line ?? undefined,
-        diffHunk: c.diff_hunk,
-        at: c.created_at,
-      }));
+    const j = JSON.parse(out) as {
+      data?: {
+        repository?: {
+          pullRequest?: {
+            reviewThreads?: {
+              nodes?: {
+                isResolved?: boolean;
+                isOutdated?: boolean;
+                comments?: { nodes?: RawThreadComment[] };
+              }[];
+            };
+          };
+        };
+      };
+    };
+    const threads = j.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+    const notes: PrReviewNote[] = [];
+    for (const t of threads) {
+      for (const c of t.comments?.nodes ?? []) {
+        if (!c.body) continue;
+        notes.push({
+          author: c.author?.login ?? "?",
+          body: c.body,
+          path: c.path ?? undefined,
+          line: c.line ?? c.originalLine ?? undefined,
+          diffHunk: c.diffHunk ?? undefined,
+          at: c.createdAt,
+          resolved: !!t.isResolved,
+          outdated: !!t.isOutdated,
+        });
+      }
+    }
+    return notes;
   } catch (err) {
     logWarn(`github.reviewComments pr#${number}`, err);
     return [];
