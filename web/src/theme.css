@@ -327,6 +327,8 @@ body {
   font-family: ui-monospace, Menlo, monospace;
   font-weight: 800;
   color: var(--lilac);
+  /* Soft lilac glow + a subtle dark edge so the z's stand out on any ground. */
+  text-shadow: 0 0 6px var(--lilac), 0 1px 1px rgba(40, 25, 55, 0.4);
   opacity: 0;
   animation: z-drift 3.6s ease-in infinite;
   pointer-events: none;
@@ -355,7 +357,6 @@ body {
 .fox-pop .zzz {
   font-size: 13px;
   animation-name: z-drift-mini;
-  text-shadow: 0 0 6px var(--lilac), 0 1px 1px rgba(40, 25, 55, 0.4);
 }
 .fox-pop .zzz.z2 { font-size: 16px; }
 .fox-pop .zzz.z3 { font-size: 20px; }
