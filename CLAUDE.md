@@ -60,7 +60,10 @@ WebSocket; everything else is REST.
   `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local), and
   `worktreeForBranch` (reuse an existing worktree instead of erroring).
 - `server/discover.ts` — lists past Claude sessions from
-  `~/.claude/projects/**/*.jsonl` (for resume).
+  `~/.claude/projects/**/*.jsonl` (for resume). Titles each from its `summary`
+  or first real user message; **drops** den's own headless `claude -p` helpers
+  (PR diff-summary / review prompts) and empty/aborted sessions (no summary +
+  no user prose), and scans past the limit to still fill it after skips.
 - `server/fs.ts` — home-sandboxed directory browsing + `roots()`
   (documents / work / **runn** / projects).
 - `web/src/App.tsx` — the whole UI: 3-column flex layout, session rail, center
@@ -150,7 +153,9 @@ group in a `shellTab` map.
   can tell at a glance which cards and sessions are related. App.tsx computes
   `ticketColor`/`prColor` (running sessions win over exited) and passes them to
   `WorkPanel` → `Section`/`PrCard` + `LinearSection`/`IssueCard`.
-- **Resume** past Claude sessions from `~/.claude/projects`.
+- **Resume** past Claude sessions from `~/.claude/projects` — each titled by its
+  summary / first real message, with den's headless helpers and empty sessions
+  filtered out.
 - **Attention nudges**: a background session that rings the bell shows a pulsing
   `!`; cleared when you view it.
 - **Linear ticket → Look / Work**. Work creates the branch (worktree or local),

@@ -45,7 +45,22 @@ function userText(msg: unknown): string | null {
   return null;
 }
 
-function parse(fp: string): { cwd: string | null; title: string } {
+// den spawns one-shot `claude -p` helpers (PR diff summaries, PR reviews — see
+// server/github.ts). Those write transcripts too, but you'd never resume them,
+// so we detect them by their prompt and drop them from the resume list.
+const HEADLESS_PROMPTS = [
+  "Summarize this PR's unified diff",
+  "You are reviewing a GitHub pull request",
+];
+// den's self-edit session opens with a long handover prompt; give it a clean name.
+const DEN_SELF_EDIT = "working on **den itself**";
+
+function parse(fp: string): {
+  cwd: string | null;
+  title: string;
+  /** True when this session shouldn't appear in the resume list. */
+  skip: boolean;
+} {
   let cwd: string | null = null;
   let summary: string | null = null;
   let firstUser: string | null = null;
@@ -72,11 +87,26 @@ function parse(fp: string): { cwd: string | null; title: string } {
     }
     if (cwd && (summary || firstUser)) break;
   }
-  const title = (summary || firstUser || "(untitled session)")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
-  return { cwd, title };
+
+  // Drop from the list: den's one-shot `claude -p` helpers (identified by their
+  // prompt), and empty/aborted sessions with no summary and no user prose (e.g.
+  // a workspace that was opened but never actually used — pure clutter).
+  const headless =
+    !!firstUser &&
+    HEADLESS_PROMPTS.some((p) => firstUser!.trimStart().startsWith(p));
+  const empty = !summary && !firstUser;
+
+  // Title: Claude's own summary, else the first real user message, tidied up.
+  let base = summary || firstUser || "(untitled session)";
+  if (!summary && firstUser?.includes(DEN_SELF_EDIT)) base = "Editing den itself";
+  const title =
+    base
+      .replace(/\s+/g, " ")
+      // drop leading markdown/emoji noise so the first real words show
+      .replace(/^[\s>*#`~\-–—.]+/, "")
+      .trim()
+      .slice(0, 80) || "(untitled session)";
+  return { cwd, title, skip: headless || empty };
 }
 
 export function listPastSessions(limit = 40): PastSession[] {
@@ -101,10 +131,15 @@ export function listPastSessions(limit = 40): PastSession[] {
   }
   files.sort((a, b) => b.mtime - a.mtime);
 
+  // Scan newest-first and collect real sessions until we have `limit`. We may
+  // skip many (headless helpers, gone cwds), so scan beyond `limit` — but cap
+  // the scan so a huge history doesn't read thousands of files.
   const out: PastSession[] = [];
-  for (const { fp, id, mtime } of files.slice(0, limit)) {
+  for (const { fp, id, mtime } of files.slice(0, Math.max(limit * 6, 200))) {
+    if (out.length >= limit) break;
     try {
-      const { cwd, title } = parse(fp);
+      const { cwd, title, skip } = parse(fp);
+      if (skip) continue;
       if (cwd && existsSync(cwd)) {
         out.push({ sessionId: id, cwd, title, updatedAt: mtime });
       }
