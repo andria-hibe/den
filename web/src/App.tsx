@@ -15,6 +15,7 @@ import { TicketComments } from "./TicketComments.tsx";
 import { deriveFoxPose, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
 import { useRovingFocus } from "./useRovingFocus.ts";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts.ts";
+import { useNotifications } from "./useNotifications.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
@@ -111,6 +112,14 @@ export function App() {
 
   // Arrow-key roving focus across rail / center / work columns.
   useRovingFocus(navRef);
+
+  // Native OS notifications for session bells + PRs newly needing you.
+  useNotifications({
+    sessions,
+    activeId,
+    prsReady: work.prs !== null,
+    prsNeedingAttention: prs.filter((p) => p.needsAttention),
+  });
 
   // Match a session's branch ticket hint to a PR / Linear ticket.
   const prByHint = (hint: string | null) =>

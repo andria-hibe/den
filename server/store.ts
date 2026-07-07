@@ -33,6 +33,9 @@ export interface SessionRow {
   prRepo: string | null;
   /** Title was locked (manual rename or descriptive ticket/PR title). */
   titleLocked: 0 | 1;
+  /** Tail of the terminal scrollback, persisted so a restart isn't destructive.
+   * Written periodically (not on the metadata `update` path). */
+  scrollback: string | null;
 }
 
 // Stable per-user location (works identically for the CLI and the packaged
@@ -71,6 +74,7 @@ for (const col of [
   "pr INTEGER",
   "prRepo TEXT",
   "titleLocked INTEGER NOT NULL DEFAULT 0",
+  "scrollback TEXT",
 ]) {
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
@@ -81,8 +85,8 @@ for (const col of [
 
 const stmts = {
   insert: db.prepare(
-    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked)
-     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked)`,
+    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked, scrollback)
+     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked, @scrollback)`,
   ),
   all: db.prepare(`SELECT * FROM sessions ORDER BY createdAt ASC`),
   update: db.prepare(
@@ -90,6 +94,9 @@ const stmts = {
        claudeSessionId=@claudeSessionId, lastActive=@lastActive,
        branch=@branch, ticket=@ticket, look=@look, view=@view,
        pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked WHERE id=@id`,
+  ),
+  setScrollback: db.prepare(
+    `UPDATE sessions SET scrollback=@scrollback WHERE id=@id`,
   ),
   delete: db.prepare(`DELETE FROM sessions WHERE id=?`),
   markAllExited: db.prepare(
@@ -112,6 +119,11 @@ export const store = {
   },
   update(row: SessionRow) {
     stmts.update.run(row);
+  },
+  /** Persist just the scrollback tail (kept off the metadata `update` path so
+   * frequent buffer writes don't rewrite the whole row). */
+  setScrollback(id: string, scrollback: string) {
+    stmts.setScrollback.run({ id, scrollback });
   },
   delete(id: string) {
     stmts.delete.run(id);

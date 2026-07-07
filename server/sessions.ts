@@ -88,6 +88,8 @@ class DenSession {
   status: "running" | "exited" = "running";
   private buffer: string[] = [];
   private bufferBytes = 0;
+  /** New output since the last scrollback flush to the store. */
+  private scrollbackDirty = false;
   private listeners = new Set<Listener>();
   /** Once the user renames, stop auto-updating the title from the terminal. */
   titleLocked = false;
@@ -149,6 +151,7 @@ class DenSession {
     term.onExit(({ exitCode, signal }) => {
       this.status = "exited";
       this.term = null;
+      this.persistScrollback(); // keep the final output across a restart
       this.emit({ type: "exit", code: exitCode, signal });
     });
   }
@@ -156,6 +159,7 @@ class DenSession {
   private push(data: string) {
     this.buffer.push(data);
     this.bufferBytes += data.length;
+    this.scrollbackDirty = true;
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
     }
@@ -286,15 +290,46 @@ class DenSession {
       pr: this.pr,
       prRepo: this.prRepo,
       titleLocked: this.titleLocked ? 1 : 0,
+      // Scrollback is persisted separately (store.setScrollback), not on this
+      // metadata path — a fresh row starts empty.
+      scrollback: null,
     };
+  }
+
+  /** Restore persisted scrollback so an attaching client replays it after a
+   * server restart (the live PTY is gone, but its output history survives). */
+  restoreScrollback(text: string) {
+    this.buffer = [text];
+    this.bufferBytes = text.length;
+  }
+
+  /** Write the current scrollback to the store if it changed since last flush. */
+  persistScrollback() {
+    if (!this.scrollbackDirty) return;
+    this.scrollbackDirty = false;
+    store.setScrollback(this.id, this.buffer.join(""));
   }
 }
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
 
+// How often to flush changed scrollback to the store. A crash loses at most
+// this much recent output; keeping it coarse avoids constant disk writes.
+const SCROLLBACK_FLUSH_MS = 5000;
+
 class SessionManager {
   private sessions = new Map<string, DenSession>();
   private colorIdx = 0;
+
+  constructor() {
+    // Periodically persist any session whose scrollback changed, so a restart
+    // can replay recent output instead of showing an empty pane.
+    const timer = setInterval(() => {
+      for (const s of this.sessions.values()) s.persistScrollback();
+    }, SCROLLBACK_FLUSH_MS);
+    // Don't keep the process alive just for this (CLI/tests exit cleanly).
+    timer.unref?.();
+  }
 
   /** Restore persisted rows as exited placeholders (live PTYs don't survive). */
   hydrate() {
@@ -319,6 +354,7 @@ class SessionManager {
       s.pr = row.pr ?? null;
       s.prRepo = row.prRepo ?? null;
       s.titleLocked = row.titleLocked === 1;
+      if (row.scrollback) s.restoreScrollback(row.scrollback);
       this.sessions.set(s.id, s);
     }
   }
