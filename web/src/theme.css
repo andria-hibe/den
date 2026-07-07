@@ -582,6 +582,19 @@ body {
   padding: 2px 4px 6px;
 }
 
+/* Arrow-key roving focus ring (rail sessions, center pane, work cards). The
+   .roving-focus class is toggled by the keyboard-nav handler in App.tsx. */
+.session.roving-focus,
+.pr-card.roving-focus {
+  outline: 2.5px solid var(--pink-deep);
+  outline-offset: 2px;
+}
+.term-wrap.roving-focus {
+  outline: 2.5px solid var(--pink-deep);
+  outline-offset: -4px;
+  border-radius: 16px;
+}
+
 /* Shell-pane tab strip (multiple terminals per workspace) */
 .shell-tabs {
   display: flex;
