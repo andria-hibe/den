@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import type { LinearData, LinearIssue } from "../../server/linear.ts";
+import { useState, type CSSProperties } from "react";
+import type { LinearIssue } from "../../server/linear.ts";
 import { Fox } from "./Fox.tsx";
+import { useWorkData } from "./WorkData.tsx";
 
 const PRIORITY_CLASS: Record<number, string> = {
   1: "prio-urgent",
@@ -132,52 +133,14 @@ export function LinearSection({
   onOpenTicket: (issue: LinearIssue) => void;
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
 }) {
-  const [connected, setConnected] = useState<boolean | null>(null);
-  const [data, setData] = useState<LinearData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const loadIssues = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/linear/issues${refresh ? "?refresh=1" : ""}`);
-      if (res.status === 409) {
-        setConnected(false);
-        return;
-      }
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-      setData(d);
-      setConnected(true);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/linear/status")
-      .then((r) => r.json())
-      .then((s) => {
-        setConnected(s.connected);
-        if (s.connected) loadIssues();
-      })
-      .catch(() => setConnected(false));
-  }, [loadIssues]);
-
-  useEffect(() => {
-    if (!connected) return;
-    const t = setInterval(() => loadIssues(), 60_000);
-    return () => clearInterval(t);
-  }, [connected, loadIssues]);
-
-  const disconnect = async () => {
-    await fetch("/api/linear/key", { method: "DELETE" });
-    setData(null);
-    setConnected(false);
-  };
+  const {
+    linear: data,
+    linearConnected: connected,
+    linearError: error,
+    linearLoading: loading,
+    refreshIssues,
+    disconnectLinear: disconnect,
+  } = useWorkData();
 
   // Where to send you when you click the notifications nudge: your Linear
   // workspace inbox, derived from any issue URL (…/<workspace>/issue/…), else
@@ -220,7 +183,7 @@ export function LinearSection({
             <>
               <button
                 className="btn-ghost"
-                onClick={() => loadIssues(true)}
+                onClick={refreshIssues}
                 disabled={loading}
                 title="refresh"
               >
@@ -239,7 +202,7 @@ export function LinearSection({
           <Fox pose="walk" size={20} /> checking…
         </div>
       )}
-      {connected === false && <ConnectForm onConnected={() => loadIssues(true)} />}
+      {connected === false && <ConnectForm onConnected={refreshIssues} />}
       {connected && error && <div className="browser-error">⚠️ {error}</div>}
       {connected &&
         data &&

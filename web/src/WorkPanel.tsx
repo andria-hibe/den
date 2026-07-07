@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, type CSSProperties } from "react";
-import type { PrBuckets, PullRequest } from "../../server/github.ts";
+import { type CSSProperties } from "react";
+import type { PullRequest } from "../../server/github.ts";
 import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
+import { useWorkData } from "./WorkData.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -145,31 +146,12 @@ export function WorkPanel({
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
-  const [data, setData] = useState<PrBuckets | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/github/prs${refresh ? "?refresh=1" : ""}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as PrBuckets & { error?: string };
-      if (json.error) throw new Error(json.error);
-      setData(json);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(() => load(), 60_000);
-    return () => clearInterval(t);
-  }, [load]);
+  const {
+    prs: data,
+    prsError: error,
+    prsLoading: loading,
+    refreshPrs,
+  } = useWorkData();
 
   return (
     <aside className="panel work">
@@ -191,7 +173,7 @@ export function WorkPanel({
             <span style={{ marginLeft: "auto" }}>
               <button
                 className="btn-ghost"
-                onClick={() => load(true)}
+                onClick={refreshPrs}
                 disabled={loading}
                 title="refresh"
               >

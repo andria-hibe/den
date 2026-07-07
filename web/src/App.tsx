@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useTerminal } from "./useTerminal.ts";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
@@ -9,10 +8,16 @@ import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
-import type { FoxPose } from "./foxSprites.ts";
 import { Splitter, usePersistentNumber, clamp } from "./Splitter.tsx";
+import { api } from "./api.ts";
+import { TerminalView } from "./TerminalView.tsx";
+import { TicketComments } from "./TicketComments.tsx";
+import { deriveFoxPose, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
+import { useRovingFocus } from "./useRovingFocus.ts";
+import { useKeyboardShortcuts } from "./useKeyboardShortcuts.ts";
+import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
-import type { LinearIssue, LinearComment } from "../../server/linear.ts";
+import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
@@ -23,126 +28,26 @@ const MOD =
     ? "⌘"
     : "Ctrl";
 
-// The full cast of topbar foxes, for the click-to-open status popover.
-const FOX_POSES: { pose: FoxPose; label: string; note: string }[] = [
-  { pose: "sit", label: "Sit", note: "idle — open PRs, nothing urgent" },
-  { pose: "happy", label: "Happy", note: "all your PRs look healthy" },
-  { pose: "alert", label: "Alert", note: "a PR, a review, or Linear needs you" },
-  { pose: "walk", label: "Walk", note: "busy — shown while loading" },
-  { pose: "sleep", label: "Sleep", note: "empty — the den is quiet" },
-];
-
-function relTime(iso: string): string {
-  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
-// Comments on a Linear ticket, shown in the read-only "look" view. Fetches
-// lazily per ticket; stays quiet (renders nothing) on error or when empty.
-function TicketComments({ ticketId }: { ticketId: string }) {
-  const [comments, setComments] = useState<LinearComment[] | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    setComments(null);
-    setFailed(false);
-    fetch(`/api/linear/comments?id=${encodeURIComponent(ticketId)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        if (d.error) setFailed(true);
-        else setComments((d.comments ?? []) as LinearComment[]);
-      })
-      .catch(() => alive && setFailed(true));
-    return () => {
-      alive = false;
-    };
-  }, [ticketId]);
-
-  if (failed)
-    return (
-      <div className="ticket-comments-note">Couldn't load comments.</div>
-    );
-  if (comments === null)
-    return <div className="ticket-comments-note">loading comments…</div>;
-  if (comments.length === 0)
-    return <div className="ticket-comments-note">No comments yet.</div>;
-
-  return (
-    <div className="ticket-comments">
-      {comments.map((c, i) => (
-        <div className="ticket-comment" key={i}>
-          <div className="ticket-comment-meta">
-            <strong>{c.author}</strong>
-            <span className="ticket-comment-time">{relTime(c.at)}</span>
-          </div>
-          <div
-            className="md"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(c.body) }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  // Only set a JSON content-type when there's actually a body — Fastify rejects
-  // an empty body when content-type is application/json (breaks DELETE).
-  const headers = init?.body ? { "content-type": "application/json" } : undefined;
-  const res = await fetch(url, { ...init, headers });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const j = await res.json();
-      if (j?.message || j?.error) msg = j.message || j.error;
-    } catch {
-      // no JSON body
-    }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
-
-function TerminalView({
-  session,
-  onExit,
-  onTitle,
-}: {
-  session: SessionMeta;
-  onExit: () => void;
-  onTitle: (name: string) => void;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  useTerminal(hostRef, session.id, onExit, onTitle);
-  // The padding/background live on the wrapper, NOT on the element FitAddon
-  // measures (.term-host): FitAddon reads getComputedStyle(host).height, which
-  // with border-box includes padding, so padding here would make it fit one row
-  // too many and clip the last line.
-  return (
-    <div className="term-host-wrap">
-      <div className="term-host" ref={hostRef} />
-    </div>
-  );
-}
-
 export function App() {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
-  const [statusPose, setStatusPose] = useState<FoxPose>("sit");
-  // Inputs to the topbar fox: PRs needing me / total open PRs / unread Linear
-  // notifications. The pose is derived from all three (see effect below).
-  const [prNeedsMe, setPrNeedsMe] = useState(false);
-  const [prCount, setPrCount] = useState(0);
-  const [linearNotifs, setLinearNotifs] = useState(0);
+  // GitHub PRs + Linear issues come from one shared poll (WorkData), so the
+  // topbar fox and the work panels never drift out of phase.
+  const work = useWorkData();
+  const prs = work.flatPrs;
+  const issues = work.issues;
+  // Topbar fox pose, derived from every attention source: alert if a PR needs
+  // me OR I have unread Linear notifications; else happy if any PRs are open;
+  // else sit. A PR I'm only *reviewing* failing its CI is the author's problem,
+  // so it doesn't count — the server clears its needsAttention.
+  const statusPose = deriveFoxPose({
+    prNeedsMe: prs.some((p) => p.needsAttention),
+    prCount: prs.length,
+    linearNotifs: work.linearNotifs,
+  });
   // groupId → the shell-tab id currently shown in that workspace's shell pane.
   const [shellTab, setShellTab] = useState<Record<string, string>>({});
   // Ticket "look" view: which tab (description vs comments) is showing.
@@ -187,73 +92,6 @@ export function App() {
   const wsBottomRef = useRef<HTMLDivElement>(null);
   const lookRef = useRef<HTMLDivElement>(null);
 
-  // PRs + Linear issues, used both for the topbar status fox and for linking a
-  // session's branch to its ticket/PR.
-  const [prs, setPrs] = useState<PullRequest[]>([]);
-  const [issues, setIssues] = useState<LinearIssue[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const r = await fetch("/api/github/prs");
-        if (!r.ok) return;
-        const d = await r.json();
-        if (!alive || d.error) return;
-        const all: PullRequest[] = [...(d.authored ?? []), ...(d.reviewRequested ?? [])];
-        setPrs(all);
-        // The fox only reacts to PRs that need *my* action: my own PRs failing
-        // CI or with changes requested, or reviews I owe. A PR I'm reviewing
-        // failing its CI is the author's problem, so it doesn't count. (An
-        // already-approved review-requested PR no longer counts either — the
-        // server clears its needsAttention.)
-        setPrNeedsMe(all.some((p) => p.needsAttention));
-        setPrCount(all.length);
-      } catch {
-        // leave as-is
-      }
-    };
-    load();
-    const t = setInterval(load, 60_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const r = await fetch("/api/linear/issues");
-        if (!r.ok) return; // 409 when not connected
-        const d = await r.json();
-        if (!alive) return;
-        if (d.issues) setIssues(d.issues as LinearIssue[]);
-        // Unread Linear notifications nudge the fox to alert (see pose effect).
-        if (typeof d.unreadNotifications === "number")
-          setLinearNotifs(d.unreadNotifications);
-      } catch {
-        // leave as-is
-      }
-    };
-    load();
-    const t = setInterval(load, 60_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
-
-  // Topbar fox pose, derived from every attention source: alert if a PR needs
-  // me OR I have unread Linear notifications; else happy if any PRs are open;
-  // else sit. (Linear notifications only nudge — click into the Linear app.)
-  useEffect(() => {
-    if (prNeedsMe || linearNotifs > 0) setStatusPose("alert");
-    else if (prCount > 0) setStatusPose("happy");
-    else setStatusPose("sit");
-  }, [prNeedsMe, prCount, linearNotifs]);
-
   // Close the fox popover on an outside click or Escape.
   useEffect(() => {
     if (!foxPopOpen) return;
@@ -271,119 +109,8 @@ export function App() {
     };
   }, [foxPopOpen]);
 
-  // --- Arrow-key roving focus ---
-  // Move a visible focus ring across three columns — rail sessions, the center
-  // pane, and work cards (tickets/PRs). Up/Down within a column, Left/Right
-  // between columns; Enter activates (dives into the terminal for the center
-  // pane); Escape leaves a terminal/input back to the rail. Bails whenever
-  // focus is in a terminal or text field so typing is never hijacked.
-  useEffect(() => {
-    const typing = (el: Element | null) =>
-      !!el &&
-      (el.tagName === "INPUT" ||
-        el.tagName === "TEXTAREA" ||
-        (el as HTMLElement).isContentEditable ||
-        !!el.closest(".xterm"));
-    const NAV_SEL = ".rail .session, [data-nav-center], .work-col .pr-card";
-    const q = (sel: string) =>
-      Array.from(document.querySelectorAll<HTMLElement>(sel));
-    const columns = () =>
-      [
-        { key: "rail", items: q(".rail .session") },
-        { key: "center", items: q("[data-nav-center]") },
-        { key: "work", items: q(".work-col .pr-card") },
-      ].filter((c) => c.items.length > 0);
-    // Move both real focus and an explicit ring class (a scripted .focus() can't
-    // be relied on to trigger :focus-visible, so we mark the ring ourselves).
-    const clearRing = () =>
-      document
-        .querySelectorAll(".roving-focus")
-        .forEach((n) => n.classList.remove("roving-focus"));
-    const focus = (el?: HTMLElement | null) => {
-      if (!el) return;
-      clearRing();
-      el.classList.add("roving-focus");
-      el.focus();
-      navRef.current = el;
-    };
-    // A mouse interaction ends keyboard navigation — drop the ring.
-    const onDown = () => clearRing();
-
-    const onKey = (e: KeyboardEvent) => {
-      const active = document.activeElement as HTMLElement | null;
-      // Escape steps out of a terminal/input back to the rail.
-      if (e.key === "Escape" && typing(active)) {
-        const rail =
-          document.querySelector<HTMLElement>(".rail .session.active") ??
-          document.querySelector<HTMLElement>(".rail .session");
-        if (rail) {
-          e.preventDefault();
-          (active as HTMLElement)?.blur?.();
-          focus(rail);
-        }
-        return;
-      }
-      if (typing(active)) return; // terminal/inputs own their keys
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      const isArrow = e.key.startsWith("Arrow");
-      if (!isArrow && e.key !== "Enter") return;
-
-      const cols = columns();
-      if (!cols.length) return;
-
-      const cur =
-        active && active.matches?.(NAV_SEL)
-          ? active
-          : navRef.current && document.contains(navRef.current)
-            ? navRef.current
-            : null;
-      const ci = cur ? cols.findIndex((c) => c.items.includes(cur!)) : -1;
-      const ii = ci >= 0 ? cols[ci].items.indexOf(cur!) : -1;
-
-      if (e.key === "Enter") {
-        if (!cur) return;
-        e.preventDefault();
-        if (cur.hasAttribute("data-nav-center"))
-          (
-            cur.querySelector<HTMLElement>(".xterm-helper-textarea") ?? cur
-          ).focus();
-        else cur.click();
-        return;
-      }
-
-      e.preventDefault();
-      // Not yet in the ring: enter at the active rail session (or first item).
-      if (ci < 0) {
-        const rail = cols.find((c) => c.key === "rail") ?? cols[0];
-        focus(
-          rail.items.find((el) => el.classList.contains("active")) ??
-            rail.items[0],
-        );
-        return;
-      }
-      if (e.key === "ArrowUp") focus(cols[ci].items[Math.max(0, ii - 1)]);
-      else if (e.key === "ArrowDown")
-        focus(cols[ci].items[Math.min(cols[ci].items.length - 1, ii + 1)]);
-      else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        const nci = Math.min(
-          cols.length - 1,
-          Math.max(0, ci + (e.key === "ArrowRight" ? 1 : -1)),
-        );
-        if (nci === ci) return;
-        const dst = cols[nci];
-        // Keep roughly the same vertical position when changing columns.
-        const ratio =
-          cols[ci].items.length > 1 ? ii / (cols[ci].items.length - 1) : 0;
-        focus(dst.items[Math.round(ratio * (dst.items.length - 1))] ?? dst.items[0]);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, []);
+  // Arrow-key roving focus across rail / center / work columns.
+  useRovingFocus(navRef);
 
   // Match a session's branch ticket hint to a PR / Linear ticket.
   const prByHint = (hint: string | null) =>
@@ -406,15 +133,6 @@ export function App() {
     sessionColor(
       (s) => (s.pr === number && s.prRepo === repo) || hintEq(s.ticketHint, hint),
     );
-
-  const STATUS_TITLE: Record<FoxPose, string> = {
-    happy: "all your PRs look happy 🎉",
-    alert:
-      "something needs you — a PR to fix, a review you owe, or Linear notifications",
-    sit: "no open PRs right now",
-    sleep: "",
-    walk: "",
-  };
 
   useEffect(() => {
     api<{ sessions: SessionMeta[] }>("/api/sessions")
@@ -564,56 +282,18 @@ export function App() {
     );
   };
 
-  // --- Keyboard shortcuts ---
   // Cmd/Ctrl+N new claude · Cmd/Ctrl+T new shell · Cmd/Ctrl+1–9 switch to the
-  // Nth rail session · Cmd/Ctrl+W close the active session. Handlers/state can
-  // change between renders, so we read them through a ref and subscribe once.
-  // (In the packaged app main.ts frees Cmd+W from the native menu; in the dev
-  // browser Cmd+W still closes the tab — use the app for the full set.)
-  const kb = useRef({
+  // Nth rail session · Cmd/Ctrl+W close the active. Suppressed while a modal or
+  // inline rename is open.
+  useKeyboardShortcuts({
     rail,
     activeId,
-    blocked: false,
-    addSession,
-    closeSession,
-    selectSession,
+    blocked: showNew || !!ticketModal || !!prModal || editingId !== null,
+    onNewClaude: () => setShowNew(true),
+    onNewShell: () => addSession({ shell: true }),
+    onClose: closeSession,
+    onSelect: selectSession,
   });
-  kb.current = {
-    rail,
-    activeId,
-    blocked:
-      showNew || !!ticketModal || !!prModal || editingId !== null,
-    addSession,
-    closeSession,
-    selectSession,
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      const s = kb.current;
-      if (s.blocked) return;
-      const k = e.key.toLowerCase();
-      if (k === "n") {
-        e.preventDefault();
-        setShowNew(true);
-      } else if (k === "t") {
-        e.preventDefault();
-        s.addSession({ shell: true });
-      } else if (k === "w") {
-        if (!s.activeId) return;
-        e.preventDefault();
-        s.closeSession(s.activeId);
-      } else if (k >= "1" && k <= "9") {
-        const target = s.rail[Number(k) - 1];
-        if (target) {
-          e.preventDefault();
-          s.selectSession(target.id);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   // --- Linear ticket → look / work ---
   // Reuse an existing session for the ticket (by explicit ticket or branch hint)
