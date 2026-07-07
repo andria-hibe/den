@@ -64,7 +64,10 @@ function TicketComments({ ticketId }: { ticketId: string }) {
     };
   }, [ticketId]);
 
-  if (failed) return null;
+  if (failed)
+    return (
+      <div className="ticket-comments-note">Couldn't load comments.</div>
+    );
   if (comments === null)
     return <div className="ticket-comments-note">loading comments…</div>;
   if (comments.length === 0)
@@ -72,9 +75,6 @@ function TicketComments({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="ticket-comments">
-      <div className="ticket-comments-head">
-        Comments <span className="pr-count">{comments.length}</span>
-      </div>
       {comments.map((c, i) => (
         <div className="ticket-comment" key={i}>
           <div className="ticket-comment-meta">
@@ -137,6 +137,10 @@ export function App() {
   const [linearNotifs, setLinearNotifs] = useState(0);
   // groupId → the shell-tab id currently shown in that workspace's shell pane.
   const [shellTab, setShellTab] = useState<Record<string, string>>({});
+  // Ticket "look" view: which tab (description vs comments) is showing.
+  const [lookTab, setLookTab] = useState<"description" | "comments">(
+    "description",
+  );
   // Click the topbar fox to open a popover showing the whole cast.
   const [foxPopOpen, setFoxPopOpen] = useState(false);
   const foxPopRef = useRef<HTMLSpanElement>(null);
@@ -904,10 +908,32 @@ export function App() {
             work on it
           </button>
         </div>
-        {issue ? (
-          <div className="ticket-detail-body">
-            <div className="ticket-detail-title">{issue.title}</div>
-            {issue.description ? (
+        {issue && <div className="ticket-detail-title">{issue.title}</div>}
+        <div className="ticket-look-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={lookTab === "description"}
+            className={`look-tab${lookTab === "description" ? " active" : ""}`}
+            onClick={() => setLookTab("description")}
+          >
+            Description
+          </button>
+          <button
+            role="tab"
+            aria-selected={lookTab === "comments"}
+            className={`look-tab${lookTab === "comments" ? " active" : ""}`}
+            onClick={() => setLookTab("comments")}
+          >
+            Comments
+          </button>
+        </div>
+        <div className="ticket-detail-body">
+          {lookTab === "description" ? (
+            !issue ? (
+              <div className="placeholder">
+                Ticket details aren't in your assigned list right now.
+              </div>
+            ) : issue.description ? (
               <div
                 className="ticket-detail-desc md"
                 dangerouslySetInnerHTML={{
@@ -916,14 +942,11 @@ export function App() {
               />
             ) : (
               <div className="placeholder">No description.</div>
-            )}
-          </div>
-        ) : (
-          <div className="placeholder" style={{ padding: 12 }}>
-            Ticket details aren't in your assigned list right now.
-          </div>
-        )}
-        {ticketId && <TicketComments ticketId={ticketId} />}
+            )
+          ) : ticketId ? (
+            <TicketComments ticketId={ticketId} />
+          ) : null}
+        </div>
       </div>
     );
   };

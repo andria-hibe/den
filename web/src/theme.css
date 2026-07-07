@@ -1144,14 +1144,41 @@ body {
   font-size: 14px;
 }
 .ticket-detail-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-top: 10px;
 }
 .ticket-detail-title {
   font-size: 15px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin: 8px 0 4px;
   line-height: 1.35;
+}
+/* Description / Comments toggle in the ticket look view. */
+.ticket-look-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  border-bottom: 1.5px solid var(--border);
+}
+.look-tab {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1.5px;
+}
+.look-tab:hover {
+  color: var(--ink);
+}
+.look-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--pink-deep);
 }
 .ticket-detail-desc {
   font-size: 13px;
@@ -1159,27 +1186,14 @@ body {
   color: var(--ink);
 }
 
-/* ---- Ticket comments (read-only "look" view) ---- */
+/* ---- Ticket comments (read-only "look" view, "Comments" tab) ---- */
 .ticket-comments {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1.5px dashed rgba(90, 60, 90, 0.18);
-}
-.ticket-comments-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--muted, #9a7fa6);
-  margin-bottom: 10px;
+  padding-top: 10px;
 }
 .ticket-comments-note {
-  margin-top: 14px;
+  padding-top: 12px;
   font-size: 12px;
-  color: var(--muted, #9a7fa6);
+  color: var(--ink-soft);
   font-style: italic;
 }
 .ticket-comment {

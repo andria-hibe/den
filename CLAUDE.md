@@ -151,9 +151,9 @@ group in a `shellTab` map.
 - **Linear ticket → Look / Work**. Work creates the branch (worktree or local),
   seeds the notepad with a ticket summary, and **primes Claude** with the ticket
   to explain the issue + propose a solution before coding. Look = ticket detail
-  (markdown) **+ the ticket's Linear comments** (`getIssueComments` →
-  `/api/linear/comments`; bot/integration comments show their `botActor` name) +
-  a Claude pane.
+  with **Description / Comments tabs** (`lookTab` state) + a Claude pane; comments
+  via `getIssueComments` → `/api/linear/comments` (bot/integration comments show
+  their `botActor` name).
 - **Linear notifications nudge**: `getAssignedIssues` also returns
   `unreadNotifications` (same GraphQL query); a pink `! N` badge shows in the work
   panel's linear header (links to the workspace inbox) and unread notifications
