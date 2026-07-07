@@ -199,11 +199,20 @@ No automated suite yet — verification is scripted + visual:
    "→ Claude" buttons only *hand a comment to Claude* to action locally — they
    don't reply to or resolve the thread on GitHub. Natural next step: let Claude
    post its response / mark the inline comment resolved from Den.
-6. **Persistence**: `view`/`ticket`/`pr` are in-memory only — persist them so the
-   rail restores full context after a server restart (columns like groupId/role
-   already migrate in `store.ts`).
-7. **Keyboard shortcuts** (new session, switch 1–9, close) + window-state memory;
-   maybe a menu-bar mode.
+6. ~~**Persistence**: `view`/`ticket`/`pr` are in-memory only.~~ **Done** —
+   `branch`/`ticket`/`look`/`view`/`pr`/`prRepo`/`titleLocked` now persist to
+   `store.ts` (migrated columns) and restore in `hydrate()`, so the rail renders
+   full PR/ticket/look context after a server restart (sessions come back
+   `exited`, but their center pane is intact).
+7. ~~**Keyboard shortcuts** (new session, switch 1–9, close).~~ **Done** —
+   `Cmd/Ctrl+N` new claude · `Cmd/Ctrl+T` new shell · `Cmd/Ctrl+1–9` switch to
+   the Nth rail session · `Cmd/Ctrl+W` close the active session (a window
+   `keydown` listener in `App.tsx` reading current state via a ref; suppressed
+   while a modal/rename is open). Native Cmd+W was freed from Electron's default
+   macOS menu by installing a trimmed menu in `main.ts` (`installMenu()` keeps
+   Edit/View/appMenu roles, drops the Cmd+W "Close Window" accelerator). Still
+   open: window-state memory; maybe a menu-bar mode. **NB in dev-browser Cmd+W
+   still closes the tab** — only the packaged app frees it.
 8. **Native notifications** for attention (bell) and PR check failures.
 9. **Token awareness**: headless PR review + progress logging spend tokens — add
    visible toggles / cost hints.

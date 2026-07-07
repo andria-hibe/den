@@ -17,6 +17,12 @@ import type { SessionMeta } from "../../server/sessions.ts";
 
 const COLORS = ["#ffb7d5", "#cdb4f6", "#b8e6d4", "#b4d8f6", "#ffd9b0", "#fff0a8"];
 
+// Modifier symbol shown in the shortcuts hint (⌘ on macOS, Ctrl elsewhere).
+const MOD =
+  typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)
+    ? "⌘"
+    : "Ctrl";
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   // Only set a JSON content-type when there's actually a body — Fastify rejects
   // an empty body when content-type is application/json (breaks DELETE).
@@ -260,6 +266,57 @@ export function App() {
       prev.map((s) => (s.id === id ? { ...s, attention: false } : s)),
     );
   };
+
+  // --- Keyboard shortcuts ---
+  // Cmd/Ctrl+N new claude · Cmd/Ctrl+T new shell · Cmd/Ctrl+1–9 switch to the
+  // Nth rail session · Cmd/Ctrl+W close the active session. Handlers/state can
+  // change between renders, so we read them through a ref and subscribe once.
+  // (In the packaged app main.ts frees Cmd+W from the native menu; in the dev
+  // browser Cmd+W still closes the tab — use the app for the full set.)
+  const kb = useRef({
+    rail,
+    activeId,
+    blocked: false,
+    addSession,
+    closeSession,
+    selectSession,
+  });
+  kb.current = {
+    rail,
+    activeId,
+    blocked:
+      showNew || !!ticketModal || !!prModal || editingId !== null,
+    addSession,
+    closeSession,
+    selectSession,
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      const s = kb.current;
+      if (s.blocked) return;
+      const k = e.key.toLowerCase();
+      if (k === "n") {
+        e.preventDefault();
+        setShowNew(true);
+      } else if (k === "t") {
+        e.preventDefault();
+        s.addSession({ shell: true });
+      } else if (k === "w") {
+        if (!s.activeId) return;
+        e.preventDefault();
+        s.closeSession(s.activeId);
+      } else if (k >= "1" && k <= "9") {
+        const target = s.rail[Number(k) - 1];
+        if (target) {
+          e.preventDefault();
+          s.selectSession(target.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // --- Linear ticket → look / work ---
   // Reuse an existing session for the ticket (by explicit ticket or branch hint)
@@ -651,7 +708,30 @@ export function App() {
         ) : (
           <PixelFox size={30} />
         )}
-        <span className="wordmark">den</span>
+        <span className="wordmark" tabIndex={0}>
+          den
+          <div className="shortcuts-pop" role="tooltip">
+            <div className="shortcuts-title">keyboard shortcuts</div>
+            <ul>
+              <li>
+                <span className="keys"><kbd>{MOD}</kbd><kbd>N</kbd></span>
+                <span>new claude session</span>
+              </li>
+              <li>
+                <span className="keys"><kbd>{MOD}</kbd><kbd>T</kbd></span>
+                <span>new shell</span>
+              </li>
+              <li>
+                <span className="keys"><kbd>{MOD}</kbd><kbd>1</kbd>–<kbd>9</kbd></span>
+                <span>switch session</span>
+              </li>
+              <li>
+                <span className="keys"><kbd>{MOD}</kbd><kbd>W</kbd></span>
+                <span>close session</span>
+              </li>
+            </ul>
+          </div>
+        </span>
         {active && (
           <span className="topbar-title" title={active.name}>
             <span className="dot" style={{ background: active.color }} />

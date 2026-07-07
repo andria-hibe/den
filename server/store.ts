@@ -19,6 +19,20 @@ export interface SessionRow {
   /** Workspace grouping: a Claude session groups a main pane + a shell pane. */
   groupId: string;
   role: string; // "main" | "shell"
+  // --- Session context (restores the rail after a restart) ---
+  /** Git branch captured when the session started. */
+  branch: string | null;
+  /** Linear ticket identifier this session is for (e.g. "FAST-6115"). */
+  ticket: string | null;
+  /** Lightweight "just looking" ticket viewer session. */
+  look: 0 | 1;
+  /** GitHub PR layout: "review" (others' PR) or "mypr" (your own). */
+  view: string | null;
+  /** GitHub PR number + nameWithOwner repo, if this is a PR session. */
+  pr: number | null;
+  prRepo: string | null;
+  /** Title was locked (manual rename or descriptive ticket/PR title). */
+  titleLocked: 0 | 1;
 }
 
 // Stable per-user location (works identically for the CLI and the packaged
@@ -46,8 +60,18 @@ db.exec(`
   );
 `);
 
-// Migrate older DBs that predate workspace grouping.
-for (const col of ["groupId TEXT", "role TEXT"]) {
+// Migrate older DBs that predate workspace grouping or session-context columns.
+for (const col of [
+  "groupId TEXT",
+  "role TEXT",
+  "branch TEXT",
+  "ticket TEXT",
+  "look INTEGER NOT NULL DEFAULT 0",
+  "view TEXT",
+  "pr INTEGER",
+  "prRepo TEXT",
+  "titleLocked INTEGER NOT NULL DEFAULT 0",
+]) {
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
   } catch {
@@ -57,13 +81,15 @@ for (const col of ["groupId TEXT", "role TEXT"]) {
 
 const stmts = {
   insert: db.prepare(
-    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role)
-     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role)`,
+    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked)
+     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked)`,
   ),
   all: db.prepare(`SELECT * FROM sessions ORDER BY createdAt ASC`),
   update: db.prepare(
     `UPDATE sessions SET name=@name, color=@color, status=@status,
-       claudeSessionId=@claudeSessionId, lastActive=@lastActive WHERE id=@id`,
+       claudeSessionId=@claudeSessionId, lastActive=@lastActive,
+       branch=@branch, ticket=@ticket, look=@look, view=@view,
+       pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked WHERE id=@id`,
   ),
   delete: db.prepare(`DELETE FROM sessions WHERE id=?`),
   markAllExited: db.prepare(

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, Menu, shell } from "electron";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { startServer, type RunningServer } from "../server/app.ts";
@@ -23,8 +23,28 @@ function fixPath() {
   }
 }
 
+// Den is a single-window cockpit and binds Cmd+W itself (close the active
+// *session*, not the window). The default macOS menu binds Cmd+W to "Close
+// Window" at the native level, which would swallow that keystroke before the
+// renderer sees it — so install a menu that keeps the standard Edit/View roles
+// (copy/paste/undo/quit) but drops the Cmd+W accelerator. Quit is still Cmd+Q.
+function installMenu() {
+  if (process.platform !== "darwin") return; // default menu is fine elsewhere
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { role: "appMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    {
+      label: "Window",
+      submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 async function boot() {
   fixPath();
+  installMenu();
   const webDir = app.isPackaged
     ? join(process.resourcesPath, "web")
     : join(__dirname, "..", "web"); // dist/electron -> dist/web

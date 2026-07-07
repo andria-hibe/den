@@ -257,6 +257,13 @@ class DenSession {
       lastActive: this.lastActive,
       groupId: this.groupId,
       role: this.role,
+      branch: this.branch,
+      ticket: this.ticket,
+      look: this.look ? 1 : 0,
+      view: this.view,
+      pr: this.pr,
+      prRepo: this.prRepo,
+      titleLocked: this.titleLocked ? 1 : 0,
     };
   }
 }
@@ -283,6 +290,13 @@ class SessionManager {
         (row.role as "main" | "shell") ?? "main",
       );
       s.status = "exited";
+      s.branch = row.branch ?? null;
+      s.ticket = row.ticket ?? null;
+      s.look = row.look === 1;
+      s.view = (row.view as "review" | "mypr" | null) ?? null;
+      s.pr = row.pr ?? null;
+      s.prRepo = row.prRepo ?? null;
+      s.titleLocked = row.titleLocked === 1;
       this.sessions.set(s.id, s);
     }
   }

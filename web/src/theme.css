@@ -138,6 +138,78 @@ body {
 .topbar .wordmark {
   font-size: 18px;
   font-weight: 800;
+  position: relative;
+  cursor: default;
+  outline: none;
+}
+/* Hover/focus the wordmark to reveal the keyboard-shortcuts cheat sheet. */
+.shortcuts-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 40;
+  min-width: 214px;
+  padding: 10px 12px;
+  background: #fffafd;
+  color: #2e2333;
+  border: 1.5px solid rgba(90, 60, 90, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(90, 60, 90, 0.28);
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  letter-spacing: normal;
+}
+.wordmark:hover .shortcuts-pop,
+.wordmark:focus-visible .shortcuts-pop,
+.wordmark:focus .shortcuts-pop {
+  opacity: 1;
+  transform: translateY(0);
+}
+.shortcuts-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #9a7fa6;
+  margin-bottom: 7px;
+}
+.shortcuts-pop ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shortcuts-pop li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.shortcuts-pop .keys {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 58px;
+}
+.shortcuts-pop kbd {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 5px;
+  min-width: 18px;
+  text-align: center;
+  color: #4a3a52;
+  background: #f3e8f4;
+  border: 1px solid rgba(90, 60, 90, 0.22);
+  border-radius: 5px;
+  box-shadow: 0 1px 0 rgba(90, 60, 90, 0.22);
 }
 .topbar-title {
   display: flex;
