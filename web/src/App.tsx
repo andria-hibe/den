@@ -383,6 +383,22 @@ export function App() {
   const issueByHint = (hint: string | null) =>
     hint ? issues.find((i) => i.ticketHint.toLowerCase() === hint) : undefined;
 
+  // The reverse: the colour of a session working on a given ticket / PR, so the
+  // work-panel card can be tinted to match its session (running sessions win
+  // over exited ones). Lets you see at a glance which cards have a live session.
+  const hintEq = (a?: string | null, b?: string | null) =>
+    !!a && !!b && a.toLowerCase() === b.toLowerCase();
+  const sessionColor = (match: (s: SessionMeta) => boolean) => {
+    const mains = sessions.filter((s) => s.role === "main" && match(s));
+    return (mains.find((s) => s.status === "running") ?? mains[0])?.color;
+  };
+  const ticketColor = (identifier: string, hint?: string) =>
+    sessionColor((s) => s.ticket === identifier || hintEq(s.ticketHint, hint));
+  const prColor = (repo: string, number: number, hint?: string) =>
+    sessionColor(
+      (s) => (s.pr === number && s.prRepo === repo) || hintEq(s.ticketHint, hint),
+    );
+
   const STATUS_TITLE: Record<FoxPose, string> = {
     happy: "all your PRs look happy 🎉",
     alert:
@@ -1327,7 +1343,12 @@ export function App() {
 
       {/* Right: work — live GitHub PRs + Linear tickets */}
       <div className="work-col" style={{ width: workW }}>
-        <WorkPanel onOpenTicket={openTicket} onOpenPr={openPr} />
+        <WorkPanel
+          onOpenTicket={openTicket}
+          onOpenPr={openPr}
+          ticketColor={ticketColor}
+          prColor={prColor}
+        />
       </div>
       </div>
 

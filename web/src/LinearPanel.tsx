@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { LinearData, LinearIssue } from "../../server/linear.ts";
 import { Fox } from "./Fox.tsx";
 
@@ -17,16 +17,30 @@ function relTime(iso: string): string {
   return `${Math.round(h / 24)}d`;
 }
 
+// A ticket linked to an open session is tinted with that session's colour
+// (left stripe + faint wash), matching the accent Pr cards use.
+function accentStyle(color?: string): CSSProperties | undefined {
+  if (!color) return undefined;
+  return {
+    borderLeftColor: color,
+    borderLeftWidth: 5,
+    background: `color-mix(in srgb, ${color} 16%, var(--bg-rail))`,
+  };
+}
+
 function IssueCard({
   issue,
   onOpen,
+  accent,
 }: {
   issue: LinearIssue;
   onOpen: (issue: LinearIssue) => void;
+  accent?: string;
 }) {
   return (
     <div
-      className="pr-card ticket-card"
+      className={`pr-card ticket-card${accent ? " session-linked" : ""}`}
+      style={accentStyle(accent)}
       onClick={() => onOpen(issue)}
       role="button"
       tabIndex={0}
@@ -113,8 +127,10 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
 
 export function LinearSection({
   onOpenTicket,
+  ticketColor,
 }: {
   onOpenTicket: (issue: LinearIssue) => void;
+  ticketColor?: (identifier: string, hint?: string) => string | undefined;
 }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [data, setData] = useState<LinearData | null>(null);
@@ -233,7 +249,12 @@ export function LinearSection({
           </div>
         ) : (
           data.issues.map((i) => (
-            <IssueCard key={i.identifier} issue={i} onOpen={onOpenTicket} />
+            <IssueCard
+              key={i.identifier}
+              issue={i}
+              onOpen={onOpenTicket}
+              accent={ticketColor?.(i.identifier, i.ticketHint)}
+            />
           ))
         ))}
     </div>

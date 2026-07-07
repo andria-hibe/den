@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import type { PrBuckets, PullRequest } from "../../server/github.ts";
 import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
@@ -26,18 +26,32 @@ function relTime(iso: string): string {
   return `${Math.round(h / 24)}d`;
 }
 
+// A card linked to an open session is tinted with that session's colour (left
+// stripe + faint wash) so related work reads at a glance.
+function accentStyle(color?: string): CSSProperties | undefined {
+  if (!color) return undefined;
+  return {
+    borderLeftColor: color,
+    borderLeftWidth: 5,
+    background: `color-mix(in srgb, ${color} 16%, var(--bg-rail))`,
+  };
+}
+
 function PrCard({
   pr,
   onOpen,
+  accent,
 }: {
   pr: PullRequest;
   onOpen: (pr: PullRequest) => void;
+  accent?: string;
 }) {
   const check = CHECK_ICON[pr.checks];
   const review = REVIEW_LABEL[pr.review];
   return (
     <div
-      className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}`}
+      className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}${accent ? " session-linked" : ""}`}
+      style={accentStyle(accent)}
       onClick={() => onOpen(pr)}
       role="button"
       tabIndex={0}
@@ -90,10 +104,12 @@ function Section({
   title,
   prs,
   onOpenPr,
+  prColor,
 }: {
   title: string;
   prs: PullRequest[];
   onOpenPr: (pr: PullRequest) => void;
+  prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
   return (
     <div className="pr-section">
@@ -106,7 +122,12 @@ function Section({
         </div>
       ) : (
         prs.map((pr) => (
-          <PrCard key={`${pr.repo}#${pr.number}`} pr={pr} onOpen={onOpenPr} />
+          <PrCard
+            key={`${pr.repo}#${pr.number}`}
+            pr={pr}
+            onOpen={onOpenPr}
+            accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
+          />
         ))
       )}
     </div>
@@ -116,9 +137,13 @@ function Section({
 export function WorkPanel({
   onOpenTicket,
   onOpenPr,
+  ticketColor,
+  prColor,
 }: {
   onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
   onOpenPr: (pr: PullRequest) => void;
+  ticketColor?: (identifier: string, hint?: string) => string | undefined;
+  prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
   const [data, setData] = useState<PrBuckets | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +178,7 @@ export function WorkPanel({
       </div>
 
       <div className="pr-scroll">
-        <LinearSection onOpenTicket={onOpenTicket} />
+        <LinearSection onOpenTicket={onOpenTicket} ticketColor={ticketColor} />
 
         <div className="pr-section">
           <div className="pr-section-title">
@@ -186,11 +211,13 @@ export function WorkPanel({
                 title="review requested"
                 prs={data.reviewRequested}
                 onOpenPr={onOpenPr}
+                prColor={prColor}
               />
               <Section
                 title="my open PRs"
                 prs={data.authored}
                 onOpenPr={onOpenPr}
+                prColor={prColor}
               />
             </>
           )}

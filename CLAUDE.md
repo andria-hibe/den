@@ -145,6 +145,11 @@ group in a `shellTab` map.
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and
   on rail cards (matched via the `fast-NNNN` branch hint + explicit ids).
+- **Colour-linked work cards**: a work-panel card whose ticket/PR has a live
+  session is tinted with that session's colour (left stripe + faint wash), so you
+  can tell at a glance which cards and sessions are related. App.tsx computes
+  `ticketColor`/`prColor` (running sessions win over exited) and passes them to
+  `WorkPanel` → `Section`/`PrCard` + `LinearSection`/`IssueCard`.
 - **Resume** past Claude sessions from `~/.claude/projects`.
 - **Attention nudges**: a background session that rings the bell shows a pulsing
   `!`; cleared when you view it.
