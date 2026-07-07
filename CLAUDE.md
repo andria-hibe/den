@@ -81,14 +81,24 @@ WebSocket; everything else is REST.
 ## Data model
 
 A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
-- **Claude workspace** = a `main` claude pane + a `shell` pane (same group) + a
-  progress notepad file at `~/.den/progress/<groupId>.md`.
+- **Claude workspace** = a `main` claude pane + **one or more `shell` panes**
+  (same group, shown as tabs) + a progress notepad at `~/.den/progress/<groupId>.md`.
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
   `review` (others' PR), `mypr` (your PR), or a ticket-look. They also carry
   `ticket` / `pr` / `prRepo` / `branch` for linking.
 The rail shows only `role === "main"`. The frontend polls `/api/sessions` (~4s)
-to sync names/status/attention.
+to sync names/status/attention — the poll **only merges existing rows, never
+adds new ones**, so any code that creates a session out-of-band must refetch the
+full list itself (see `addSession` / `addShellTab`). Session context
+(`branch`/`ticket`/`look`/`view`/`pr`/`prRepo`/`titleLocked`) persists in
+`store.ts` and restores in `hydrate()`, so the rail keeps full context across a
+server restart (sessions come back `exited` but their center pane is intact).
+
+Extra shell tabs: `sessions.addShell(groupId)` (route `POST /api/sessions/:id/shell`)
+adds a shell-role pane to a group; `removeOne(id)` (route `DELETE …?scope=one`)
+closes a single pane, refusing "main". The frontend tracks the active tab per
+group in a `shellTab` map.
 
 ## Features (all built + committed on `master`)
 
@@ -101,16 +111,31 @@ to sync names/status/attention.
 - **Resizable** panels (draggable splitters, sizes persisted to localStorage).
 - Session **titles**: Claude auto-titles via OSC (shells don't); manual rename
   locks it; the **topbar tints to the active session's colour + shows its title**.
-- **Reactive pixel-art fox**: topbar status fox — `alert` only when a PR needs
-  *your* action (an authored PR failing CI / changes requested, or a review you
-  owe); a PR you're *reviewing* failing its CI does NOT alert. Driven by the
-  server-computed `PullRequest.needsAttention` (see `getMyPullRequests`), the
-  same flag that marks cards. Else `happy` (open PRs) / `sit` (none). Sleeping
-  fox (drifting z) in the empty state; walking fox in loading rows. Sprites in
-  `foxSprites.ts`; keep integer scale + stepped animation or they blur.
+- **Reactive pixel-art fox**: topbar status fox — `alert` when something needs
+  *your* action: a PR needing you (authored PR failing CI / changes requested, or
+  a review you owe) **or unread Linear notifications**. A PR you're *reviewing*
+  failing its CI does NOT alert, and a review-requested PR that's **already
+  approved** no longer alerts. The pose is derived (in `App.tsx`) from three
+  inputs — `prNeedsMe` + `prCount` + `linearNotifs` — not set inline. Else `happy`
+  (open PRs) / `sit` (none). Sleeping fox in the empty state; walking fox in
+  loading rows. Sprites in `foxSprites.ts`; keep integer scale + stepped animation
+  or they blur. **Click the status fox** for a popover showing all five poses
+  (current one badged "now"); **hover the `den` wordmark** for the keyboard-shortcut
+  cheat sheet.
 - **PR cards flag what needs you**: cards with `needsAttention` get a pink accent
   + pulsing `!` (tooltip = `attentionReason`), so the "review requested" and "my
-  open PRs" sections show at a glance which ones are on you.
+  open PRs" sections show at a glance which ones are on you. Already-approved
+  review-requested PRs drop the flag (`getMyPullRequests`: `review !== "approved"`).
+- **Keyboard shortcuts**: `Cmd/Ctrl+N` new claude · `Cmd/Ctrl+T` new shell ·
+  `Cmd/Ctrl+1–9` switch to the Nth rail session · `Cmd/Ctrl+W` close active
+  (native Cmd+W freed via a trimmed Electron menu in `main.ts`).
+- **Arrow-key roving focus**: arrows move a visible `.roving-focus` ring across
+  rail sessions → center pane → work cards; Up/Down within a column, Left/Right
+  between; Enter activates (dives into the terminal for the center pane); Escape
+  leaves a terminal/input back to the rail. Bails while focus is in a
+  terminal/text field (never hijacks typing); a mouse click clears the ring.
+- **Multiple terminal tabs per workspace**: the shell pane is a tab strip — `+`
+  opens another shell in the same workspace, `×` closes one (shown only when >1).
 - **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
@@ -126,7 +151,13 @@ to sync names/status/attention.
 - **Linear ticket → Look / Work**. Work creates the branch (worktree or local),
   seeds the notepad with a ticket summary, and **primes Claude** with the ticket
   to explain the issue + propose a solution before coding. Look = ticket detail
-  (markdown) + a Claude pane.
+  (markdown) **+ the ticket's Linear comments** (`getIssueComments` →
+  `/api/linear/comments`; bot/integration comments show their `botActor` name) +
+  a Claude pane.
+- **Linear notifications nudge**: `getAssignedIssues` also returns
+  `unreadNotifications` (same GraphQL query); a pink `! N` badge shows in the work
+  panel's linear header (links to the workspace inbox) and unread notifications
+  push the topbar fox to `alert`.
 - **GitHub PR → Review / Edit**. Others' PRs: check out into a worktree, show the
   diff + description + optional headless Claude review + a Claude session. The
   review diff is grouped per file with a **left summary column** (headless Claude
@@ -172,6 +203,14 @@ No automated suite yet — verification is scripted + visual:
   that `<link>`s the real `web/src/theme.css` (via `file://`) and hand-builds the
   component's DOM with representative data, then `shot.cjs` it. Avoids the full
   worktree + headless-Claude cost when you only need to verify styling/layout.
+- **Driving the live app** (for interaction, not just layout): run `npm run dev`
+  (node ABI), then a throwaway Electron script that `loadURL`s `:5173` and
+  `executeJavaScript`s clicks / `fetch`es, reading back DOM state. Gotcha:
+  **synthetic `dispatchEvent` keyboard events are untrusted** — they won't trigger
+  `:focus-visible` or the browser's keyboard modality. Use
+  `webContents.sendInputEvent({type:"keyDown",keyCode:"Down"})` for a trusted key,
+  or (as the arrow-nav does) drive focus with an explicit class instead of relying
+  on `:focus-visible`.
 - Verify data/endpoints against **real** PRs/tickets (e.g. `getPrDetail`,
   `summarizePrDiff`, the paste endpoint) with a short Node fetch script on an
   isolated server — separate from the visual layout check above.
@@ -191,7 +230,9 @@ No automated suite yet — verification is scripted + visual:
 2. **My-PR (Edit) flow**: comment rendering + inline-comment diffs + "→ Claude"
    are built & verified, but the end-to-end *edit* path (branch checks out/reuses,
    Claude makes & pushes changes) still needs a live click-through with a push.
-3. **Feed Linear ticket status into the fox** too (topbar fox is GitHub-only).
+3. ~~**Feed Linear into the fox**.~~ **Partly done** — unread Linear
+   *notifications* now push the fox to `alert`. Still open: reflect Linear ticket
+   *status/priority* (e.g. an urgent assigned ticket) in the fox too.
 4. **Worktree lifecycle**: offer to remove Den-created worktrees
    (`runn/.claude-worktrees/pr-*`) when closing a session; list/adopt existing
    ones.
