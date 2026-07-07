@@ -1,6 +1,11 @@
 import { readdirSync, statSync, existsSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve, join, dirname, sep } from "node:path";
+import { store } from "./store.ts";
+
+// Where we remember the den source repo, so the "edit den" button always finds
+// it — even in the packaged app, which runs from the .app bundle (not the repo).
+const DEN_REPO_SETTING = "den_repo_path";
 
 // All filesystem browsing is sandboxed to the home directory — this is a local
 // personal tool, but there's no reason to let the UI wander the whole disk.
@@ -52,25 +57,38 @@ export function roots() {
   };
 }
 
+/** True if `r` looks like the den source checkout (not the packaged app). */
+function looksLikeDenRepo(r: string): boolean {
+  return (
+    within(r) &&
+    existsSync(join(r, "server", "app.ts")) &&
+    existsSync(join(r, "package.json"))
+  );
+}
+
 /**
- * The den *source* repo, for the "edit den" self-editing session. NOT the
- * packaged /Applications/Den.app (editing that is useless) — the checkout you
- * actually develop in. Prefers $DEN_REPO, then the usual location, then the dev
- * cwd; only returns a path that actually looks like the den source.
+ * The den *source* repo, for the "edit den" self-editing session — the checkout
+ * you develop in, NOT the packaged /Applications/Den.app (editing that is
+ * useless). Checks, in order: $DEN_REPO, the path we remembered from a previous
+ * run, the usual location, and the current working dir. The **first time** it's
+ * found (e.g. during `npm run dev`, whose cwd is the repo) the path is persisted
+ * to the settings store — which the packaged app shares (`~/.den/den.db`) — so
+ * from then on the "edit den" button reliably lands in the repo even though the
+ * app itself runs from the bundle. Returns null only if it's never been located.
  */
 export function denRepo(): string | null {
   const candidates = [
     process.env.DEN_REPO,
+    store.getSetting(DEN_REPO_SETTING),
     join(HOME, "Documents", "projects", "den"),
     process.cwd(),
   ].filter(Boolean) as string[];
   for (const c of candidates) {
     const r = resolve(c);
-    if (
-      within(r) &&
-      existsSync(join(r, "server", "app.ts")) &&
-      existsSync(join(r, "package.json"))
-    ) {
+    if (looksLikeDenRepo(r)) {
+      if (store.getSetting(DEN_REPO_SETTING) !== r) {
+        store.setSetting(DEN_REPO_SETTING, r);
+      }
       return r;
     }
   }
