@@ -436,18 +436,6 @@ export function App() {
   // editor at a time) + a locked, descriptive title.
   const DEN_TICKET = "den:self-edit";
 
-  const denNotesSeed = (root: string) =>
-    `# Editing den — handover\n\n` +
-    `You're working on **den itself** — the source of the very app this session ` +
-    `is running inside.\nRepo: \`${root}\`\n\n` +
-    `## Orient\n` +
-    `- Read \`CLAUDE.md\` first: architecture, features, conventions, gotchas.\n` +
-    `- Dev loop: \`npm run dev\` (needs the Node ABI — \`npm run rebuild:node\`).\n` +
-    `- **Do NOT repackage/reinstall the app** (\`npm run pack\`) unless andria ` +
-    `explicitly asks.\n` +
-    `- Verify with an isolated server + screenshots (see CLAUDE.md).\n\n` +
-    `## Progress\n_(Claude keeps timestamped notes below as it works.)_\n`;
-
   const denPrompt =
     `You're now working on **den itself** — the source of the very app this ` +
     `session is running inside (this is its repo). First read ./CLAUDE.md to get ` +
@@ -472,7 +460,9 @@ export function App() {
       cwd: denRoot,
       ticket: DEN_TICKET,
       name: "🦊 edit den",
-      notepadSeed: denNotesSeed(denRoot),
+      // Start with an empty progress note (default "# Progress"), not the
+      // handover doc — the handover lives in the initial prompt so we never
+      // risk editing it with unrelated progress entries.
       initialPrompt: denPrompt,
     });
   };
