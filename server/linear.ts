@@ -55,15 +55,32 @@ export function clearKey() {
 
 // --- GraphQL ----------------------------------------------------------------
 
-async function graphql<T>(query: string, key: string): Promise<T> {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: key, // Linear personal keys: raw key, no "Bearer" prefix
-    },
-    body: JSON.stringify({ query }),
-  });
+async function graphql<T>(
+  query: string,
+  key: string,
+  variables?: Record<string, unknown>,
+): Promise<T> {
+  // Bound the request so a hung Linear API can't leave the route pending forever
+  // (git/gh calls all set timeouts; fetch has none by default).
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: key, // Linear personal keys: raw key, no "Bearer" prefix
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: ac.signal,
+    });
+  } catch (err) {
+    if (ac.signal.aborted) throw new Error("linear_timeout", { cause: err });
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401 || res.status === 403) throw new Error("unauthorized");
   if (!res.ok) throw new Error(`linear_http_${res.status}`);
   const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
@@ -191,8 +208,8 @@ export async function getIssueComments(
   const data = await graphql<{
     issues: { nodes: { comments: { nodes: RawComment[] } }[] };
   }>(
-    `query {
-      issues(filter: { number: { eq: ${number} }, team: { key: { eq: "${teamKey}" } } }, first: 1) {
+    `query issueComments($number: Float!, $teamKey: String!) {
+      issues(filter: { number: { eq: $number }, team: { key: { eq: $teamKey } } }, first: 1) {
         nodes {
           comments(first: 100) {
             nodes { body createdAt user { name displayName } botActor { name } }
@@ -201,6 +218,7 @@ export async function getIssueComments(
       }
     }`,
     key,
+    { number, teamKey },
   );
 
   const node = data.issues.nodes[0];

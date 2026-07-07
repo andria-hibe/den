@@ -58,15 +58,38 @@ async function boot() {
     minHeight: 540,
     backgroundColor: "#fdf6fb",
     title: "den",
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
 
   win.loadURL(server.url);
 
+  const serverOrigin = new URL(server.url).origin;
+
+  // Only http(s) links may reach the OS (PR/issue URLs). A crafted mailto:/file:/
+  // custom-scheme URL arriving from remote data shouldn't be handed to the shell.
+  const openExternalIfSafe = (url: string) => {
+    try {
+      if (["https:", "http:"].includes(new URL(url).protocol)) {
+        shell.openExternal(url);
+      }
+    } catch {
+      // not a valid URL — ignore
+    }
+  };
+
   // PR cards etc. use target=_blank — send those to the real browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalIfSafe(url);
     return { action: "deny" };
+  });
+
+  // Pin the window to the local app origin: never let in-page navigation carry
+  // the renderer off to an arbitrary site (open those externally instead).
+  win.webContents.on("will-navigate", (e, url) => {
+    if (new URL(url).origin !== serverOrigin) {
+      e.preventDefault();
+      openExternalIfSafe(url);
+    }
   });
 
   // Smoke test: verify boot end-to-end then quit (used in CI/verification).

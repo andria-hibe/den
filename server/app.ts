@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import type { AddressInfo } from "node:net";
-import { sessions } from "./sessions.ts";
+import { sessions, isValidGroupId } from "./sessions.ts";
 import {
   getMyPullRequests,
   getPrDetail,
@@ -25,6 +25,8 @@ import {
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
 import { prepareWork, checkoutPr, type WorkEnv } from "./git.ts";
+import { isLocalRequest } from "./security.ts";
+import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 export interface StartOptions {
@@ -49,6 +51,15 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   const app = Fastify({ logger: false });
   await app.register(websocket);
+
+  // Reject cross-origin / rebound requests before any handler runs. This covers
+  // both REST routes and the terminal WebSocket upgrade (a GET that hits this
+  // hook first), so a page you're browsing can't reach the local control plane.
+  app.addHook("onRequest", async (req, reply) => {
+    if (!isLocalRequest(req.headers)) {
+      reply.code(403).send({ error: "forbidden" });
+    }
+  });
 
   app.get("/api/health", async () => ({ ok: true, home: os.homedir() }));
 
@@ -135,8 +146,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         const { cwd } = prepareWork(roots().runn, body.branch, body.env);
         body.cwd = cwd;
       } catch (err) {
+        logWarn("prepareWork", err);
         reply.code(500);
-        return { error: "git_failed", message: (err as Error).message };
+        return { error: "git_failed", message: "Could not prepare the branch." };
       }
     }
     // PR review / edit: check out the PR so Claude has the code.
@@ -147,8 +159,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         );
         body.cwd = cwd;
       } catch (err) {
+        logWarn("checkoutPr", err);
         reply.code(500);
-        return { error: "git_failed", message: (err as Error).message };
+        return { error: "git_failed", message: "Could not check out the PR." };
       }
     }
     if (body.cwd && !isDir(body.cwd)) {
@@ -221,13 +234,21 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- Workspace progress notepad ---
-  app.get("/api/notepad/:groupId", async (req) => {
+  app.get("/api/notepad/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
+    if (!isValidGroupId(groupId)) {
+      reply.code(400);
+      return { error: "bad_group_id" };
+    }
     return { content: sessions.readNotepad(groupId) };
   });
 
-  app.put("/api/notepad/:groupId", async (req) => {
+  app.put("/api/notepad/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
+    if (!isValidGroupId(groupId)) {
+      reply.code(400);
+      return { error: "bad_group_id" };
+    }
     const { content } = (req.body ?? {}) as { content?: string };
     sessions.writeNotepad(groupId, content ?? "");
     return { ok: true };
@@ -246,8 +267,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       prCache = { at: Date.now(), data };
       return data;
     } catch (err) {
+      logWarn("github", err);
       reply.code(502);
-      return { error: "gh_failed", message: (err as Error).message };
+      return { error: "gh_failed", message: "GitHub request failed." };
     }
   });
 
@@ -261,8 +283,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     try {
       return await getPrDetail(repo, Number(number));
     } catch (err) {
+      logWarn("github", err);
       reply.code(502);
-      return { error: "gh_failed", message: (err as Error).message };
+      return { error: "gh_failed", message: "GitHub request failed." };
     }
   });
 
@@ -276,8 +299,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     try {
       return { diff: await getPrDiff(repo, Number(number)) };
     } catch (err) {
+      logWarn("github", err);
       reply.code(502);
-      return { error: "gh_failed", message: (err as Error).message };
+      return { error: "gh_failed", message: "GitHub request failed." };
     }
   });
 
@@ -294,8 +318,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     try {
       return { review: await reviewPr(repo, number) };
     } catch (err) {
+      logWarn("github.review", err);
       reply.code(502);
-      return { error: "review_failed", message: (err as Error).message };
+      return { error: "review_failed", message: "Claude review failed." };
     }
   });
 
@@ -312,8 +337,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     try {
       return { summaries: await summarizePrDiff(repo, number) };
     } catch (err) {
+      logWarn("github.diffSummary", err);
       reply.code(502);
-      return { error: "summary_failed", message: (err as Error).message };
+      return { error: "summary_failed", message: "Diff summary failed." };
     }
   });
 

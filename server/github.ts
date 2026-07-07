@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { logWarn } from "./log.ts";
 
 const exec = promisify(execFile);
 
@@ -86,7 +87,7 @@ const FAIL_CONCLUSIONS = new Set([
 ]);
 const NEUTRAL_CONCLUSIONS = new Set(["SKIPPED", "NEUTRAL", "CANCELLED"]);
 
-function summarizeChecks(rollup: RollupItem[]): {
+export function summarizeChecks(rollup: RollupItem[]): {
   state: CheckState;
   counts: PullRequest["checkCounts"];
 } {
@@ -118,7 +119,7 @@ function summarizeChecks(rollup: RollupItem[]): {
   return { state, counts: { passed, failed, pending, total } };
 }
 
-function reviewFrom(decision: string | null): ReviewState {
+export function reviewFrom(decision: string | null): ReviewState {
   switch (decision) {
     case "APPROVED":
       return "approved";
@@ -132,7 +133,7 @@ function reviewFrom(decision: string | null): ReviewState {
 }
 
 // Branch names look like "jordan-fast-5979-stretch-..." — pull the "fast-NNNN".
-function parseTicketHint(branch?: string): string | undefined {
+export function parseTicketHint(branch?: string): string | undefined {
   if (!branch) return undefined;
   const m = branch.match(/([a-z]+-\d+)/i);
   return m?.[1];
@@ -161,8 +162,9 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
     branch = j.headRefName;
     checks = summarizeChecks(j.statusCheckRollup ?? []);
     review = reviewFrom(j.reviewDecision ?? null);
-  } catch {
+  } catch (err) {
     // Enrichment is best-effort; fall back to the search-level data.
+    logWarn(`github.enrich pr#${row.number}`, err);
   }
   return {
     number: row.number,
@@ -199,6 +201,40 @@ async function mapLimit<T, R>(
   return results;
 }
 
+/**
+ * Does one of *your own* PRs need your action? Only when you have to act: a
+ * colleague requested changes, or CI is failing (drafts included — failing
+ * checks on your WIP are still yours to fix). A PR's own CI status is your
+ * problem here, unlike the review-requested bucket below.
+ */
+export function authoredAttention(p: Pick<PullRequest, "review" | "checks">): {
+  needsAttention: boolean;
+  attentionReason?: string;
+} {
+  const reasons: string[] = [];
+  if (p.review === "changes_requested") reasons.push("changes requested");
+  if (p.checks === "failing") reasons.push("checks failing");
+  return reasons.length
+    ? { needsAttention: true, attentionReason: reasons.join(" · ") }
+    : { needsAttention: false };
+}
+
+/**
+ * Does a PR you were *asked to review* need your action? Yes whenever you owe a
+ * review — a first review or a re-review (GitHub re-adds you either way). Its own
+ * CI is irrelevant to you. But once the PR is already approved you no longer owe
+ * anything, and drafts aren't ready for review — neither flags.
+ */
+export function reviewAttention(p: Pick<PullRequest, "isDraft" | "review">): {
+  needsAttention: boolean;
+  attentionReason?: string;
+} {
+  const needs = !p.isDraft && p.review !== "approved";
+  return needs
+    ? { needsAttention: true, attentionReason: "your review is requested" }
+    : { needsAttention: false };
+}
+
 export async function getMyPullRequests(): Promise<PrBuckets> {
   const [authoredRows, reviewRows] = await Promise.all([
     search("--author=@me"),
@@ -208,26 +244,12 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
     mapLimit(authoredRows, 6, enrich),
     mapLimit(reviewRows, 6, enrich),
   ]);
-  // Your own PRs need attention when *you* have to act: failing CI or a
-  // colleague requested changes. Drafts count too — failing checks on your own
-  // WIP are still yours to fix, and you want to see that before marking ready.
   authored.forEach((p) => {
     p.isMine = true;
-    const reasons: string[] = [];
-    if (p.review === "changes_requested") reasons.push("changes requested");
-    if (p.checks === "failing") reasons.push("checks failing");
-    p.needsAttention = reasons.length > 0;
-    p.attentionReason = p.needsAttention ? reasons.join(" · ") : undefined;
+    Object.assign(p, authoredAttention(p));
   });
-  // A review-requested PR needs attention simply because you owe a review —
-  // whether it's a first review or a re-review after they addressed your notes
-  // (GitHub re-adds you as a requested reviewer, so it lands in this bucket
-  // either way). Its own CI status is irrelevant to you. But once the PR is
-  // already approved (its overall reviewDecision), you no longer owe a review —
-  // drop the urgent styling even if you're still nominally a requested reviewer.
   reviewRequested.forEach((p) => {
-    p.needsAttention = !p.isDraft && p.review !== "approved";
-    p.attentionReason = p.needsAttention ? "your review is requested" : undefined;
+    Object.assign(p, reviewAttention(p));
   });
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
 }
@@ -327,7 +349,8 @@ async function getReviewComments(
         diffHunk: c.diff_hunk,
         at: c.created_at,
       }));
-  } catch {
+  } catch (err) {
+    logWarn(`github.reviewComments pr#${number}`, err);
     return [];
   }
 }
@@ -340,11 +363,15 @@ let cachedLogin: string | null = null;
 async function viewerLogin(): Promise<string> {
   if (cachedLogin) return cachedLogin;
   try {
-    cachedLogin = (await gh(["api", "user", "--jq", ".login"])).trim();
-  } catch {
-    cachedLogin = "";
+    // Only cache a real login — a transient gh failure must not poison the cache
+    // with "" for the whole process lifetime (which would mis-attribute "my PRs").
+    const login = (await gh(["api", "user", "--jq", ".login"])).trim();
+    if (login) cachedLogin = login;
+    return login;
+  } catch (err) {
+    logWarn("github.viewerLogin", err);
+    return "";
   }
-  return cachedLogin;
 }
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
@@ -402,7 +429,8 @@ export async function summarizePrDiff(
   try {
     const parsed = JSON.parse(m[0]) as FileSummary[];
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (err) {
+    logWarn("github.summarizePrDiff parse", err);
     return [];
   }
 }

@@ -1,6 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { logWarn } from "./log.ts";
+
+// Branch names flow in from Linear / PR data and are passed as positional args
+// to git. All calls use execFile (no shell), so there's no command injection —
+// but a value starting with "-" could still be misread as a git flag. Restrict
+// to git's safe ref charset and reject a leading dash before using one.
+const BRANCH_RE = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
+export function isValidBranch(branch: string): boolean {
+  return BRANCH_RE.test(branch) && !branch.includes("..");
+}
+function assertValidBranch(branch: string): void {
+  if (!isValidBranch(branch)) throw new Error("invalid_branch");
+}
 
 function git(cwd: string, args: string[], timeout = 20000): string {
   return execFileSync("git", ["-C", cwd, ...args], {
@@ -53,6 +66,9 @@ function baseRef(repo: string): string {
       // try next
     }
   }
+  // No master/main resolved — branching off HEAD may not be what the user wants
+  // (e.g. a detached/unexpected checkout), so make the fallback visible.
+  logWarn("git.baseRef", `no master/main in ${repo}; falling back to HEAD`);
   return "HEAD";
 }
 
@@ -70,6 +86,7 @@ export function prepareWork(
   branch: string,
   env: WorkEnv,
 ): { cwd: string } {
+  assertValidBranch(branch);
   // If the branch already lives in a worktree (e.g. Claude Code's own), reuse it
   // rather than creating a duplicate or erroring that it's already checked out.
   const existingWt = worktreeForBranch(repo, branch);

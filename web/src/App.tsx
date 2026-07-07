@@ -331,7 +331,7 @@ export function App() {
       const cols = columns();
       if (!cols.length) return;
 
-      let cur =
+      const cur =
         active && active.matches?.(NAV_SEL)
           ? active
           : navRef.current && document.contains(navRef.current)

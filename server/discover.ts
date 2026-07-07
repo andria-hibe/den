@@ -55,6 +55,17 @@ const HEADLESS_PROMPTS = [
 // den's self-edit session opens with a long handover prompt; give it a clean name.
 const DEN_SELF_EDIT = "working on **den itself**";
 
+/** Collapse whitespace, strip leading markdown/emoji noise, cap at 80 chars. */
+export function tidyTitle(base: string): string {
+  return (
+    base
+      .replace(/\s+/g, " ")
+      .replace(/^[\s>*#`~\-–—.]+/, "")
+      .trim()
+      .slice(0, 80) || "(untitled session)"
+  );
+}
+
 function parse(fp: string): {
   cwd: string | null;
   title: string;
@@ -99,14 +110,7 @@ function parse(fp: string): {
   // Title: Claude's own summary, else the first real user message, tidied up.
   let base = summary || firstUser || "(untitled session)";
   if (!summary && firstUser?.includes(DEN_SELF_EDIT)) base = "Editing den itself";
-  const title =
-    base
-      .replace(/\s+/g, " ")
-      // drop leading markdown/emoji noise so the first real words show
-      .replace(/^[\s>*#`~\-–—.]+/, "")
-      .trim()
-      .slice(0, 80) || "(untitled session)";
-  return { cwd, title, skip: headless || empty };
+  return { cwd, title: tidyTitle(base), skip: headless || empty };
 }
 
 export function listPastSessions(limit = 40): PastSession[] {

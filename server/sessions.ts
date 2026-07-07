@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
+import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
@@ -33,8 +34,17 @@ const SCROLLBACK_CAP = 256 * 1024; // bytes of raw terminal output kept per sess
 // Per-workspace progress notepads live here (outside the project so we never
 // pollute a repo). The main Claude is granted write access to this dir.
 const PROGRESS_DIR = join(os.homedir(), ".den", "progress");
-export const notepadPath = (groupId: string) =>
-  join(PROGRESS_DIR, `${groupId}.md`);
+
+// groupIds are randomUUIDs. Validate before building a path so a crafted id
+// (e.g. "../../etc/foo") can't escape PROGRESS_DIR into arbitrary file read/write.
+const GROUP_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+export function isValidGroupId(groupId: string): boolean {
+  return GROUP_ID_RE.test(groupId);
+}
+export const notepadPath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(PROGRESS_DIR, `${groupId}.md`);
+};
 
 /** Metadata shape sent to the web app. */
 export interface SessionMeta {
@@ -114,13 +124,25 @@ class DenSession {
     const loginShell = process.env.SHELL ?? "/bin/zsh";
     const file = this.shell ? loginShell : CLAUDE_BIN;
     const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
-    const term = pty.spawn(file, args, {
-      name: "xterm-color",
-      cols: 80,
-      rows: 24,
-      cwd: this.cwd || os.homedir(),
-      env: { ...process.env, TERM: "xterm-256color" },
-    });
+    let term: pty.IPty;
+    try {
+      term = pty.spawn(file, args, {
+        name: "xterm-color",
+        cols: 80,
+        rows: 24,
+        cwd: this.cwd || os.homedir(),
+        env: { ...process.env, TERM: "xterm-256color" },
+      });
+    } catch (err) {
+      // Missing binary (e.g. `claude`/shell not on PATH) or a bad cwd: don't let
+      // it crash the create-session request — surface the pane as exited so the
+      // UI can show it failed instead of the whole server falling over.
+      logWarn(`pty.spawn ${file}`, err);
+      this.status = "exited";
+      this.term = null;
+      this.emit({ type: "exit", code: null });
+      return;
+    }
     this.term = term;
     this.status = "running";
     term.onData((data) => this.push(data));
