@@ -1,9 +1,21 @@
 // Renders a unified diff (from `gh pr diff`) grouped per file, with a left
 // column of Claude's per-file summaries aligned to each file's block so you can
 // scan the changes at a glance.
+import { ToClaude } from "./ToClaude.tsx";
+
 interface FileBlock {
   file: string | null;
   lines: string[];
+}
+
+/** Prompt Claude receives when asked for a targeted review of one file's diff. */
+function fileReviewPrompt(file: string, prNumber: number | undefined, lines: string[]): string {
+  const where = prNumber ? ` from PR #${prNumber}` : "";
+  return (
+    `Please give me a targeted review of the changes to \`${file}\`${where}. ` +
+    `Call out bugs, edge cases, and anything risky.\n\n` +
+    `\`\`\`diff\n${lines.join("\n")}\n\`\`\``
+  );
 }
 
 export function classify(line: string): string {
@@ -67,10 +79,16 @@ export function DiffView({
   diff,
   summaries,
   loadingSummaries,
+  sessionId,
+  prNumber,
 }: {
   diff: string;
   summaries?: Record<string, string>;
   loadingSummaries?: boolean;
+  // When present, each file block gets a "→ Claude" button that pastes just
+  // that file's diff into the session for a targeted review.
+  sessionId?: string;
+  prNumber?: number;
 }) {
   if (!diff.trim()) return <div className="placeholder">No diff.</div>;
   const blocks = parseFiles(diff);
@@ -92,6 +110,15 @@ export function DiffView({
                   ? "summarising…"
                   : ""}
             </div>
+            {sessionId && b.file && (
+              <ToClaude
+                sessionId={sessionId}
+                text={fileReviewPrompt(b.file, prNumber, b.lines)}
+                label="→ review"
+                title="Paste this file's diff into Claude for a targeted review"
+                className="diff-sum-review"
+              />
+            )}
           </div>
           <div className="diff-lines-col">
             {b.lines.map((line, i) => (

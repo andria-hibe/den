@@ -972,6 +972,7 @@ export function App() {
             key={active.id}
             repo={active.prRepo}
             number={active.pr}
+            sessionId={active.id}
             autoReview={autoReviewPr === active.pr}
             header={renderHeader(active)}
             terminal={

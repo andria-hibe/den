@@ -3,6 +3,7 @@ import { DiffView, DiffHunk } from "./DiffView.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
 import { Fox } from "./Fox.tsx";
+import { ToClaude } from "./ToClaude.tsx";
 
 interface PrNote {
   author: string;
@@ -39,32 +40,6 @@ function usePrDetail(repo: string, number: number) {
 function Md({ text }: { text: string }) {
   return (
     <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
-  );
-}
-
-/** Button that pastes a framed instruction into the session's Claude prompt. */
-function ToClaude({ sessionId, text }: { sessionId: string; text: string }) {
-  const [sent, setSent] = useState(false);
-  const send = () => {
-    fetch(`/api/sessions/${sessionId}/paste`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    })
-      .then(() => {
-        setSent(true);
-        setTimeout(() => setSent(false), 2000);
-      })
-      .catch(() => {});
-  };
-  return (
-    <button
-      className="btn to-claude"
-      onClick={send}
-      title="Paste this into Claude to action it"
-    >
-      {sent ? "✓ sent to Claude" : "→ Claude"}
-    </button>
   );
 }
 
@@ -190,12 +165,14 @@ function InlineComments({
 export function PrReviewView({
   repo,
   number,
+  sessionId,
   autoReview,
   header,
   terminal,
 }: {
   repo: string;
   number: number;
+  sessionId: string;
   autoReview: boolean;
   header: ReactNode;
   terminal: ReactNode;
@@ -266,6 +243,8 @@ export function PrReviewView({
           diff={diff}
           summaries={summaries}
           loadingSummaries={loadingSummaries}
+          sessionId={sessionId}
+          prNumber={number}
         />
       </div>
       <Splitter

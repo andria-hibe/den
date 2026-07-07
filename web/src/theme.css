@@ -1325,6 +1325,10 @@ body {
   line-height: 1.5;
   color: #d9cfe0;
 }
+.diff-sum-review {
+  margin-left: 0;
+  margin-top: 8px;
+}
 .diff-lines-col {
   min-width: 0;
   overflow-x: auto;
