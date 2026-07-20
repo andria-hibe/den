@@ -5,6 +5,7 @@ release/
 .DS_Store
 den.db
 den.db-*
+.claude/settings.local.json
 build/app-shot*.png
 build/pixel-preview.png
 

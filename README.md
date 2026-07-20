@@ -87,6 +87,32 @@ personal API key in the work panel).
   path inputs, and never stores or logs your API keys in the repo (the Linear
   key lives only in `~/.den/den.db`, which is gitignored).
 
+## Security
+
+**den runs commands on your machine as you.** It spawns real shells and Claude
+Code / `git` / `gh` processes with your privileges — that's the whole point, but
+it also means the local server is as trusted as your terminal. Treat it that way:
+
+- **Keep it on loopback.** The server binds `127.0.0.1` and, in the app, an
+  ephemeral port. An `onRequest` guard (`server/security.ts`) rejects any request
+  whose `Host` isn't loopback (blocks DNS-rebinding) or whose `Origin`, when
+  present, isn't loopback (blocks cross-site WebSocket/fetch hijacking) — for REST
+  **and** the terminal WebSocket. **Don't** put it behind a tunnel or bind it to
+  `0.0.0.0`; anyone who can reach the port can run commands as you.
+- **Input hardening.** Shell-outs use `execFile`/`spawn` with argument arrays
+  (never a shell string); branch names are validated (a leading `-` can't become
+  a flag); file browsing is realpath-sandboxed to `$HOME`; the notepad id is
+  checked against path traversal.
+- **Secrets.** Your Linear API key lives only in `~/.den/den.db` (gitignored) or
+  `$LINEAR_API_KEY` — it's never returned to the client or logged, and errors are
+  sanitized before they reach the UI.
+- **Electron.** The renderer runs with `sandbox`, `contextIsolation`, and no Node
+  integration; navigation is pinned to the app origin and only `http(s)` links
+  reach the OS.
+
+Found something? Please open an issue (or email the maintainer) rather than a
+public PoC.
+
 ## Develop
 
 ```bash
@@ -97,6 +123,10 @@ Tests cover the pure, rule-heavy logic (the loopback guard, PR attention rules,
 branch validation, the path sandbox, the fox pose). Architecture, conventions,
 and the hard-won gotchas are documented for contributors in
 [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE) © Andria Hibe
 
 ---
 

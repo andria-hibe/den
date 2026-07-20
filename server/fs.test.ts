@@ -1,8 +1,8 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { symlinkSync, rmSync } from "node:fs";
-import { within } from "./fs.ts";
+import { symlinkSync, rmSync, mkdirSync } from "node:fs";
+import { within, soleGitRepo } from "./fs.ts";
 
 const HOME = homedir();
 
@@ -35,5 +35,40 @@ describe("within (home sandbox)", () => {
       // realpath resolution must catch that its target is not.
       expect(within(link)).toBe(false);
     });
+  });
+});
+
+describe("soleGitRepo (work-dir auto-detect)", () => {
+  const base = join(HOME, `.den-worktest-${process.pid}`);
+  const mk = (...parts: string[]) => {
+    const p = join(base, ...parts);
+    mkdirSync(p, { recursive: true });
+    return p;
+  };
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it("returns null when the dir doesn't exist", () => {
+    expect(soleGitRepo(join(base, "nope"))).toBe(null);
+  });
+
+  it("returns null when there are no git repos", () => {
+    const dir = mk("empty");
+    mkdirSync(join(dir, "plain-folder"), { recursive: true });
+    expect(soleGitRepo(dir)).toBe(null);
+  });
+
+  it("returns the sole repo when exactly one child has .git", () => {
+    const dir = mk("one");
+    const repo = join(dir, "myrepo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    mkdirSync(join(dir, "not-a-repo"), { recursive: true });
+    expect(soleGitRepo(dir)).toBe(repo);
+  });
+
+  it("returns null when more than one child is a repo (ambiguous)", () => {
+    const dir = mk("many");
+    mkdirSync(join(dir, "a", ".git"), { recursive: true });
+    mkdirSync(join(dir, "b", ".git"), { recursive: true });
+    expect(soleGitRepo(dir)).toBe(null);
   });
 });

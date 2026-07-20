@@ -58,7 +58,7 @@ export function PrDialog({
                 <div className="choose-emoji">💻</div>
                 <div className="choose-text">
                   <div className="choose-title">Default local</div>
-                  <div className="choose-sub">check out in your runn folder</div>
+                  <div className="choose-sub">check out in your work repo</div>
                 </div>
               </button>
             </div>

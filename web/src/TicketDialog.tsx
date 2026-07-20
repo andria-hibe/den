@@ -89,7 +89,7 @@ export function TicketDialog({
                 <div className="choose-text">
                   <div className="choose-title">Default local</div>
                   <div className="choose-sub">
-                    check out the branch in your runn folder
+                    check out the branch in your work repo
                   </div>
                 </div>
               </button>

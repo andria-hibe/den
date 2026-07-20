@@ -126,6 +126,9 @@ export function checkoutPr(
   env: WorkEnv,
   branch?: string,
 ): { cwd: string } {
+  // A non-integer PR number would flow into the worktree path (`pr-${number}`)
+  // and the `gh` positional — reject it before either.
+  if (!Number.isInteger(number) || number <= 0) throw new Error("invalid_pr");
   // Reuse an existing worktree for the PR's branch if there is one.
   if (branch) {
     const existingWt = worktreeForBranch(repoDir, branch);

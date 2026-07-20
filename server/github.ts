@@ -4,6 +4,17 @@ import { logWarn } from "./log.ts";
 
 const exec = promisify(execFile);
 
+/**
+ * True if `repo` is a well-formed GitHub "owner/name" slug. Client-supplied repo
+ * values flow into `gh --repo <repo>`; constraining them to GitHub's identifier
+ * charset keeps anything odd from reaching the authenticated CLI. (It sits in a
+ * value position, so it isn't flag-injectable — this is defence in depth.)
+ */
+export function isValidRepo(repo: string): boolean {
+  // First char isn't a dash, so the whole value can never be read as a flag.
+  return /^[A-Za-z0-9._][A-Za-z0-9._-]*\/[A-Za-z0-9._-]+$/.test(repo);
+}
+
 // --- Types exposed to the web app -------------------------------------------
 
 export type CheckState = "passing" | "failing" | "pending" | "none";
@@ -17,7 +28,7 @@ export interface PullRequest {
   number: number;
   title: string;
   url: string;
-  repo: string; // nameWithOwner, e.g. "Runn-Fast/runn"
+  repo: string; // nameWithOwner, e.g. "owner/repo"
   branch?: string; // headRefName
   isDraft: boolean;
   updatedAt: string;

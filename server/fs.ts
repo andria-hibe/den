@@ -44,6 +44,47 @@ export function within(p: string): boolean {
   }
 }
 
+// The primary work repo that "Work" sessions and PR/ticket checkouts default
+// into. It has to be an actual git repo (prepareWork/checkoutPr run git in it),
+// so it's a single configurable directory rather than a fixed path.
+const WORK_DIR_SETTING = "work_dir";
+
+/** If exactly one direct child of `dir` is a git repo, return its path. */
+export function soleGitRepo(dir: string): string | null {
+  const repos: string[] = [];
+  try {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      try {
+        if (statSync(p).isDirectory() && existsSync(join(p, ".git"))) repos.push(p);
+      } catch {
+        // unreadable entry — skip
+      }
+    }
+  } catch {
+    return null; // dir missing / unreadable
+  }
+  return repos.length === 1 ? repos[0] : null;
+}
+
+/**
+ * The primary work repo, resolved in order:
+ *   1. $DEN_WORK_DIR
+ *   2. the stored `work_dir` setting
+ *   3. auto-detect the sole git repo directly under ~/Documents/work
+ *   4. ~/Documents/work itself
+ * The result is always re-checked against the HOME sandbox before use.
+ */
+export function workDir(): string {
+  const work = join(HOME, "Documents", "work");
+  for (const c of [process.env.DEN_WORK_DIR, store.getSetting(WORK_DIR_SETTING)]) {
+    if (!c) continue;
+    const abs = c.startsWith("~") ? join(HOME, c.slice(1)) : resolve(c);
+    if (within(abs) && existsSync(abs)) return abs;
+  }
+  return soleGitRepo(work) ?? work;
+}
+
 /** Well-known starting points offered in the New Session dialog. */
 export function roots() {
   const documents = join(HOME, "Documents");
@@ -51,7 +92,7 @@ export function roots() {
     home: HOME,
     documents,
     work: join(documents, "work"),
-    runn: join(documents, "work", "runn"),
+    workRepo: workDir(),
     projects: join(documents, "projects"),
     den: denRepo(),
   };

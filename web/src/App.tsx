@@ -85,14 +85,14 @@ export function App() {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   // Collapse the colour picker whenever we switch sessions.
   useEffect(() => setColorPickerOpen(false), [activeId]);
-  const [runnRoot, setRunnRoot] = useState<string>("");
+  const [workRepoRoot, setWorkRepoRoot] = useState<string>("");
   const [denRoot, setDenRoot] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/fs/roots")
       .then((r) => r.json())
       .then((d) => {
-        setRunnRoot(d.runn ?? "");
+        setWorkRepoRoot(d.workRepo ?? "");
         setDenRoot(d.den ?? "");
       })
       .catch(() => {});
@@ -405,7 +405,7 @@ export function App() {
       return;
     }
     addSession({
-      cwd: runnRoot || undefined,
+      cwd: workRepoRoot || undefined,
       ticket: issue.identifier,
       look: true,
       // Ticket id is shown by the chip, so keep the title to just the summary.

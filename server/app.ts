@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
-import os from "node:os";
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId } from "./sessions.ts";
 import {
@@ -11,6 +10,7 @@ import {
   getPrDiff,
   reviewPr,
   summarizePrDiff,
+  isValidRepo,
   type PrBuckets,
 } from "./github.ts";
 import {
@@ -28,6 +28,26 @@ import { prepareWork, checkoutPr, type WorkEnv } from "./git.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
+
+/** A positive-integer PR number, coerced from untrusted query/body input. */
+export function prNumber(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Strip control bytes from text pasted into a PTY. Pasted content is
+ * attacker-controllable (PR/ticket comments reach it via "→ Claude"), so it must
+ * not carry terminal escape sequences — in particular an embedded `\x1b[201~`
+ * that would end bracketed paste early and inject live input, or OSC sequences
+ * that spoof the title / touch the clipboard. Tab and newline are kept.
+ */
+export function sanitizePaste(text: string): string {
+  // Drop ESC (0x1B), CR (0x0D), and the other C0 controls + DEL, leaving only
+  // \t (09) and \n (0A). Stripping CR too means a raw carriage return can't
+  // submit input in a pane that isn't honouring bracketed paste (e.g. a shell).
+  return text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+}
 
 export interface StartOptions {
   /** Port to bind. 0 = ephemeral (recommended for the desktop app). */
@@ -61,7 +81,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  app.get("/api/health", async () => ({ ok: true, home: os.homedir() }));
+  app.get("/api/health", async () => ({ ok: true }));
 
   // --- Filesystem browsing (New Session dialog) ---
   app.get("/api/fs/roots", async () => roots());
@@ -143,7 +163,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // "Work on it": set up the branch/worktree first, then open there.
     if (body.branch && body.env) {
       try {
-        const { cwd } = prepareWork(roots().runn, body.branch, body.env);
+        const { cwd } = prepareWork(roots().workRepo, body.branch, body.env);
         body.cwd = cwd;
       } catch (err) {
         logWarn("prepareWork", err);
@@ -153,9 +173,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // PR review / edit: check out the PR so Claude has the code.
     if (body.pr && body.prRepo && body.env) {
+      const pr = prNumber(body.pr);
+      if (pr === null || !isValidRepo(body.prRepo)) {
+        reply.code(400);
+        return { error: "bad_pr" };
+      }
       try {
         const { cwd } = checkoutPr(
-          roots().runn, body.prRepo, body.pr, body.env, body.branch,
+          roots().workRepo, body.prRepo, pr, body.env, body.branch,
         );
         body.cwd = cwd;
       } catch (err) {
@@ -226,7 +251,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "text_required" };
     }
-    session.write(`\x1b[200~${text}\x1b[201~`);
+    session.write(`\x1b[200~${sanitizePaste(text)}\x1b[201~`);
     return { ok: true };
   });
 
@@ -287,12 +312,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Single-PR detail (description + colleagues' reviews/comments).
   app.get("/api/github/pr", async (req, reply) => {
     const { repo, number } = req.query as { repo?: string; number?: string };
-    if (!repo || !number) {
+    const n = prNumber(number);
+    if (!repo || !isValidRepo(repo) || n === null) {
       reply.code(400);
       return { error: "repo_and_number_required" };
     }
     try {
-      return await getPrDetail(repo, Number(number));
+      return await getPrDetail(repo, n);
     } catch (err) {
       logWarn("github", err);
       reply.code(502);
@@ -303,12 +329,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Raw unified diff for a PR.
   app.get("/api/github/pr/diff", async (req, reply) => {
     const { repo, number } = req.query as { repo?: string; number?: string };
-    if (!repo || !number) {
+    const n = prNumber(number);
+    if (!repo || !isValidRepo(repo) || n === null) {
       reply.code(400);
       return { error: "repo_and_number_required" };
     }
     try {
-      return { diff: await getPrDiff(repo, Number(number)) };
+      return { diff: await getPrDiff(repo, n) };
     } catch (err) {
       logWarn("github", err);
       reply.code(502);
@@ -322,12 +349,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       repo?: string;
       number?: number;
     };
-    if (!repo || !number) {
+    const n = prNumber(number);
+    if (!repo || !isValidRepo(repo) || n === null) {
       reply.code(400);
       return { error: "repo_and_number_required" };
     }
     try {
-      return { review: await reviewPr(repo, number) };
+      return { review: await reviewPr(repo, n) };
     } catch (err) {
       logWarn("github.review", err);
       reply.code(502);
@@ -341,12 +369,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       repo?: string;
       number?: number;
     };
-    if (!repo || !number) {
+    const n = prNumber(number);
+    if (!repo || !isValidRepo(repo) || n === null) {
       reply.code(400);
       return { error: "repo_and_number_required" };
     }
     try {
-      return { summaries: await summarizePrDiff(repo, number) };
+      return { summaries: await summarizePrDiff(repo, n) };
     } catch (err) {
       logWarn("github.diffSummary", err);
       reply.code(502);

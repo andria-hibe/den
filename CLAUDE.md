@@ -60,7 +60,8 @@ WebSocket; everything else is REST.
   line per file, for the review diff's side column).
 - `server/linear.ts` — Linear GraphQL (`@linear/sdk` not used; raw fetch).
   Assigned issues + `branchName` + `description`. Key in the settings table or
-  `LINEAR_API_KEY`. **Linear = runn only.**
+  `LINEAR_API_KEY`. Scoped to whatever workspace the key belongs to (runn, for
+  the maintainer).
 - `server/git.ts` — `prepareWork` (ticket branch: worktree or local, off a fresh
   `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local), and
   `worktreeForBranch` (reuse an existing worktree instead of erroring).
@@ -70,7 +71,10 @@ WebSocket; everything else is REST.
   (PR diff-summary / review prompts) and empty/aborted sessions (no summary +
   no user prose), and scans past the limit to still fill it after skips.
 - `server/fs.ts` — home-sandboxed directory browsing + `roots()`
-  (documents / work / **runn** / projects).
+  (documents / work / **workRepo** / projects). `workRepo` is the primary git
+  repo that "Work" sessions and PR/ticket checkouts default into, resolved via
+  `$DEN_WORK_DIR` → the `work_dir` setting → the sole git repo under
+  `~/Documents/work` → `~/Documents/work` (see `workDir()`).
 - `web/src/App.tsx` — the whole UI: 3-column flex layout, session rail, center
   (terminal / 3-pane claude workspace / look / PR review / my-PR), work panel,
   all dialogs + handlers. Still the largest file, but the cross-cutting concerns
@@ -240,8 +244,9 @@ back exited, and one click revives it.
   the commit fails with "1Password: failed to fill whole buffer" — retry when
   unlocked, or `--no-gpg-sign` and re-sign later. Commit trailer:
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- **runn workspace** has its own Claude rules/setup — always work inside runn
-  (`~/Documents/work/runn`) or a worktree of it for Linear/PR work.
+- **work repo** = the configurable primary repo (`workDir()`, default: the sole
+  git repo under `~/Documents/work`; the maintainer's is `runn`). It has its own
+  Claude rules/setup — always work inside it or a worktree of it for Linear/PR work.
 
 ### Security posture (server is loopback-only)
 The server can spawn shells and touch files under `$HOME`, so it is treated as a

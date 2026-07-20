@@ -5,6 +5,7 @@ import {
   parseTicketHint,
   authoredAttention,
   reviewAttention,
+  isValidRepo,
 } from "./github.ts";
 
 describe("summarizeChecks", () => {
@@ -85,6 +86,23 @@ describe("authoredAttention (your own PRs)", () => {
     expect(authoredAttention({ review: "approved", checks: "passing" })).toEqual({
       needsAttention: false,
     });
+  });
+});
+
+describe("isValidRepo (owner/name slug)", () => {
+  it("accepts well-formed nameWithOwner slugs", () => {
+    expect(isValidRepo("owner/repo")).toBe(true);
+    expect(isValidRepo("Runn-Fast/runn")).toBe(true);
+    expect(isValidRepo("a.b_c/d.e_f")).toBe(true);
+  });
+  it("rejects malformed or injection-shaped values", () => {
+    expect(isValidRepo("")).toBe(false);
+    expect(isValidRepo("noslash")).toBe(false);
+    expect(isValidRepo("owner/repo/extra")).toBe(false);
+    expect(isValidRepo("-flag/x")).toBe(false); // leading dash can't become a flag
+    expect(isValidRepo("owner /repo")).toBe(false); // spaces can't split into args
+    expect(isValidRepo("owner/repo;rm -rf")).toBe(false);
+    expect(isValidRepo("../../etc/passwd")).toBe(false);
   });
 });
 

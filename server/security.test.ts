@@ -36,9 +36,10 @@ describe("isLocalRequest", () => {
     expect(isLocalRequest({ host: "@@@" })).toBe(false);
   });
 
-  it("tolerates the literal 'null' Origin (sandboxed iframe / file://)", () => {
-    // A "null" origin isn't a cross-site origin we can attribute; the loopback
-    // Host is the real gate, so this should pass rather than hard-fail.
-    expect(isLocalRequest({ host: "127.0.0.1:4321", origin: "null" })).toBe(true);
+  it("rejects the opaque 'null' Origin (sandboxed iframe / data: / srcdoc)", () => {
+    // `Origin: null` is attacker-controllable (a sandboxed iframe can send it),
+    // so it must not be trusted — genuine non-browser clients send no Origin at
+    // all, which is handled by the missing-Origin case above.
+    expect(isLocalRequest({ host: "127.0.0.1:4321", origin: "null" })).toBe(false);
   });
 });

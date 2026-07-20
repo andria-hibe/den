@@ -15,7 +15,10 @@
 // Both are defeated by refusing any request whose Origin or Host isn't loopback.
 // Non-browser clients (curl, the Vite dev proxy, top-level navigations) send no
 // Origin header at all; those are allowed — the browser cross-origin threat only
-// exists when an Origin *is* present and points somewhere else.
+// exists when an Origin *is* present and points somewhere else. The opaque
+// `Origin: null` (sandboxed iframe, data:/srcdoc document, some redirect chains)
+// is attacker-controllable and is NOT trusted — it's treated like any other
+// non-loopback origin.
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
@@ -39,9 +42,10 @@ function originIsLoopback(origin: string): boolean {
 /**
  * True if a request is safe to serve: its Host is a loopback address (blocks DNS
  * rebinding) and, if it carries an Origin, that Origin is also loopback (blocks
- * cross-site WebSocket/fetch hijacking). A missing Origin is fine — that means a
+ * cross-site WebSocket/fetch hijacking). A *missing* Origin is fine — that means a
  * non-browser client or a same-document navigation, neither of which is the
- * cross-origin threat this guards against.
+ * cross-origin threat this guards against. A present-but-non-loopback Origin —
+ * including the opaque `null` origin — is rejected.
  */
 export function isLocalRequest(headers: {
   origin?: string;
@@ -53,7 +57,7 @@ export function isLocalRequest(headers: {
   if (!hostname || !LOOPBACK_HOSTS.has(hostname)) return false;
 
   const origin = headers.origin;
-  if (origin && origin !== "null" && !originIsLoopback(origin)) return false;
+  if (origin && !originIsLoopback(origin)) return false;
 
   return true;
 }

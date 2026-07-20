@@ -5,7 +5,7 @@ interface Roots {
   home: string;
   documents: string;
   work: string;
-  runn: string;
+  workRepo: string;
   projects: string;
 }
 interface Listing {
@@ -78,7 +78,7 @@ export function NewSessionDialog({
     }
     if (!roots) return;
     const start =
-      m === "work" ? roots.runn : m === "personal" ? roots.projects : roots.documents;
+      m === "work" ? roots.workRepo : m === "personal" ? roots.projects : roots.documents;
     navigate(start);
   };
 
@@ -126,7 +126,7 @@ export function NewSessionDialog({
               <div className="choose-emoji">🏢</div>
               <div className="choose-text">
                 <div className="choose-title">Work</div>
-                <div className="choose-sub">runn codebase &amp; work folder</div>
+                <div className="choose-sub">your main repo &amp; work folder</div>
               </div>
             </button>
             <button
@@ -220,14 +220,14 @@ export function NewSessionDialog({
               {listing?.dirs.map((d) => (
                 <button
                   key={d.path}
-                  className={`dir-row ${roots && d.path === roots.runn ? "highlight" : ""}`}
+                  className={`dir-row ${roots && d.path === roots.workRepo ? "highlight" : ""}`}
                   onClick={() => navigate(d.path)}
                   onDoubleClick={() => onCreate(d.path)}
                   title="click to open, double-click to start here"
                 >
                   📁 {d.name}
-                  {roots && d.path === roots.runn && (
-                    <span className="dir-tag">runn</span>
+                  {roots && d.path === roots.workRepo && (
+                    <span className="dir-tag">★ default</span>
                   )}
                 </button>
               ))}
