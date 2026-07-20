@@ -1,7 +1,18 @@
 import { useState, type CSSProperties } from "react";
 import type { LinearIssue } from "../../server/linear.ts";
 import { Fox } from "./Fox.tsx";
+import { usePersistentString } from "./Splitter.tsx";
 import { useWorkData } from "./WorkData.tsx";
+
+// The Linear section splits assigned tickets by their identifier prefix into
+// FAST-* and CYCLE-* tabs (the two teams the maintainer works across). Anything
+// that's neither falls under "other" so no ticket ever goes missing.
+function issueGroup(identifier: string): "fast" | "cycle" | "other" {
+  const prefix = identifier.split("-")[0]?.toUpperCase();
+  if (prefix === "FAST") return "fast";
+  if (prefix === "CYCLE") return "cycle";
+  return "other";
+}
 
 const PRIORITY_CLASS: Record<number, string> = {
   1: "prio-urgent",
@@ -158,6 +169,18 @@ export function LinearSection({
   })();
   const notifs = data?.unreadNotifications ?? 0;
 
+  const [tab, setTab] = usePersistentString("den.linearTab", "fast", [
+    "fast",
+    "cycle",
+  ] as const);
+  const issues = data?.issues ?? [];
+  const fastIssues = issues.filter((i) => issueGroup(i.identifier) === "fast");
+  const cycleIssues = issues.filter((i) => issueGroup(i.identifier) === "cycle");
+  const otherIssues = issues.filter((i) => issueGroup(i.identifier) === "other");
+  // Tickets that are neither FAST nor CYCLE ride along on whichever tab is
+  // active so they never vanish.
+  const shown = tab === "fast" ? [...fastIssues, ...otherIssues] : cycleIssues;
+
   return (
     <div className="pr-section">
       <div className="pr-section-title">
@@ -204,22 +227,42 @@ export function LinearSection({
       )}
       {connected === false && <ConnectForm onConnected={refreshIssues} />}
       {connected && error && <div className="browser-error">⚠️ {error}</div>}
-      {connected &&
-        data &&
-        (data.issues.length === 0 ? (
-          <div className="placeholder" style={{ padding: "4px 6px" }}>
-            no active tickets 🌿
+      {connected && data && (
+        <>
+          <div className="ticket-look-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "fast"}
+              className={`look-tab${tab === "fast" ? " active" : ""}`}
+              onClick={() => setTab("fast")}
+            >
+              FAST{fastIssues.length ? ` (${fastIssues.length})` : ""}
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "cycle"}
+              className={`look-tab${tab === "cycle" ? " active" : ""}`}
+              onClick={() => setTab("cycle")}
+            >
+              CYCLE{cycleIssues.length ? ` (${cycleIssues.length})` : ""}
+            </button>
           </div>
-        ) : (
-          data.issues.map((i) => (
-            <IssueCard
-              key={i.identifier}
-              issue={i}
-              onOpen={onOpenTicket}
-              accent={ticketColor?.(i.identifier, i.ticketHint)}
-            />
-          ))
-        ))}
+          {shown.length === 0 ? (
+            <div className="placeholder" style={{ padding: "4px 6px" }}>
+              no active tickets 🌿
+            </div>
+          ) : (
+            shown.map((i) => (
+              <IssueCard
+                key={i.identifier}
+                issue={i}
+                onOpen={onOpenTicket}
+                accent={ticketColor?.(i.identifier, i.ticketHint)}
+              />
+            ))
+          )}
+        </>
+      )}
     </div>
   );
 }
