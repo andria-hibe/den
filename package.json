@@ -6,6 +6,12 @@
   "description": "🦊 Den — a cozy cockpit for Claude-driven development",
   "license": "MIT",
   "author": "Andria Hibe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andria-hibe/den.git"
+  },
+  "homepage": "https://github.com/andria-hibe/den#readme",
+  "bugs": "https://github.com/andria-hibe/den/issues",
   "main": "dist/electron/main.cjs",
   "scripts": {
     "postinstall": "node scripts/fix-pty.mjs",
