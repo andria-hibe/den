@@ -1084,6 +1084,13 @@ body {
   color: #7a2a45;
   border-color: transparent;
 }
+/* Your own approved + green-CI PRs: brighter than a plain "approved" badge. */
+.pr-badge.ready {
+  background: var(--mint);
+  color: #1f5a42;
+  border-color: transparent;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--mint) 60%, #1f5a42);
+}
 .pr-checkcounts {
   margin-left: auto;
   font-size: 10px;

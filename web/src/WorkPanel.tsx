@@ -49,6 +49,14 @@ function PrCard({
 }) {
   const check = CHECK_ICON[pr.checks];
   const review = REVIEW_LABEL[pr.review];
+  // Your own approved PR with no red/pending CI is genuinely ready to merge —
+  // surface that as its own badge instead of the generic "approved" one.
+  const readyToMerge =
+    pr.isMine &&
+    pr.review === "approved" &&
+    !pr.isDraft &&
+    pr.checks !== "failing" &&
+    pr.checks !== "pending";
   return (
     <div
       className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}${accent ? " session-linked" : ""}`}
@@ -88,7 +96,13 @@ function PrCard({
       <div className="pr-title">{pr.title}</div>
       <div className="pr-meta">
         {pr.ticketHint && <span className="pr-badge ticket">{pr.ticketHint}</span>}
-        {review && <span className={`pr-badge review-${pr.review}`}>{review}</span>}
+        {readyToMerge ? (
+          <span className="pr-badge ready" title="approved & checks green — ready to merge">
+            ✓ ready to merge
+          </span>
+        ) : (
+          review && <span className={`pr-badge review-${pr.review}`}>{review}</span>
+        )}
         {pr.checkCounts.total > 0 && (
           <span className="pr-checkcounts">
             {pr.checkCounts.failed > 0 && `${pr.checkCounts.failed}✕ `}
