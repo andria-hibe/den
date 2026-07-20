@@ -506,6 +506,32 @@ body {
   padding: 2px 8px;
   white-space: nowrap;
 }
+/* "run this app locally" button in the workspace header. */
+.app-run-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  text-decoration: none;
+  line-height: 1.5;
+}
+/* When the app is up, the button opens it — tint it mint so it reads "live". */
+.app-run-btn.running {
+  border-color: color-mix(in srgb, var(--mint) 70%, #1f5a42);
+  color: #1f5a42;
+  background: color-mix(in srgb, var(--mint) 22%, transparent);
+}
+.app-run-btn.running:hover {
+  background: color-mix(in srgb, var(--mint) 40%, transparent);
+  color: #1f5a42;
+}
+@media (prefers-color-scheme: dark) {
+  .app-run-btn.running {
+    color: var(--mint);
+  }
+  .app-run-btn.running:hover {
+    color: var(--mint);
+  }
+}
 .rename-input {
   flex: 1;
   min-width: 0;

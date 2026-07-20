@@ -25,6 +25,7 @@ import {
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
 import { prepareWork, checkoutPr, type WorkEnv } from "./git.ts";
+import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -47,6 +48,12 @@ export function sanitizePaste(text: string): string {
   // \t (09) and \n (0A). Stripping CR too means a raw carriage return can't
   // submit input in a pane that isn't honouring bracketed paste (e.g. a shell).
   return text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+}
+
+// Single-quote a path for a POSIX shell (wraps the ' → '\'' escape). Used to
+// build the `cd <dir> && …` command written into a spin-up shell tab.
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 export interface StartOptions {
@@ -253,6 +260,53 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     session.write(`\x1b[200~${sanitizePaste(text)}\x1b[201~`);
     return { ok: true };
+  });
+
+  // Can the app this workspace is working on be run locally? Returns how to run
+  // it, whether it's already up, and a URL to open (see server/apprun.ts).
+  app.get("/api/app/runner", async (req, reply) => {
+    const { sessionId } = req.query as { sessionId?: string };
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    try {
+      return await appRunnerStatus(session.cwd);
+    } catch (e) {
+      logWarn("app runner status failed", e);
+      reply.code(500);
+      return { error: "status_failed" };
+    }
+  });
+
+  // Spin up the workspace's app in a fresh shell tab: adds a shell to the group,
+  // then types `cd <repo> && <command>` into it. Returns the new shell's meta so
+  // the client can switch to that tab.
+  app.post("/api/app/run", async (req, reply) => {
+    const { sessionId } = (req.body ?? {}) as { sessionId?: string };
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const runner = detectAppRunner(session.cwd);
+    if (!runner.command) {
+      reply.code(400);
+      return { error: "not_runnable" };
+    }
+    const meta = sessions.addShell(session.groupId);
+    if (!meta) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    // Type the command once the fresh login shell has settled (early keystrokes
+    // can be eaten by zsh prompt init).
+    const shell = sessions.get(meta.id);
+    const cmd = `cd ${shellQuote(runner.dir)} && ${runner.command}\r`;
+    setTimeout(() => shell?.write(cmd), 400);
+    reply.code(201);
+    return meta;
   });
 
   app.delete("/api/sessions/:id", async (req, reply) => {

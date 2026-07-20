@@ -11,6 +11,7 @@ import { Fox } from "./Fox.tsx";
 import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
+import { AppRunButton } from "./AppRunButton.tsx";
 import { TicketComments } from "./TicketComments.tsx";
 import { deriveFoxPose, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
 import { useRovingFocus } from "./useRovingFocus.ts";
@@ -282,6 +283,23 @@ export function App() {
     }
   };
 
+  // Spin up the workspace's app in a fresh shell tab (server adds the shell and
+  // types the run command into it), then switch to that tab.
+  const launchApp = async (sessionId: string) => {
+    const group = sessions.find((s) => s.id === sessionId)?.groupId;
+    try {
+      const meta = await api<SessionMeta>("/api/app/run", {
+        method: "POST",
+        body: JSON.stringify({ sessionId }),
+      });
+      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+      setSessions(d.sessions);
+      if (group) setShellTab((m) => ({ ...m, [group]: meta.id }));
+    } catch (e) {
+      setErrMsg((e as Error).message);
+    }
+  };
+
   // Close a single shell tab (leaves the rest of the workspace intact).
   const closeShellTab = async (shellId: string, groupId: string) => {
     try {
@@ -476,7 +494,7 @@ export function App() {
       ),
     );
 
-  const renderHeader = (s: SessionMeta) => (
+  const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       <span className="color-picker">
         <button
@@ -522,6 +540,13 @@ export function App() {
           gap: 8,
         }}
       >
+        {opts?.workspace && (
+          <AppRunButton
+            sessionId={s.id}
+            status={s.status}
+            onLaunch={launchApp}
+          />
+        )}
         {s.status === "exited" && (
           <button
             className="btn btn-ghost-outline restart-btn"
@@ -1038,7 +1063,7 @@ export function App() {
         ) : (
           <div className="workspace" ref={wsRef}>
             <div className="ws-main" style={{ flex: `${mainFrac} 1 0` }}>
-              {renderHeader(active)}
+              {renderHeader(active, { workspace: true })}
               <TerminalView
                 key={`${active.id}:${active.status}`}
                 session={active}
