@@ -547,6 +547,23 @@ export function App() {
             onLaunch={launchApp}
           />
         )}
+        {opts?.workspace && s.ticket === DEN_TICKET && (
+          // Open den's *latest iteration* — the dev server serving your current
+          // source edits — in a real browser. That's Vite's :5173 (run it via
+          // ▶ run den → npm run dev). We deliberately don't use the running
+          // instance's origin: in the packaged app that's the installed build,
+          // not the edits you're making here. Electron routes this target=_blank
+          // link to the OS browser.
+          <a
+            className="btn btn-ghost-outline app-run-btn running"
+            href="http://localhost:5173"
+            target="_blank"
+            rel="noreferrer"
+            title="open den's latest iteration (the dev server) — needs `npm run dev` running on :5173"
+          >
+            ▶ open den in browser
+          </a>
+        )}
         {s.status === "exited" && (
           <button
             className="btn btn-ghost-outline restart-btn"

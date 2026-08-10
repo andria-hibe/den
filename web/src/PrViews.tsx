@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DiffView, DiffHunk } from "./DiffView.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
-import { Fox } from "./Fox.tsx";
 import { ToClaude } from "./ToClaude.tsx";
 
 interface PrNote {
@@ -182,11 +181,12 @@ export function PrReviewView({
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [loadingSummaries, setLoadingSummaries] = useState(true);
   const [review, setReview] = useState<string>("");
-  const [reviewing, setReviewing] = useState(false);
   const started = useRef(false);
   const [diffFrac, setDiffFrac] = usePersistentNumber("den.prDiffFrac", 0.55);
+  const [reviewFrac, setReviewFrac] = usePersistentNumber("den.prReviewFrac", 0.62);
   const [sessFrac, setSessFrac] = usePersistentNumber("den.prSessFrac", 0.55);
   const rootRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -195,6 +195,24 @@ export function PrReviewView({
       .then((d) => !d.error && setDiff(d.diff ?? ""))
       .catch(() => {});
   }, [repo, number]);
+
+  // The session writes its finished review to the workspace notepad (see
+  // reviewInstruction, server-side); poll it so the review column fills in as
+  // Claude produces it. sessionId === groupId for single-pane review panes.
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      fetch(`/api/notepad/${sessionId}`)
+        .then((r) => r.json())
+        .then((d) => !stop && setReview(d.content ?? ""))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 4000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [sessionId]);
 
   // Per-file summaries for the side column (headless Claude — takes a bit).
   useEffect(() => {
@@ -214,38 +232,78 @@ export function PrReviewView({
       .finally(() => setLoadingSummaries(false));
   }, [repo, number]);
 
-  const generate = () => {
-    if (reviewing) return;
-    setReviewing(true);
-    fetch("/api/github/pr/review", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ repo, number }),
-    })
-      .then((r) => r.json())
-      .then((d) => setReview(d.review || `⚠️ ${d.message || d.error || "failed"}`))
-      .catch((e) => setReview(`⚠️ ${e.message}`))
-      .finally(() => setReviewing(false));
-  };
+  // Have the interactive Claude session (bottom-left) do the review, rather than
+  // a one-shot headless pass rendered into this pane. The PR is checked out in
+  // the session's worktree, so Claude can read the diff + surrounding code, and
+  // you can follow up with questions right there.
+  const reviewPrompt =
+    `Please review pull request #${number} (${repo}). This is a read-only review ` +
+    `session with no shell — the PR's full diff has been saved to a file for you ` +
+    `(see your instructions) and the PR is checked out in your working directory. ` +
+    `Read the diff, then read the changed files for context, and give a concise, ` +
+    `skimmable code review in markdown with sections: **Summary**, **Potential ` +
+    `bugs**, **Risky changes**, **Suggestions**. Reference specific files and ` +
+    `lines. If it looks solid, say so briefly.`;
 
+  // "Pre-review the diff": prime the session with the prompt once, shortly after
+  // mount so Claude has a moment to be ready. Like the → Claude buttons, the
+  // paste doesn't auto-submit — press Enter in the session to run it.
   useEffect(() => {
-    if (autoReview && !started.current) {
-      started.current = true;
-      generate();
-    }
+    if (!autoReview || started.current) return;
+    started.current = true;
+    const t = setTimeout(() => {
+      fetch(`/api/sessions/${sessionId}/paste`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: reviewPrompt }),
+      }).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReview]);
 
   return (
     <div className="pr-review" ref={rootRef}>
-      <div className="pr-diff-wrap" style={{ flex: `${diffFrac} 1 0` }}>
-        <DiffView
-          diff={diff}
-          summaries={summaries}
-          loadingSummaries={loadingSummaries}
-          sessionId={sessionId}
-          prNumber={number}
+      <div className="pr-top-split" ref={topRef} style={{ flex: `${diffFrac} 1 0` }}>
+        <div className="pr-diff-wrap" style={{ flex: `${reviewFrac} 1 0` }}>
+          <DiffView
+            diff={diff}
+            summaries={summaries}
+            loadingSummaries={loadingSummaries}
+            sessionId={sessionId}
+            prNumber={number}
+          />
+        </div>
+        <Splitter
+          dir="x"
+          onDrag={(d) =>
+            setReviewFrac((f) =>
+              clamp(f + d / (topRef.current?.clientWidth ?? 1), 0.3, 0.85),
+            )
+          }
         />
+        <div className="pr-review-col" style={{ flex: `${1 - reviewFrac} 1 0` }}>
+          <div className="pr-review-head">
+            <h4>den&apos;s review</h4>
+            <ToClaude
+              sessionId={sessionId}
+              text={reviewPrompt}
+              label="review in session"
+              title="Ask the Claude session below to review this diff"
+            />
+          </div>
+          <div className="pr-review-body">
+            {review.trim() ? (
+              <Md text={review} />
+            ) : (
+              <div className="placeholder">
+                Claude reviews the diff in the session below — click “review in
+                session”, then press Enter. Its review shows up here (and is saved
+                to the progress notepad) as it writes.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       <Splitter
         dir="y"
@@ -271,24 +329,6 @@ export function PrReviewView({
             </div>
             <h4>Description</h4>
             {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
-            <hr />
-            <div className="pr-review-head">
-              <h4>Claude's review</h4>
-              {!reviewing && (
-                <button className="btn notepad-save" onClick={generate}>
-                  {review ? "re-review" : "ask Claude"}
-                </button>
-              )}
-            </div>
-            {reviewing ? (
-              <div className="loading-row">
-                <Fox pose="walk" size={22} /> reviewing the diff…
-              </div>
-            ) : review ? (
-              <Md text={review} />
-            ) : (
-              <div className="placeholder">Not reviewed yet.</div>
-            )}
           </div>
         </div>
       </div>

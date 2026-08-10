@@ -32,6 +32,27 @@ export function usePersistentString<T extends string>(
   return [value, setValue] as const;
 }
 
+/**
+ * A JSON-serialisable value that persists to localStorage. Used for the set of
+ * PR attention flags you've dismissed (a `{ key: updatedAt }` map). A malformed
+ * or stale stored value falls back to `initial`. The setter is `useState`'s, so
+ * it's stable across renders (safe as an effect/callback dependency).
+ */
+export function usePersistentJson<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored === null ? initial : (JSON.parse(stored) as T);
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
 export const clamp = (n: number, min: number, max: number) =>
   Math.min(max, Math.max(min, n));
 

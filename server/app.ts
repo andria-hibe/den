@@ -139,6 +139,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       pr?: number;
       prRepo?: string;
       initialPrompt?: string;
+      reviewDiff?: string;
     };
     // Reuse an existing running session for the same ticket (same look/work
     // mode) so we never create duplicate sessions or branches for one issue.
@@ -194,6 +195,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         logWarn("checkoutPr", err);
         reply.code(500);
         return { error: "git_failed", message: "Could not check out the PR." };
+      }
+      // A review pane has no shell, so hand it the diff via a file it can read.
+      if (body.view === "review") {
+        try {
+          body.reviewDiff = (await getPrDiff(body.prRepo, pr)).slice(0, 200_000);
+        } catch (err) {
+          logWarn("github.diff(review)", err);
+        }
       }
     }
     if (body.cwd && !isDir(body.cwd)) {

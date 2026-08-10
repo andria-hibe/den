@@ -41,10 +41,12 @@ function accentStyle(color?: string): CSSProperties | undefined {
 function PrCard({
   pr,
   onOpen,
+  onDismiss,
   accent,
 }: {
   pr: PullRequest;
   onOpen: (pr: PullRequest) => void;
+  onDismiss: (pr: PullRequest) => void;
   accent?: string;
 }) {
   const check = CHECK_ICON[pr.checks];
@@ -67,12 +69,19 @@ function PrCard({
     >
       <div className="pr-top">
         {pr.needsAttention && (
-          <span
+          <button
+            type="button"
             className="pr-attn"
-            title={pr.attentionReason ?? "needs your attention"}
+            title={`${pr.attentionReason ?? "needs your attention"} — click to dismiss`}
+            aria-label={`dismiss: ${pr.attentionReason ?? "needs your attention"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss(pr);
+            }}
           >
-            !
-          </span>
+            <span className="pr-attn-bang">!</span>
+            <span className="pr-attn-x">×</span>
+          </button>
         )}
         <span className={`pr-check ${check.cls}`} title={`checks ${pr.checks}`}>
           {check.icon}
@@ -119,11 +128,13 @@ function Section({
   title,
   prs,
   onOpenPr,
+  onDismissPr,
   prColor,
 }: {
   title: string;
   prs: PullRequest[];
   onOpenPr: (pr: PullRequest) => void;
+  onDismissPr: (pr: PullRequest) => void;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
   return (
@@ -141,6 +152,7 @@ function Section({
             key={`${pr.repo}#${pr.number}`}
             pr={pr}
             onOpen={onOpenPr}
+            onDismiss={onDismissPr}
             accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
           />
         ))
@@ -165,6 +177,7 @@ export function WorkPanel({
     prsError: error,
     prsLoading: loading,
     refreshPrs,
+    dismissPrAttention,
   } = useWorkData();
 
   return (
@@ -207,12 +220,14 @@ export function WorkPanel({
                 title="review requested"
                 prs={data.reviewRequested}
                 onOpenPr={onOpenPr}
+                onDismissPr={dismissPrAttention}
                 prColor={prColor}
               />
               <Section
                 title="my open PRs"
                 prs={data.authored}
                 onOpenPr={onOpenPr}
+                onDismissPr={dismissPrAttention}
                 prColor={prColor}
               />
             </>

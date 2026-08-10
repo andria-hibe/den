@@ -113,7 +113,8 @@ function parse(fp: string): {
   return { cwd, title: tidyTitle(base), skip: headless || empty };
 }
 
-export function listPastSessions(limit = 40): PastSession[] {
+/** All Claude transcripts on disk, newest-first (by mtime). */
+function allTranscripts(): { fp: string; id: string; mtime: number }[] {
   if (!existsSync(PROJECTS)) return [];
   const files: { fp: string; id: string; mtime: number }[] = [];
   for (const dir of readdirSync(PROJECTS)) {
@@ -134,6 +135,41 @@ export function listPastSessions(limit = 40): PastSession[] {
     }
   }
   files.sort((a, b) => b.mtime - a.mtime);
+  return files;
+}
+
+/** True if a Claude transcript with this session id exists on disk — i.e.
+ *  `claude --resume <id>` has a conversation to resume. */
+export function hasSession(id: string): boolean {
+  if (!id || !existsSync(PROJECTS)) return false;
+  for (const dir of readdirSync(PROJECTS)) {
+    try {
+      if (existsSync(join(PROJECTS, dir, `${id}.jsonl`))) return true;
+    } catch {
+      // skip unreadable dir
+    }
+  }
+  return false;
+}
+
+/** The most recent resumable Claude session id whose transcript records this
+ *  cwd. Best-effort match for restarting a pane that was created before den
+ *  pinned its own session ids. Returns null if none. */
+export function latestSessionForCwd(cwd: string): string | null {
+  if (!cwd) return null;
+  for (const { fp, id } of allTranscripts().slice(0, 400)) {
+    try {
+      const { cwd: c, skip } = parse(fp);
+      if (!skip && c === cwd) return id;
+    } catch {
+      // skip unreadable
+    }
+  }
+  return null;
+}
+
+export function listPastSessions(limit = 40): PastSession[] {
+  const files = allTranscripts();
 
   // Scan newest-first and collect real sessions until we have `limit`. We may
   // skip many (headless helpers, gone cwds), so scan beyond `limit` — but cap

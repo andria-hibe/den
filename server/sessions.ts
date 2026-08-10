@@ -1,10 +1,13 @@
 import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
+import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 
@@ -46,6 +49,42 @@ export const notepadPath = (groupId: string) => {
   return join(PROGRESS_DIR, `${groupId}.md`);
 };
 
+// PR-review sessions are locked down to strictly read-only (see reviewPermsPath).
+// The PR's diff and the per-session permission settings file live here, outside
+// any repo. Both are cleaned up when the workspace is closed.
+const REVIEW_DIR = join(os.homedir(), ".den", "review");
+const reviewDiffPath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(REVIEW_DIR, `${groupId}.diff`);
+};
+const reviewSettingsPath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(REVIEW_DIR, `${groupId}.settings.json`);
+};
+
+/** The Claude permission rules that make a PR-review pane strictly read-only.
+ * Pure (no I/O) so it's unit-testable — the caller resolves real paths first.
+ * Deny beats allow and can't be overridden at runtime, so the two deny rules are
+ * hard guarantees:
+ *  - `Bash` — no shell at all (no git push/commit, no `gh pr` write, no `sed -i`
+ *    or redirects; there is no tool that can run a command).
+ *  - `Edit(//<worktree>/**)` — no create/edit/delete anywhere in the PR checkout
+ *    (Edit rules gate Write/MultiEdit/NotebookEdit too).
+ * The single `allow` is the review's one writable path — the notepad, which lives
+ * outside the worktree — so it saves without a prompt. Read/Grep/Glob stay
+ * available (read-only by nature).
+ * `worktreeAbs`/`notepadAbs` must be absolute; they're emitted as Claude's
+ * "//<path>" root-anchored specifier. */
+export function buildReviewPermissions(worktreeAbs: string, notepadAbs: string) {
+  const root = (p: string) => "//" + p.replace(/^\/+/, "");
+  return {
+    permissions: {
+      deny: ["Bash", `Edit(${root(worktreeAbs)}/**)`],
+      allow: [`Edit(${root(notepadAbs)})`],
+    },
+  };
+}
+
 /** The system-prompt instruction telling the main Claude to log progress to its
  * workspace notepad. Shared by create() and restart() so a restarted workspace
  * keeps its progress-logging wiring. */
@@ -58,6 +97,25 @@ function progressInstruction(file: string): string {
     `Keep entries concise and skimmable and never delete earlier ones. This ` +
     `file is shown to the developer in a side notepad; don't mention this ` +
     `logging in your replies.`
+  );
+}
+
+/** System-prompt instruction for a PR-review pane. The session is strictly
+ * read-only (no shell; the only writable path is the notepad — see
+ * ensureReviewPerms), so it reads the diff from a file den provides and saves its
+ * review to the notepad, which den renders beside the diff. Shared by create()
+ * and restart() so the wiring survives a restart. */
+function reviewInstruction(notepad: string, diffFile: string): string {
+  return (
+    `You're reviewing a GitHub pull request inside a tool called "den". This is a ` +
+    `strictly read-only review session: you have NO shell (the Bash tool is ` +
+    `disabled) and you cannot modify the PR in any way — only read it. The PR's ` +
+    `full unified diff is saved at ${diffFile}; read that first, then read the ` +
+    `changed files in your working directory for surrounding context. Save your ` +
+    `finished review as markdown to the absolute path ${notepad} (create or ` +
+    `overwrite it) — that is the one file you are allowed to write, and den ` +
+    `renders it beside the diff for the developer. Write the clean, finished ` +
+    `review there, not a running log; don't mention these files in your replies.`
   );
 }
 
@@ -114,6 +172,10 @@ class DenSession {
 
   /** Overrides the default spawn args (used for the main Claude of a workspace). */
   spawnArgs: string[] | null = null;
+  /** The Claude conversation id this pane owns (pinned via `--session-id` at
+   * spawn), so a restart can `--resume` the *same* conversation rather than
+   * starting a blank one. Null for shells and pre-existing rows. */
+  claudeSessionId: string | null = null;
   /** Git branch of the working dir, captured when the session starts. */
   branch: string | null = null;
   /** Linear ticket identifier this workspace is for, if any. */
@@ -292,7 +354,7 @@ class DenSession {
       color: this.color,
       cwd: this.cwd,
       shell: this.shell ? 1 : 0,
-      claudeSessionId: null,
+      claudeSessionId: this.claudeSessionId,
       status: this.status,
       createdAt: this.createdAt,
       lastActive: this.lastActive,
@@ -381,6 +443,7 @@ class SessionManager {
         (row.role as "main" | "shell") ?? "main",
       );
       s.status = "exited";
+      s.claudeSessionId = row.claudeSessionId ?? null;
       s.branch = row.branch ?? null;
       s.ticket = row.ticket ?? null;
       s.look = row.look === 1;
@@ -423,6 +486,8 @@ class SessionManager {
     pr?: number;
     prRepo?: string;
     initialPrompt?: string;
+    /** The PR's unified diff, for a review pane's read-only diff file. */
+    reviewDiff?: string;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -449,7 +514,28 @@ class SessionManager {
       const s = new DenSession(
         groupId, name, color, cwd, false, now, now, groupId, "main",
       );
-      s.spawnArgs = ["-n", name];
+      s.claudeSessionId = randomUUID();
+      // A "review" pane keeps a workspace notepad: Claude saves its finished
+      // review there and den renders it beside the diff (and it's a record for
+      // the developer). Seeded empty so the review column shows its prompt until
+      // Claude writes. Other single-pane views (look / mypr) don't.
+      if (opts.view === "review") {
+        const file = this.ensureNotepad(groupId, "");
+        const diffFile = this.ensureReviewDiff(groupId, opts.reviewDiff);
+        const settingsFile = this.ensureReviewPerms(groupId, cwd);
+        s.spawnArgs = [
+          "--session-id", s.claudeSessionId, "-n", name,
+          // Lock the pane to strictly read-only (no shell; only the notepad is
+          // writable). --permission-mode default keeps the deny rules in force.
+          "--settings", settingsFile,
+          "--permission-mode", "default",
+          "--add-dir", PROGRESS_DIR,
+          "--add-dir", REVIEW_DIR,
+          "--append-system-prompt", reviewInstruction(file, diffFile),
+        ];
+      } else {
+        s.spawnArgs = ["--session-id", s.claudeSessionId, "-n", name];
+      }
       s.branch = branch;
       s.ticket = opts.ticket ?? null;
       s.look = !!opts.look;
@@ -470,8 +556,13 @@ class SessionManager {
     const main = new DenSession(
       randomUUID(), name, color, cwd, false, now, now, groupId, "main",
     );
+    // Pin the conversation id (or adopt the one we're resuming) so a later
+    // restart can bring back THIS exact conversation.
+    main.claudeSessionId = opts.resumeId ?? randomUUID();
     main.spawnArgs = [
-      ...(opts.resumeId ? ["--resume", opts.resumeId] : ["-n", name]),
+      ...(opts.resumeId
+        ? ["--resume", opts.resumeId]
+        : ["--session-id", main.claudeSessionId, "-n", name]),
       "--add-dir", PROGRESS_DIR,
       "--append-system-prompt", instruction,
       // An initial prompt (e.g. the ticket) becomes Claude's first message. The
@@ -534,19 +625,56 @@ class SessionManager {
   }
 
   /** Claude spawn args for a restart, rebuilt from the session's context. A
-   * workspace main keeps its progress-notepad wiring; look/PR panes just get a
-   * named session. (No initial prompt — that's a one-time create-only thing.) */
+   * workspace main keeps its progress-notepad wiring; look/PR panes just get the
+   * resume args. (No initial prompt — that's a one-time create-only thing.) */
   private restartArgs(s: DenSession): string[] {
+    const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
       mkdirSync(PROGRESS_DIR, { recursive: true });
       const file = notepadPath(s.groupId);
       return [
-        "-n", s.name,
+        ...resume,
         "--add-dir", PROGRESS_DIR,
         "--append-system-prompt", progressInstruction(file),
       ];
     }
-    return ["-n", s.name];
+    // A review pane keeps its read-only lockdown + notepad wiring so a revived
+    // review still can't touch the PR and still saves (and shows) its review.
+    if (s.view === "review") {
+      mkdirSync(PROGRESS_DIR, { recursive: true });
+      const file = notepadPath(s.groupId);
+      const diffFile = this.ensureReviewDiff(s.groupId);
+      const settingsFile = this.ensureReviewPerms(s.groupId, s.cwd);
+      return [
+        ...resume,
+        "--settings", settingsFile,
+        "--permission-mode", "default",
+        "--add-dir", PROGRESS_DIR,
+        "--add-dir", REVIEW_DIR,
+        "--append-system-prompt", reviewInstruction(file, diffFile),
+      ];
+    }
+    return resume;
+  }
+
+  /** Pick which conversation a restarting Claude pane reopens:
+   *  1. its own pinned session, if that transcript still exists → `--resume`;
+   *  2. else the newest conversation recorded in this cwd (covers panes created
+   *     before den pinned ids, e.g. after a close/reopen) → `--resume`, adopting
+   *     that id so future restarts are unambiguous;
+   *  3. else nothing to resume → start fresh, pinning a new id so the next
+   *     restart of this pane can resume it. */
+  private resumeArgs(s: DenSession): string[] {
+    if (s.claudeSessionId && hasSession(s.claudeSessionId)) {
+      return ["--resume", s.claudeSessionId];
+    }
+    const latest = latestSessionForCwd(s.cwd);
+    if (latest) {
+      s.claudeSessionId = latest;
+      return ["--resume", latest];
+    }
+    s.claudeSessionId = randomUUID();
+    return ["--session-id", s.claudeSessionId, "-n", s.name];
   }
 
   get(id: string) {
@@ -609,10 +737,44 @@ class SessionManager {
     // exit/restart keeps it, since the session lives on and can be revived.)
     try {
       rmSync(notepadPath(groupId), { force: true });
+      // Review panes also leave a diff + settings file behind — clear those too.
+      rmSync(reviewDiffPath(groupId), { force: true });
+      rmSync(reviewSettingsPath(groupId), { force: true });
     } catch {
       // invalid id / already gone — nothing to clean up
     }
     return true;
+  }
+
+  // --- PR-review read-only lockdown ---
+
+  /** Write the PR's diff to a file the review session can read (it has no shell
+   * to fetch it itself). Pass `diff` on create; omit on restart to keep whatever
+   * was captured before. Returns the file path. */
+  private ensureReviewDiff(groupId: string, diff?: string): string {
+    mkdirSync(REVIEW_DIR, { recursive: true });
+    const file = reviewDiffPath(groupId);
+    if (diff != null) writeFileSync(file, diff);
+    else if (!existsSync(file)) writeFileSync(file, "");
+    return file;
+  }
+
+  /** Write a per-session Claude settings file that locks a review pane to
+   * strictly read-only (see buildReviewPermissions for the rules) and return its
+   * path, for `--settings`. The worktree cwd is realpath'd first so a symlinked
+   * path can't dodge the deny. */
+  private ensureReviewPerms(groupId: string, worktreeCwd: string): string {
+    mkdirSync(REVIEW_DIR, { recursive: true });
+    let wt = worktreeCwd;
+    try {
+      wt = realpathSync(worktreeCwd);
+    } catch {
+      // cwd gone / not yet created — fall back to the given path
+    }
+    const settings = buildReviewPermissions(wt, notepadPath(groupId));
+    const file = reviewSettingsPath(groupId);
+    writeFileSync(file, JSON.stringify(settings, null, 2));
+    return file;
   }
 
   // --- Progress notepad ---

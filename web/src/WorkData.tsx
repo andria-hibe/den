@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { PrBuckets, PullRequest } from "../../server/github.ts";
 import type { LinearData, LinearIssue } from "../../server/linear.ts";
+import { usePersistentJson } from "./Splitter.tsx";
 
 // Single source of truth for GitHub PRs + Linear issues. Previously App, the
 // WorkPanel, and the LinearSection each ran their own 60s poll of the same two
@@ -24,6 +25,10 @@ interface WorkDataValue {
   prsError: string | null;
   prsLoading: boolean;
   refreshPrs: () => void;
+  /** Silence a PR's "!" attention flag until the PR next changes (e.g. you're
+   *  choosing not to review it). Clears the card badge, the topbar fox, and OS
+   *  notifications together, since they all read the same shared data. */
+  dismissPrAttention: (pr: PullRequest) => void;
   // Linear
   linear: LinearData | null;
   issues: LinearIssue[];
@@ -65,9 +70,63 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [refreshPrs]);
 
+  // Dismissed attention flags: prKey → the PR's `updatedAt` when you dismissed
+  // it. The dismissal is scoped to that snapshot — if the PR later changes
+  // (a new push / comment / review), the "!" comes back, mirroring how the OS
+  // notifications only react to transitions.
+  const prKey = (p: PullRequest) => `${p.repo}#${p.number}`;
+  const [dismissed, setDismissed] = usePersistentJson<Record<string, string>>(
+    "den.dismissedPrAttn",
+    {},
+  );
+
+  const dismissPrAttention = useCallback(
+    (pr: PullRequest) => {
+      setDismissed((d) => ({ ...d, [prKey(pr)]: pr.updatedAt }));
+    },
+    [setDismissed],
+  );
+
+  // Apply the dismissals: any PR whose dismissed snapshot still matches its
+  // current `updatedAt` has its needsAttention cleared. Every consumer (cards,
+  // fox, notifications) reads these derived buckets, so they never disagree.
+  const dprs = useMemo<PrBuckets | null>(() => {
+    if (!prs) return null;
+    const clear = (list: PullRequest[]) =>
+      list.map((p) =>
+        p.needsAttention && dismissed[prKey(p)] === p.updatedAt
+          ? { ...p, needsAttention: false }
+          : p,
+      );
+    return {
+      ...prs,
+      authored: clear(prs.authored),
+      reviewRequested: clear(prs.reviewRequested),
+    };
+  }, [prs, dismissed]);
+
+  // Prune stale dismissals so localStorage doesn't grow forever: drop any entry
+  // whose PR has left the list (merged/closed) or moved on (updatedAt changed —
+  // it re-alerts anyway, so the record is spent).
+  useEffect(() => {
+    if (!prs) return;
+    const live = new Map(
+      [...prs.authored, ...prs.reviewRequested].map((p) => [prKey(p), p.updatedAt]),
+    );
+    setDismissed((d) => {
+      let changed = false;
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(d)) {
+        if (live.get(k) === v) next[k] = v;
+        else changed = true;
+      }
+      return changed ? next : d;
+    });
+  }, [prs, setDismissed]);
+
   const flatPrs = useMemo(
-    () => (prs ? [...prs.authored, ...prs.reviewRequested] : []),
-    [prs],
+    () => (dprs ? [...dprs.authored, ...dprs.reviewRequested] : []),
+    [dprs],
   );
 
   // --- Linear issues ---
@@ -122,11 +181,12 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WorkDataValue>(
     () => ({
-      prs,
+      prs: dprs,
       flatPrs,
       prsError,
       prsLoading,
       refreshPrs: () => refreshPrs(true),
+      dismissPrAttention,
       linear,
       issues: linear?.issues ?? [],
       linearNotifs: linear?.unreadNotifications ?? 0,
@@ -137,11 +197,12 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
       disconnectLinear,
     }),
     [
-      prs,
+      dprs,
       flatPrs,
       prsError,
       prsLoading,
       refreshPrs,
+      dismissPrAttention,
       linear,
       linearConnected,
       linearError,

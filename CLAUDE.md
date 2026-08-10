@@ -97,7 +97,16 @@ WebSocket; everything else is REST.
     (renders one `diff_hunk`, marks the anchored last line) besides `DiffView`
     (per-file blocks: summary column left, diff right).
   - `PrViews.tsx`: `PrReviewView` (others' PRs — diff + per-file summaries +
-    Claude review); `PrMyView` (your PRs — description, top-level `Notes`, and
+    a **den's-review column beside the diff**: the session is told (via
+    `reviewInstruction`) to save its finished review as markdown to the workspace
+    notepad `~/.den/progress/<groupId>.md`; the view polls that notepad and
+    renders it, so the review is both shown next to the code and kept as a record.
+    Review panes carry a notepad — `create()`/`restartArgs` wire it for
+    `view === "review"`. **Review panes are locked to strictly read-only** (see
+    Security posture): no shell, and the notepad is the only writable path, so a
+    review can never touch the PR. Since it has no shell to run `gh pr diff`, den
+    fetches the diff (`app.ts`) into `~/.den/review/<groupId>.diff` for the
+    session to Read); `PrMyView` (your PRs — description, top-level `Notes`, and
     `InlineComments`: line-level comments grouped by file, each shown with its
     diff hunk — **resolved threads are hidden by default** behind a "show N
     resolved" toggle so the tab focuses on what still needs action); `ToClaude`
@@ -260,6 +269,18 @@ local control plane, not a public API:
   read as a flag; `fs.ts` `within()` realpaths the nearest existing ancestor so a
   symlink inside `$HOME` can't escape it; notepad `groupId` is validated
   (`isValidGroupId`) against traversal.
+- **PR-review panes are strictly read-only.** Reviewing someone else's PR must
+  never modify their branch, so a `view === "review"` session is spawned with a
+  generated per-session settings file (`--settings`, `--permission-mode default`)
+  whose `permissions` (`buildReviewPermissions` in `sessions.ts`, unit-tested)
+  **deny `Bash`** (no shell → no `git push`/`commit`, no `gh pr` write, no
+  `sed -i`/redirects) and **deny `Edit(//<realpath'd-worktree>/**)`** (Edit rules
+  gate Write/MultiEdit/NotebookEdit too). A `deny` is a hard block — it can't be
+  overridden by an approval prompt. The only writable path is the notepad
+  (`allow: Edit(//<notepad>)`, outside the worktree), so the review saves without
+  a prompt. Read/Grep/Glob stay available; the diff is handed over as a file to
+  Read (`~/.den/review/<groupId>.diff`) since there's no shell to fetch it. (No
+  GitHub MCP is configured, so with `Bash` gone there is no tool path to the PR.)
 - The Linear key lives only in `~/.den/den.db` (gitignored) or `$LINEAR_API_KEY`;
   it's never returned to the client or logged. Errors are sanitized before
   reaching the client (`server/log.ts` `logWarn` keeps details server-side).
