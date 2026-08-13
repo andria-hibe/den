@@ -234,9 +234,10 @@ export function PrReviewView({
   // can follow up with questions right there. The structure mirrors
   // reviewInstruction (server/sessions.ts) so den can file it per file.
   const reviewPrompt =
-    `Please review pull request #${number} (${repo}). This is a read-only review ` +
-    `session with no shell — the PR's full diff has been saved to a file for you ` +
-    `(see your instructions) and the PR is checked out in your working directory. ` +
+    `Please review pull request #${number} (${repo}). The PR's full diff has been ` +
+    `saved to a file for you (see your instructions) and the PR is checked out in ` +
+    `your working directory — run whatever you need, but don't commit or push, and ` +
+    `keep any experiment on the scratch branch named in your instructions. ` +
     `Read the diff, then read the changed files for context, and write your review ` +
     `to the notepad as markdown in this shape: first the general review (a short ` +
     `**Summary**, then any cross-cutting **Risks**), then one \`## <file path>\` ` +

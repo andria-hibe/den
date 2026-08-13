@@ -1,39 +1,53 @@
 import { describe, it, expect } from "vitest";
-import { buildReviewPermissions } from "./sessions.ts";
+import { buildReviewPermissions, scratchBranch } from "./sessions.ts";
 
-const WORKTREE = "/Users/x/Documents/work/runn/.claude-worktrees/pr-123";
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 
-describe("buildReviewPermissions (read-only PR review lockdown)", () => {
-  const { permissions } = buildReviewPermissions(WORKTREE, NOTEPAD);
+describe("buildReviewPermissions (PR review guardrails)", () => {
+  const { permissions } = buildReviewPermissions(NOTEPAD);
 
-  it("denies the Bash tool outright (no shell → no git/gh writes, sed -i, redirects)", () => {
-    expect(permissions.deny).toContain("Bash");
+  it("leaves the shell available — a review needs to run things", () => {
+    expect(permissions.deny).not.toContain("Bash");
+    expect(permissions.deny.some((r) => r === "Bash(:*)")).toBe(false);
   });
 
-  it("denies edits anywhere in the worktree, root-anchored with a /** wildcard", () => {
-    expect(permissions.deny).toContain(`Edit(//${WORKTREE.replace(/^\/+/, "")}/**)`);
+  it("denies pushing and committing in any form", () => {
+    expect(permissions.deny).toContain("Bash(git push:*)");
+    expect(permissions.deny).toContain("Bash(git commit:*)");
   });
 
-  it("allows editing ONLY the exact notepad file, outside the worktree", () => {
-    expect(permissions.allow).toEqual([`Edit(//${NOTEPAD.replace(/^\/+/, "")})`]);
-    // The single allow must not be a broad wildcard.
-    expect(permissions.allow[0]).not.toContain("**");
+  it("denies the gh subcommands that write to GitHub", () => {
+    for (const sub of ["merge", "review", "comment", "edit", "close", "reopen", "ready"]) {
+      expect(permissions.deny).toContain(`Bash(gh pr ${sub}:*)`);
+    }
+    expect(permissions.deny).toContain("Bash(gh api:*)");
+    expect(permissions.deny).toContain("Bash(gh issue comment:*)");
   });
 
-  it("does not allow any write path inside the worktree (deny > allow anyway)", () => {
-    for (const rule of permissions.allow) {
-      expect(rule.includes(WORKTREE)).toBe(false);
+  it("keeps the gh read paths open (nothing denies pr view/diff/checks)", () => {
+    for (const read of ["gh pr view", "gh pr diff", "gh pr checks"]) {
+      expect(permissions.deny.some((r) => r.startsWith(`Bash(${read}`))).toBe(false);
     }
   });
 
-  it("emits Claude's // root-anchored absolute specifier (double slash)", () => {
-    expect(permissions.deny.some((r) => r.startsWith("Edit(//"))).toBe(true);
-    expect(permissions.allow[0].startsWith("Edit(//")).toBe(true);
+  it("allows editing the exact notepad file, root-anchored and not a wildcard", () => {
+    expect(permissions.allow).toEqual([`Edit(//${NOTEPAD.replace(/^\/+/, "")})`]);
+    expect(permissions.allow[0]).not.toContain("**");
   });
 
-  it("grants no other mutating capability (only Bash + worktree Edit are denied, nothing extra allowed)", () => {
-    expect(permissions.deny).toHaveLength(2);
+  it("grants nothing else — the allow list is the notepad alone", () => {
     expect(permissions.allow).toHaveLength(1);
+  });
+});
+
+describe("scratchBranch", () => {
+  it("prefixes the PR's branch, so the PR's own branch never carries edits", () => {
+    expect(scratchBranch("fast-1234-add-thing")).toBe(
+      "andria/changes-to-fast-1234-add-thing",
+    );
+  });
+  it("falls back when the branch is unknown", () => {
+    expect(scratchBranch(null)).toBe("andria/changes-to-this-pr");
+    expect(scratchBranch("")).toBe("andria/changes-to-this-pr");
   });
 });

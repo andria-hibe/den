@@ -2,7 +2,7 @@ import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
 import {
-  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync,
+  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -49,7 +49,7 @@ export const notepadPath = (groupId: string) => {
   return join(PROGRESS_DIR, `${groupId}.md`);
 };
 
-// PR-review sessions are locked down to strictly read-only (see reviewPermsPath).
+// PR-review sessions get their own guardrails (see buildReviewPermissions).
 // The PR's diff and the per-session permission settings file live here, outside
 // any repo. Both are cleaned up when the workspace is closed.
 const REVIEW_DIR = join(os.homedir(), ".den", "review");
@@ -62,27 +62,54 @@ const reviewSettingsPath = (groupId: string) => {
   return join(REVIEW_DIR, `${groupId}.settings.json`);
 };
 
-/** The Claude permission rules that make a PR-review pane strictly read-only.
- * Pure (no I/O) so it's unit-testable — the caller resolves real paths first.
- * Deny beats allow and can't be overridden at runtime, so the two deny rules are
- * hard guarantees:
- *  - `Bash` — no shell at all (no git push/commit, no `gh pr` write, no `sed -i`
- *    or redirects; there is no tool that can run a command).
- *  - `Edit(//<worktree>/**)` — no create/edit/delete anywhere in the PR checkout
- *    (Edit rules gate Write/MultiEdit/NotebookEdit too).
- * The single `allow` is the review's one writable path — the notepad, which lives
- * outside the worktree — so it saves without a prompt. Read/Grep/Glob stay
- * available (read-only by nature).
- * `worktreeAbs`/`notepadAbs` must be absolute; they're emitted as Claude's
- * "//<path>" root-anchored specifier. */
-export function buildReviewPermissions(worktreeAbs: string, notepadAbs: string) {
+/** The Claude permission rules for a PR-review pane.
+ *
+ * A review pane has a **shell and can edit files** — reviewing a PR properly
+ * means running the tests, bisecting a suspicion, trying a fix. What it must
+ * never do is change the PR: the primary guard is the instruction
+ * (`reviewInstruction` — no commits, no pushes, edits only on a scratch branch),
+ * and these deny rules are the backstop under it, blocking the direct path to
+ * anything that leaves this machine or rewrites history:
+ *  - `git push` / `git commit` in any form (the prefix covers flags/subargs);
+ *  - the `gh` subcommands that write to the PR, the repo, or the issue tracker,
+ *    while `gh pr view|diff|checks` stay available for reading;
+ *  - `gh api`, which can POST anything.
+ * They are a backstop, not a sandbox: a deny can't be prompted past, but a
+ * determined shell can still reach the same place by another route (a wrapper
+ * script, `git -C`, an alias). The instruction does the real work.
+ *
+ * The one `allow` is the notepad, so the finished review saves without a prompt.
+ * Everything else follows den's normal permission behaviour (`--permission-mode
+ * default`), i.e. Claude asks before it acts, exactly like any other pane.
+ *
+ * Pure (no I/O) so it's unit-testable. `notepadAbs` must be absolute; it's
+ * emitted as Claude's "//<path>" root-anchored specifier. */
+export function buildReviewPermissions(notepadAbs: string) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
     permissions: {
-      deny: ["Bash", `Edit(${root(worktreeAbs)}/**)`],
+      deny: [
+        "Bash(git push:*)",
+        "Bash(git commit:*)",
+        "Bash(gh pr merge:*)",
+        "Bash(gh pr review:*)",
+        "Bash(gh pr comment:*)",
+        "Bash(gh pr edit:*)",
+        "Bash(gh pr close:*)",
+        "Bash(gh pr reopen:*)",
+        "Bash(gh pr ready:*)",
+        "Bash(gh issue comment:*)",
+        "Bash(gh api:*)",
+      ],
       allow: [`Edit(${root(notepadAbs)})`],
     },
   };
+}
+
+/** Where a review session must put any change it needs to make, so the PR's own
+ * branch never carries den's edits. */
+export function scratchBranch(branch: string | null | undefined): string {
+  return `andria/changes-to-${branch || "this-pr"}`;
 }
 
 /** The system-prompt instruction telling the main Claude to log progress to its
@@ -100,20 +127,37 @@ function progressInstruction(file: string): string {
   );
 }
 
-/** System-prompt instruction for a PR-review pane. The session is strictly
- * read-only (no shell; the only writable path is the notepad — see
- * ensureReviewPerms), so it reads the diff from a file den provides and saves its
+/** System-prompt instruction for a PR-review pane. The session has a full shell
+ * (see buildReviewPermissions), so the rules that keep it from touching the PR
+ * live here: never commit, never push, and any change it needs to make goes on a
+ * local scratch branch. It reads the diff from a file den provides and saves its
  * review to the notepad, which den renders beside the diff. Shared by create()
  * and restart() so the wiring survives a restart. */
-function reviewInstruction(notepad: string, diffFile: string): string {
+function reviewInstruction(
+  notepad: string,
+  diffFile: string,
+  branch: string | null | undefined,
+): string {
+  const scratch = scratchBranch(branch);
   return (
-    `You're reviewing a GitHub pull request inside a tool called "den". This is a ` +
-    `strictly read-only review session: you have NO shell (the Bash tool is ` +
-    `disabled) and you cannot modify the PR in any way — only read it. The PR's ` +
-    `full unified diff is saved at ${diffFile}; read that first, then read the ` +
-    `changed files in your working directory for surrounding context. Save your ` +
-    `finished review as markdown to the absolute path ${notepad} (create or ` +
-    `overwrite it) — that is the one file you are allowed to write. den splits ` +
+    `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
+    `someone else's work and your job is to review it, not to change it. You have ` +
+    `a full shell and can run anything you need to understand the change — the ` +
+    `tests, a build, git history, gh reads. But these rules are absolute:\n` +
+    `1. NEVER commit. Not on the PR's branch, not anywhere.\n` +
+    `2. NEVER push, and never post anything to GitHub — no \`git push\`, no ` +
+    `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
+    `review goes in the notepad file named below and nowhere else — the developer ` +
+    `decides what, if anything, reaches GitHub.\n` +
+    `3. If you need to change files — to test a fix, reproduce a bug, or check a ` +
+    `suspicion — first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
+    `(or \`git checkout ${scratch}\` if it already exists), then edit there. Keep ` +
+    `it local and uncommitted, and say so in your review rather than leaving it ` +
+    `as a surprise. Never leave the PR's own branch modified.\n` +
+    `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +
+    `read the changed files in your working directory for surrounding context. ` +
+    `Save your finished review as markdown to the absolute path ${notepad} ` +
+    `(create or overwrite it) — that file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
     `structure it exactly like this: first the general review (short summary, ` +
     `then any cross-cutting risks), then one "## <file path>" heading per file ` +
@@ -571,16 +615,17 @@ class SessionManager {
       if (opts.view === "review") {
         const file = this.ensureNotepad(groupId, "");
         const diffFile = this.ensureReviewDiff(groupId, opts.reviewDiff);
-        const settingsFile = this.ensureReviewPerms(groupId, cwd);
+        const settingsFile = this.ensureReviewPerms(groupId);
         s.spawnArgs = [
           "--session-id", s.claudeSessionId, "-n", name,
-          // Lock the pane to strictly read-only (no shell; only the notepad is
-          // writable). --permission-mode default keeps the deny rules in force.
+          // The pane has a normal shell; the settings file carries the deny
+          // backstop (no push/commit/gh writes) and the notepad allow.
+          // --permission-mode default keeps the deny rules in force.
           "--settings", settingsFile,
           "--permission-mode", "default",
           "--add-dir", PROGRESS_DIR,
           "--add-dir", REVIEW_DIR,
-          "--append-system-prompt", reviewInstruction(file, diffFile),
+          "--append-system-prompt", reviewInstruction(file, diffFile, branch),
         ];
       } else {
         s.spawnArgs = ["--session-id", s.claudeSessionId, "-n", name];
@@ -687,20 +732,20 @@ class SessionManager {
         "--append-system-prompt", progressInstruction(file),
       ];
     }
-    // A review pane keeps its read-only lockdown + notepad wiring so a revived
-    // review still can't touch the PR and still saves (and shows) its review.
+    // A review pane keeps its guardrails + notepad wiring so a revived review
+    // still won't commit/push the PR and still saves (and shows) its review.
     if (s.view === "review") {
       mkdirSync(PROGRESS_DIR, { recursive: true });
       const file = notepadPath(s.groupId);
       const diffFile = this.ensureReviewDiff(s.groupId);
-      const settingsFile = this.ensureReviewPerms(s.groupId, s.cwd);
+      const settingsFile = this.ensureReviewPerms(s.groupId);
       return [
         ...resume,
         "--settings", settingsFile,
         "--permission-mode", "default",
         "--add-dir", PROGRESS_DIR,
         "--add-dir", REVIEW_DIR,
-        "--append-system-prompt", reviewInstruction(file, diffFile),
+        "--append-system-prompt", reviewInstruction(file, diffFile, s.branch),
       ];
     }
     return resume;
@@ -795,11 +840,12 @@ class SessionManager {
     return true;
   }
 
-  // --- PR-review read-only lockdown ---
+  // --- PR-review guardrails ---
 
-  /** Write the PR's diff to a file the review session can read (it has no shell
-   * to fetch it itself). Pass `diff` on create; omit on restart to keep whatever
-   * was captured before. Returns the file path. */
+  /** Write the PR's diff to a file the review session can read, so the whole
+   * change is in front of it without a `gh pr diff` round-trip. Pass `diff` on
+   * create; omit on restart to keep whatever was captured before. Returns the
+   * file path. */
   private ensureReviewDiff(groupId: string, diff?: string): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
     const file = reviewDiffPath(groupId);
@@ -808,19 +854,12 @@ class SessionManager {
     return file;
   }
 
-  /** Write a per-session Claude settings file that locks a review pane to
-   * strictly read-only (see buildReviewPermissions for the rules) and return its
-   * path, for `--settings`. The worktree cwd is realpath'd first so a symlinked
-   * path can't dodge the deny. */
-  private ensureReviewPerms(groupId: string, worktreeCwd: string): string {
+  /** Write a per-session Claude settings file carrying a review pane's deny
+   * backstop + notepad allow (see buildReviewPermissions) and return its path,
+   * for `--settings`. */
+  private ensureReviewPerms(groupId: string): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
-    let wt = worktreeCwd;
-    try {
-      wt = realpathSync(worktreeCwd);
-    } catch {
-      // cwd gone / not yet created — fall back to the given path
-    }
-    const settings = buildReviewPermissions(wt, notepadPath(groupId));
+    const settings = buildReviewPermissions(notepadPath(groupId));
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));
     return file;

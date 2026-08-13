@@ -127,11 +127,12 @@ WebSocket; everything else is REST.
     then one `## <file path>` heading per file; the view polls that notepad, so the
     review is shown next to the code it's about *and* kept as a record.
     Review panes carry a notepad — `create()`/`restartArgs` wire it for
-    `view === "review"`. **Review panes are locked to strictly read-only** (see
-    Security posture): no shell, and the notepad is the only writable path, so a
-    review can never touch the PR. Since it has no shell to run `gh pr diff`, den
-    fetches the diff (`app.ts`) into `~/.den/review/<groupId>.diff` for the
-    session to Read); `PrMyView` (your PRs — description, top-level `Notes`, and
+    `view === "review"`. **A review pane has a full shell** (running the tests or
+    trying a fix is part of reviewing) but **must never commit or push** — see
+    Security posture for the instruction + deny backstop that holds that line. den
+    still fetches the diff (`app.ts`) into `~/.den/review/<groupId>.diff` so the
+    whole change is in front of the session without a round-trip);
+    `PrMyView` (your PRs — description, top-level `Notes`, and
     `InlineComments`: line-level comments grouped by file, each shown with its
     diff hunk — **resolved threads are hidden by default** behind a "show N
     resolved" toggle so the tab focuses on what still needs action); `ToClaude`
@@ -333,18 +334,29 @@ local control plane, not a public API:
   read as a flag; `fs.ts` `within()` realpaths the nearest existing ancestor so a
   symlink inside `$HOME` can't escape it; notepad `groupId` is validated
   (`isValidGroupId`) against traversal.
-- **PR-review panes are strictly read-only.** Reviewing someone else's PR must
-  never modify their branch, so a `view === "review"` session is spawned with a
-  generated per-session settings file (`--settings`, `--permission-mode default`)
-  whose `permissions` (`buildReviewPermissions` in `sessions.ts`, unit-tested)
-  **deny `Bash`** (no shell → no `git push`/`commit`, no `gh pr` write, no
-  `sed -i`/redirects) and **deny `Edit(//<realpath'd-worktree>/**)`** (Edit rules
-  gate Write/MultiEdit/NotebookEdit too). A `deny` is a hard block — it can't be
-  overridden by an approval prompt. The only writable path is the notepad
-  (`allow: Edit(//<notepad>)`, outside the worktree), so the review saves without
-  a prompt. Read/Grep/Glob stay available; the diff is handed over as a file to
-  Read (`~/.den/review/<groupId>.diff`) since there's no shell to fetch it. (No
-  GitHub MCP is configured, so with `Bash` gone there is no tool path to the PR.)
+- **PR-review panes: full shell, but never commit or push.** Reviewing someone
+  else's PR properly means running their tests, bisecting a suspicion, trying a
+  fix — so a `view === "review"` pane is a normal Claude session with a shell.
+  (It was strictly read-only, `deny: ["Bash", Edit(worktree)]`, until 2026-08-13;
+  that made real review work impossible. Don't reintroduce the Bash deny.) What
+  holds the line now is two layers:
+  1. **The instruction** (`reviewInstruction` in `sessions.ts`) — the primary
+     guard, and the one to edit if the rules change: never commit, never push,
+     never post to GitHub, and any file change goes on a local scratch branch
+     `andria/changes-to-<pr branch>` (`scratchBranch`), left uncommitted, so the
+     PR's own branch is never the one carrying den's edits.
+  2. **A deny backstop** in the generated per-session settings file
+     (`--settings`, `--permission-mode default`; `buildReviewPermissions`,
+     unit-tested): `Bash(git push:*)`, `Bash(git commit:*)`, the writing `gh pr`
+     subcommands (`merge`/`review`/`comment`/`edit`/`close`/`reopen`/`ready`),
+     `gh issue comment`, and `gh api`. A `deny` can't be prompted past, and
+     `gh pr view|diff|checks` stay open for reading. It is a backstop, **not** a
+     sandbox: a shell can still reach those places another way (`git -C`, a
+     wrapper script, an alias), which is why the instruction carries the weight.
+  The one `allow` is the notepad (`Edit(//<notepad>)`), so the finished review
+  saves without a prompt; everything else prompts as usual. The diff is still
+  handed over as a file (`~/.den/review/<groupId>.diff`) so the whole change is
+  in front of the session immediately.
 - The Linear key lives only in `~/.den/den.db` (gitignored) or `$LINEAR_API_KEY`;
   it's never returned to the client or logged. Errors are sanitized before
   reaching the client (`server/log.ts` `logWarn` keeps details server-side).
