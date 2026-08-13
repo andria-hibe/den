@@ -1328,64 +1328,64 @@ body {
   display: flex;
   flex-direction: column;
 }
-.pr-diff-wrap,
-.pr-bottom {
+/* Upper region of the review view: one scroll region holding the general review
+   then the annotated diff (the Review tab). */
+.pr-review-scroll {
+  flex: 1;
   min-height: 0;
-  display: flex;
-}
-/* Top region of the review view: diff on the left, den's review on the right. */
-.pr-top-split {
-  min-height: 0;
-  display: flex;
-}
-.pr-diff-wrap {
-  min-width: 0;
-}
-.pr-review-col {
-  min-width: 0;
+  overflow-y: auto;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
-  border: 2px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-panel);
-  overflow: hidden;
+  gap: 10px;
 }
-.pr-review-col .pr-review-head {
+.pr-review-overall {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pr-review-overall .placeholder {
+  padding: 2px 0;
+}
+/* Waiting on the review: the walking fox sits with the first line of the note,
+   not centred against the whole wrapped block. */
+.pr-review-overall .loading-row {
+  align-items: flex-start;
+  padding: 4px 0;
+}
+.pr-review-overall .loading-row img {
   flex: none;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
 }
-.pr-review-col .pr-review-head h4 {
-  margin: 0;
+.pr-review-overall .pr-review-head h4 {
+  margin: 0 0 2px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--ink-soft);
 }
-.pr-review-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 14px;
-  font-size: 13px;
-  line-height: 1.55;
-}
+/* Scrolls with .pr-review-scroll — the diff is part of that one region. No
+   `overflow` here: it would become the scrollport the sticky notes column sticks
+   to (and can't scroll), so the notes would never follow the hunks. The corners
+   are rounded on the first/last block's columns instead of clipped. */
 .diff-view {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex: none;
   background: var(--term-bg);
   border-radius: 12px;
 }
+.diff-file-block:first-child .diff-notes-col { border-top-left-radius: 12px; }
+.diff-file-block:last-child .diff-notes-col { border-bottom-left-radius: 12px; }
+.diff-file-block:first-child .diff-lines-col { border-top-right-radius: 12px; }
+.diff-file-block:last-child .diff-lines-col { border-bottom-right-radius: 12px; }
 .diff-file-block {
   display: grid;
-  grid-template-columns: minmax(150px, 30%) 1fr;
+  grid-template-columns: minmax(190px, 36%) 1fr;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 .diff-file-block:first-child {
   border-top: none;
 }
-.diff-summary-col {
+/* The review's comments for this file, sticky so they stay visible while you
+   scroll through its hunks. */
+.diff-notes-col {
   position: sticky;
   top: 0;
   align-self: start;
@@ -1394,7 +1394,7 @@ body {
   background: var(--term-bg);
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
-.diff-sum-file {
+.diff-note-file {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 10.5px;
   font-weight: 700;
@@ -1402,12 +1402,33 @@ body {
   margin-bottom: 5px;
   word-break: break-all;
 }
-.diff-sum-text {
+.diff-note-md {
   font-size: 12px;
   line-height: 1.5;
   color: #d9cfe0;
 }
-.diff-sum-review {
+.diff-note-md > :first-child { margin-top: 0; }
+.diff-note-md > :last-child { margin-bottom: 0; }
+.diff-note-md h4,
+.diff-note-md h3 { font-size: 12px; margin: 8px 0 3px; color: #cdb4f6; }
+.diff-note-md ul { padding-left: 16px; margin: 4px 0; }
+.diff-note-md li { margin: 4px 0; }
+.diff-note-md code {
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: #f0e6f5;
+}
+.diff-note-md pre {
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.diff-note-empty {
+  font-size: 11.5px;
+  font-style: italic;
+  color: #8a7a95;
+}
+.diff-note-review {
   margin-left: 0;
   margin-top: 8px;
 }
@@ -1419,11 +1440,42 @@ body {
   font-size: 12px;
   line-height: 1.45;
 }
+/* A line is [old no.][new no.] + text. `max-content` width (floored at the
+   scrollport) so the row's tint runs the full length of a long line, not just
+   the visible part. */
 .diff-line {
-  padding: 0 10px;
-  white-space: pre;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
   color: #d9cfe0;
 }
+.diff-text {
+  white-space: pre;
+  padding-right: 10px;
+}
+/* Sticky so the numbers stay put when a wide line scrolls sideways. It covers
+   the row, so it repaints the row's own tint (a translucent layer over the
+   terminal background) rather than letting the text slide under a clear panel. */
+.diff-gutter {
+  position: sticky;
+  left: 0;
+  flex: none;
+  display: flex;
+  gap: 5px;
+  padding: 0 9px 0 6px;
+  background: var(--term-bg);
+  user-select: none;
+}
+.diff-num {
+  width: 4ch;
+  text-align: right;
+  font-size: 10.5px;
+  color: #6c5f76;
+}
+.diff-num-new { color: #8f809a; }
+.diff-add .diff-gutter { background: linear-gradient(rgba(63, 191, 127, 0.13) 0 100%), var(--term-bg); }
+.diff-del .diff-gutter { background: linear-gradient(rgba(255, 92, 122, 0.13) 0 100%), var(--term-bg); }
+.diff-hunk .diff-gutter { background: linear-gradient(rgba(180, 216, 246, 0.08) 0 100%), var(--term-bg); }
 .diff-file { color: #cdb4f6; font-weight: 700; margin-top: 8px; }
 .diff-meta { color: #8a7a95; }
 .diff-hunk { color: #7fb0d8; background: rgba(180, 216, 246, 0.08); }
@@ -1582,14 +1634,15 @@ body {
   line-height: 1.45;
   border-bottom: 1px solid var(--border);
 }
-.diff-hunk-block .diff-line {
-  padding: 0 10px;
-  white-space: pre;
-}
-/* The line the comment is anchored to. */
+/* The line the comment is anchored to. The marker is repeated on the gutter,
+   which sits above the line's own inset shadow. */
 .diff-hunk-block .diff-anchor {
   box-shadow: inset 3px 0 0 var(--pink-deep);
   background: rgba(255, 183, 213, 0.14);
+}
+.diff-hunk-block .diff-anchor .diff-gutter {
+  background: linear-gradient(rgba(255, 183, 213, 0.14) 0 100%), var(--term-bg);
+  box-shadow: inset 3px 0 0 var(--pink-deep);
 }
 .pr-prereview {
   display: flex;

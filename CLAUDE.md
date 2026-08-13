@@ -50,14 +50,18 @@ WebSocket; everything else is REST.
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot).
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
-  review-requested → `isMine`); `getPrDetail` (body + reviews + issue comments +
+  review-requested → `isMine`); CI status from **`gh pr checks --json bucket`**
+  (deduped to the latest run per check — *not* `statusCheckRollup`; see the CI
+  gotcha below) summarized by `summarizeChecks`; `getPrDetail` (body + reviews + issue comments +
   **inline review comments** with `path`/`line`/`diffHunk` + a `resolved` flag,
   fetched via `gh api graphql` **reviewThreads** — the thread carries
   `isResolved`, which the REST comments endpoint omits, so the my-PR UI can hide
-  resolved comments); `getPrDiff`;
-  `reviewPr` (headless `claude -p` fed the diff → markdown, via `claudePrint`);
-  and `summarizePrDiff` (headless `claude -p` → `[{file, summary}]` JSON, one
-  line per file, for the review diff's side column).
+  resolved comments); `getPrDiff`; and `reviewPr` (headless `claude -p` fed the
+  diff → markdown, via `claudePrint`) — note `reviewPr` / `POST /api/github/pr/review`
+  are **currently unused by the UI**: the interactive review session does the
+  reviewing now. (`summarizePrDiff`, a second headless pass that produced one-line
+  per-file summaries for the review diff's side column, was removed when that
+  column became the session's own per-file review comments.)
 - `server/linear.ts` — Linear GraphQL (`@linear/sdk` not used; raw fetch).
   Assigned issues + `branchName` + `description`. Key in the settings table or
   `LINEAR_API_KEY`. Scoped to whatever workspace the key belongs to (runn, for
@@ -68,7 +72,7 @@ WebSocket; everything else is REST.
 - `server/discover.ts` — lists past Claude sessions from
   `~/.claude/projects/**/*.jsonl` (for resume). Titles each from its `summary`
   or first real user message; **drops** den's own headless `claude -p` helpers
-  (PR diff-summary / review prompts) and empty/aborted sessions (no summary +
+  (PR review / diff-summary prompts) and empty/aborted sessions (no summary +
   no user prose), and scans past the limit to still fill it after skips.
 - `server/fs.ts` — home-sandboxed directory browsing + `roots()`
   (documents / work / **workRepo** / projects). `workRepo` is the primary git
@@ -93,14 +97,35 @@ WebSocket; everything else is REST.
   `TicketDialog`, `PrDialog`, `PrViews` (PrReviewView/PrMyView), `DiffView`,
   `NotepadPane`, `NewSessionDialog`, `Fox`/`foxSprites` + `PixelFox`, `Splitter`,
   `useTerminal`, `markdown.ts`, `theme.css`.
-  - `DiffView.tsx` exports `classify(line)` (diff-line CSS class) + `DiffHunk`
-    (renders one `diff_hunk`, marks the anchored last line) besides `DiffView`
-    (per-file blocks: summary column left, diff right).
-  - `PrViews.tsx`: `PrReviewView` (others' PRs — diff + per-file summaries +
-    a **den's-review column beside the diff**: the session is told (via
-    `reviewInstruction`) to save its finished review as markdown to the workspace
-    notepad `~/.den/progress/<groupId>.md`; the view polls that notepad and
-    renders it, so the review is both shown next to the code and kept as a record.
+  - `DiffView.tsx` exports `classify(line)` (diff-line CSS class), `DiffHunk`
+    (renders one `diff_hunk`, marks the anchored last line), `lineNumbers(lines)`
+    (old/new file line numbers walked from each `@@ -a,b +c,d @@` header — only
+    *inside* a hunk, since the `---`/`+++` preamble also starts with `-`/`+`), and
+    `diffFiles(diff)` (the paths a diff touches — the keys review comments are
+    filed under), besides `DiffView` (per-file blocks: the review's comments for
+    that file in a sticky left column, diff right). Every line renders a two-column
+    number gutter (`.diff-gutter`, old then new) so a review saying "line 448" can
+    be found in the diff; the gutter is `position: sticky; left: 0` and repaints
+    the row's tint, so numbers survive scrolling a wide line sideways.
+  - `reviewNotes.ts` — pure `parseReview(md, files)` → `{ overall, byFile }`:
+    splits the review markdown a review session writes to its notepad into the
+    general review plus per-file sections, keyed by `## <path>` headings. Matching
+    is forgiving (backticks, shortened paths, trailing prose, fenced `#` lines);
+    unit-tested in `reviewNotes.test.ts`. **A heading that fails to match falls
+    into the previous file's column** — the failure mode to watch. Two guards:
+    only *matched* emphasis pairs are stripped (`stripEmphasis`), because stripping
+    `_` wholesale broke every snake_case path (`query_notification_subscriptions.test.ts`);
+    and a heading that `looksLikePath` but matches no file in the diff ends the
+    current section and is appended to `overall` instead of misfiling.
+  - `PrViews.tsx`: `PrReviewView` (others' PRs — **two regions, one splitter**, so
+    it works on a small screen: a tabbed pane above (**Review** / **Description**)
+    and the session below. The Review tab is one scroll region — the general review
+    first, then the diff with **each file's review comments beside that file's
+    hunks** (sticky, via `parseReview` → `DiffView notes=`). The session is told
+    (via `reviewInstruction`) to save its finished review as markdown to the
+    workspace notepad `~/.den/progress/<groupId>.md`, structured as general review
+    then one `## <file path>` heading per file; the view polls that notepad, so the
+    review is shown next to the code it's about *and* kept as a record.
     Review panes carry a notepad — `create()`/`restartArgs` wire it for
     `view === "review"`. **Review panes are locked to strictly read-only** (see
     Security posture): no shell, and the notepad is the only writable path, so a
@@ -169,7 +194,12 @@ back exited, and one click revives it.
   approved** no longer alerts. The pose is derived (in `App.tsx`) from three
   inputs — `prNeedsMe` + `prCount` + `linearNotifs` — not set inline. Else `happy`
   (open PRs) / `sit` (none). Sleeping fox in the empty state; walking fox in
-  loading rows. Sprites in `foxSprites.ts`; keep integer scale + stepped animation
+  loading rows (`.loading-row`) — PR/Linear fetches, and the PR review while
+  Claude is writing it. That last one is gated on a review having actually been
+  *requested* (`requested` in `PrReviewView`, set by the auto-paste or the "review
+  in session" button), not on the notepad being empty: an empty notepad usually
+  just means nobody asked yet, and a fox walking then would be a lie.
+  Sprites in `foxSprites.ts`; keep integer scale + stepped animation
   or they blur. **Click the status fox** for a popover showing all five poses
   (current one badged "now"); **hover the `den` wordmark** for the keyboard-shortcut
   cheat sheet.
@@ -216,12 +246,14 @@ back exited, and one click revives it.
   `unreadNotifications` (same GraphQL query); a pink `! N` badge shows in the work
   panel's linear header (links to the workspace inbox) and unread notifications
   push the topbar fox to `alert`.
-- **GitHub PR → Review / Edit**. Others' PRs: check out into a worktree, show the
-  diff + description + optional headless Claude review + a Claude session. The
-  review diff is grouped per file with a **left summary column** (headless Claude
-  one-liner per file) aligned to each file's block, so you can scan changes at a
-  glance. Your PRs: description + colleagues' reviews/comments + a Claude session
-  on the branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
+- **GitHub PR → Review / Edit**. Others' PRs: check out into a worktree, then
+  **one tabbed pane above (Review / Description) + the Claude session below** —
+  two regions, one splitter (it used to be four panes and three splitters, which
+  didn't fit a small screen). The Review tab reads top-to-bottom: the general
+  review, then the diff per file with **that file's review comments in the column
+  beside its hunks** (sticky, so they stay put while you scroll the code). Your
+  PRs: description + colleagues' reviews/comments + a Claude session on the
+  branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
 - **Inline comments → Claude** (your PRs). The my-PR info pane has **two tabs**
   (`PrMyView`): *Description & comments* (description + top-level reviews/comments)
   and *Inline comments* — line-level review comments grouped by file, each rendered
@@ -229,7 +261,25 @@ back exited, and one click revives it.
   it's about. Every review / comment / inline comment has a **"→ Claude"** button
   that pastes a framed instruction (author, `file:line`, body, diff hunk) into
   the session's Claude prompt via `POST /api/sessions/:id/paste` (bracketed
-  paste — keeps multi-line as one entry, does **not** auto-submit).
+  paste — keeps multi-line as one entry, does **not** auto-submit: you read it,
+  then press Enter).
+- **`submit: true` on the paste route** = press Enter too, for the actions that
+  mean "do this now": the "Have Claude pre-review the diff" option and the "review
+  in session" button, which used to need a second click in the terminal. Three
+  things make it safe/reliable, all worth keeping:
+  1. The CR is written by the server, never carried in `text` — `sanitizePaste`
+     strips CR from content, so a PR comment can't submit itself (tested).
+  2. It's a **separate write ~250ms after** the paste (`PASTE_SUBMIT_DELAY_MS`):
+     Claude's TUI ingests a paste asynchronously and an Enter in the same chunk can
+     beat the input box.
+  3. A submit first **waits for the pane to be ready** (`waitUntilIdle` /
+     `ptyLooksIdle` in `sessions.ts`: output seen, then quiet ~800ms). A freshly
+     spawned Claude *silently drops* input while it's drawing — measured on a real
+     session, a paste at 6s vanished and the same paste at 12s landed — so the old
+     fixed 2s client delay was a coin flip. Verified: paste fired 0ms after spawn,
+     server held 1.4s, prompt landed and Claude answered.
+  Auto pre-review fires once: `PrReviewView` calls `onAutoReviewStarted` so App
+  clears `autoReviewPr`, otherwise revisiting the session re-ran the whole review.
 - **Colour picker**: the workspace-header colour is a single dot button that pops
   the swatch list on click (was always-on swatches eating header space). The
   topbar title chip sizes to its content, ellipsis only on overflow.
@@ -249,6 +299,20 @@ back exited, and one click revives it.
   on `.term-host-wrap`; the inner `.term-host` (fit target) stays padding-free.
 - **OSC titles**: parsed only for claude panes (shells retitle to cwd/command and
   flap). Ticket/PR sessions lock the title so it stays descriptive.
+- **CI status must come from `gh pr checks`, never `statusCheckRollup`.** The
+  rollup lists *every* check run, including **superseded** ones, so a check that
+  was re-run and went green still carries its old `FAILURE` row and the PR reads
+  as failing forever (hit on Runn-Fast/runn#20662: 116 rollup rows vs 99 real
+  checks, one stale "Validate PR title" failure; it also inflated pass counts,
+  e.g. 81 of 100 rows where the truth was 79). It's additionally capped at ~100
+  contexts and runn PRs sit at 96–98, so bigger PRs would silently drop checks.
+  `gh pr checks --json bucket` is deduped to the latest run per check and
+  uncapped. Gotcha: it uses its **exit code as a status** (1 failing, 8 pending)
+  while still printing the `--json` payload, so it's called via `ghAllowFail`,
+  which recovers `err.stdout` instead of throwing. A PR with no CI at all exits 1
+  with an *empty* payload and "no checks reported" on stderr — that's a
+  legitimate `none`; any *other* empty payload logs a warning so a future `gh`
+  behaviour change surfaces instead of silently reading as "no checks".
 - **git commits sign via 1Password** (`commit.gpgsign=true`, ssh). If it's locked
   the commit fails with "1Password: failed to fill whole buffer" — retry when
   unlocked, or `--no-gpg-sign` and re-sign later. Commit trailer:
@@ -311,7 +375,7 @@ testable (export it) and add a case. Beyond that, verification is scripted + vis
   or (as the arrow-nav does) drive focus with an explicit class instead of relying
   on `:focus-visible`.
 - Verify data/endpoints against **real** PRs/tickets (e.g. `getPrDetail`,
-  `summarizePrDiff`, the paste endpoint) with a short Node fetch script on an
+  `getPrDiff`, the paste endpoint) with a short Node fetch script on an
   isolated server — separate from the visual layout check above.
 - In this sandbox, spawning Electron/`gh`/`claude`/git needs
   `dangerouslyDisableSandbox: true`.
@@ -358,10 +422,12 @@ testable (export it) and add a case. Beyond that, verification is scripted + vis
    *transitions* (a background session ringing the bell; a PR newly needing you),
    seeding startup state silently so a launch never spams.
 9. **Token awareness**: headless PR review + progress logging spend tokens — add
-   visible toggles / cost hints.
-10. **Diff view**: now grouped per file with a Claude summary column (review) and
-    per-comment hunks (my-PR). Still missing: syntax highlighting + collapsible
-    files. **Notepad**: auto-scroll to newest.
+   visible toggles / cost hints. (One spend removed: the review diff's per-file
+   column is now filled by the review session itself, so the separate headless
+   `summarizePrDiff` pass is gone.)
+10. **Diff view**: grouped per file, with the review's per-file comments beside
+    each file (review) and per-comment hunks (my-PR). Still missing: syntax
+    highlighting + collapsible files. **Notepad**: auto-scroll to newest.
 11. **Dual-ABI friction**: consider shipping prebuilt binaries for both Node and
     Electron so `dev` and `app` don't need rebuilds when switching.
 12. ~~**Tests**: add a real suite.~~ **Started** — vitest covers the pure logic

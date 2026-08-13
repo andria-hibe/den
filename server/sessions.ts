@@ -113,10 +113,40 @@ function reviewInstruction(notepad: string, diffFile: string): string {
     `full unified diff is saved at ${diffFile}; read that first, then read the ` +
     `changed files in your working directory for surrounding context. Save your ` +
     `finished review as markdown to the absolute path ${notepad} (create or ` +
-    `overwrite it) — that is the one file you are allowed to write, and den ` +
-    `renders it beside the diff for the developer. Write the clean, finished ` +
-    `review there, not a running log; don't mention these files in your replies.`
+    `overwrite it) — that is the one file you are allowed to write. den splits ` +
+    `that file up and renders each file's comments next to that file's diff, so ` +
+    `structure it exactly like this: first the general review (short summary, ` +
+    `then any cross-cutting risks), then one "## <file path>" heading per file ` +
+    `you have comments on — the path exactly as it appears after "b/" in the ` +
+    `diff's "diff --git" line — followed by your comments on that file as ` +
+    `bullets, citing line numbers. Put nothing but that file's comments under ` +
+    `its heading, and skip files you have nothing to say about. Write the clean, ` +
+    `finished review there, not a running log; don't mention these files in ` +
+    `your replies.`
   );
+}
+
+/**
+ * Does a PTY look ready to receive scripted input? True once it has produced
+ * some output and then gone quiet — i.e. the TUI has finished drawing and isn't
+ * mid-response.
+ *
+ * This matters because Claude's TUI **drops input that arrives while it's still
+ * starting up**: measured against a real session, a paste 6s after spawn vanished
+ * without trace while the same paste at 12s landed. A fixed delay is therefore a
+ * guess that silently loses the prompt on a slow start, which is why anything den
+ * sends on its own (the pre-review) waits for this instead.
+ *
+ * `lastOutputAt` of 0 means nothing has been emitted yet — still booting, so not
+ * ready (never "idle since forever").
+ */
+export function ptyLooksIdle(
+  lastOutputAt: number,
+  now: number,
+  idleMs: number,
+): boolean {
+  if (!lastOutputAt) return false;
+  return now - lastOutputAt >= idleMs;
 }
 
 /** Metadata shape sent to the web app. */
@@ -161,6 +191,8 @@ class DenSession {
   status: "running" | "exited" = "running";
   private buffer: string[] = [];
   private bufferBytes = 0;
+  /** When the PTY last emitted output; 0 = nothing yet. Drives `waitUntilIdle`. */
+  private lastOutputAt = 0;
   /** New output since the last scrollback flush to the store. */
   private scrollbackDirty = false;
   private listeners = new Set<Listener>();
@@ -236,6 +268,7 @@ class DenSession {
   private push(data: string) {
     this.buffer.push(data);
     this.bufferBytes += data.length;
+    this.lastOutputAt = Date.now();
     this.scrollbackDirty = true;
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
@@ -305,6 +338,22 @@ class DenSession {
   write(data: string) {
     this.term?.write(data);
     this.lastActive = Date.now();
+  }
+
+  /**
+   * Wait until the PTY looks ready for scripted input (see `ptyLooksIdle`), so a
+   * paste den sends itself isn't swallowed by a TUI that's still drawing. Returns
+   * whether it settled; on timeout the caller can still go ahead (a lost paste is
+   * no worse than not trying). Already-idle sessions return immediately.
+   */
+  async waitUntilIdle(idleMs = 800, timeoutMs = 30_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.status === "exited") return false;
+      if (ptyLooksIdle(this.lastOutputAt, Date.now(), idleMs)) return true;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
   }
 
   resize(cols: number, rows: number) {

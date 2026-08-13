@@ -9,22 +9,30 @@ export function ToClaude({
   label = "→ Claude",
   title = "Paste this into Claude to action it",
   className = "",
+  onSent,
+  submit = false,
 }: {
   sessionId: string;
   text: string;
   label?: string;
   title?: string;
   className?: string;
+  /** Fired once the paste lands — lets the caller show a "working on it" state. */
+  onSent?: () => void;
+  /** Press Enter for the user too. For buttons that mean "do this now" (the
+   * review); the comment buttons leave it off so you can read before sending. */
+  submit?: boolean;
 }) {
   const [sent, setSent] = useState(false);
   const send = () => {
     fetch(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, submit }),
     })
       .then(() => {
         setSent(true);
+        onSent?.();
         setTimeout(() => setSent(false), 2000);
       })
       .catch(() => {});

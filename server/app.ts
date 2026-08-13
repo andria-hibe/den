@@ -9,7 +9,6 @@ import {
   getPrDetail,
   getPrDiff,
   reviewPr,
-  summarizePrDiff,
   isValidRepo,
   type PrBuckets,
 } from "./github.ts";
@@ -49,6 +48,11 @@ export function sanitizePaste(text: string): string {
   // submit input in a pane that isn't honouring bracketed paste (e.g. a shell).
   return text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 }
+
+// Beat between a bracketed paste and the carriage return that submits it (for
+// `POST /api/sessions/:id/paste` with `submit`), so Claude's TUI has taken the
+// text into its input box before Enter arrives.
+const PASTE_SUBMIT_DELAY_MS = 250;
 
 // Single-quote a path for a POSIX shell (wraps the ' → '\'' escape). Used to
 // build the `cd <dir> && …` command written into a spin-up shell tab.
@@ -253,11 +257,27 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
-  // Paste text into a session's Claude prompt (bracketed paste keeps multi-line
-  // input as one entry and does not auto-submit — the user reviews then sends).
+  // Paste text into a session's Claude prompt. Bracketed paste keeps multi-line
+  // input as one entry; by default it does NOT auto-submit (the "→ Claude"
+  // comment buttons want you to read it first).
+  //
+  // `submit: true` follows the paste with a carriage return, for the actions that
+  // mean "do this now" (den's own pre-review prompt). The CR is generated here,
+  // never carried by `text` — `sanitizePaste` still strips CR from the content, so
+  // an attacker-supplied PR comment can't submit itself by embedding one. It goes
+  // in a separate write after a short beat: Claude's TUI ingests the paste
+  // asynchronously, and a CR in the same chunk can land before the input box has
+  // taken the text.
+  //
+  // A submit also waits for the pane to be ready first (`waitUntilIdle`): a
+  // freshly spawned Claude drops input while it's still drawing, and "send this
+  // now" that silently vanishes is worse than one that takes a moment.
   app.post("/api/sessions/:id/paste", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { text } = (req.body ?? {}) as { text?: string };
+    const { text, submit } = (req.body ?? {}) as {
+      text?: string;
+      submit?: boolean;
+    };
     const session = sessions.get(id);
     if (!session) {
       reply.code(404);
@@ -267,8 +287,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "text_required" };
     }
+    let ready: boolean | undefined;
+    if (submit) ready = await session.waitUntilIdle();
     session.write(`\x1b[200~${sanitizePaste(text)}\x1b[201~`);
-    return { ok: true };
+    if (submit) {
+      await new Promise((r) => setTimeout(r, PASTE_SUBMIT_DELAY_MS));
+      session.write("\r");
+    }
+    return { ok: true, submitted: !!submit, ready };
   });
 
   // Can the app this workspace is working on be run locally? Returns how to run
@@ -423,26 +449,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       logWarn("github.review", err);
       reply.code(502);
       return { error: "review_failed", message: "Claude review failed." };
-    }
-  });
-
-  // Per-file one-line summaries of a PR's diff (for the side column).
-  app.post("/api/github/pr/diff-summary", async (req, reply) => {
-    const { repo, number } = (req.body ?? {}) as {
-      repo?: string;
-      number?: number;
-    };
-    const n = prNumber(number);
-    if (!repo || !isValidRepo(repo) || n === null) {
-      reply.code(400);
-      return { error: "repo_and_number_required" };
-    }
-    try {
-      return { summaries: await summarizePrDiff(repo, n) };
-    } catch (err) {
-      logWarn("github.diffSummary", err);
-      reply.code(502);
-      return { error: "summary_failed", message: "Diff summary failed." };
     }
   });
 

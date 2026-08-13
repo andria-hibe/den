@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { prNumber, sanitizePaste } from "./app.ts";
+import { ptyLooksIdle } from "./sessions.ts";
 
 describe("prNumber (PR number coercion)", () => {
   it("accepts positive integers (string or number)", () => {
@@ -32,5 +33,30 @@ describe("sanitizePaste (PTY paste hardening)", () => {
   it("strips other control bytes (OSC title/clipboard, DEL, NUL)", () => {
     expect(sanitizePaste("a\x00b\x07c\x7fd")).toBe("abcd");
     expect(sanitizePaste("\x1b]0;pwned\x07")).toBe("]0;pwned");
+  });
+  // The paste route can append a CR itself (`submit: true`, used by the
+  // pre-review action). That must stay den's decision alone: content can never
+  // carry its own newline-as-submit, however it's spelled.
+  it("leaves no CR in the content for any spelling of a submit", () => {
+    for (const evil of ["do it\r", "do it\r\n", "a\rb\rc", "\x1b[201~\r"]) {
+      expect(sanitizePaste(evil)).not.toContain("\r");
+    }
+  });
+});
+
+describe("ptyLooksIdle (is a pane ready for a scripted paste?)", () => {
+  const now = 1_000_000;
+  it("is not ready before any output — still booting", () => {
+    // The important case: Claude drops input while it's starting up, and 0 must
+    // not read as "idle since the epoch".
+    expect(ptyLooksIdle(0, now, 800)).toBe(false);
+  });
+  it("is not ready while output is still flowing", () => {
+    expect(ptyLooksIdle(now - 100, now, 800)).toBe(false);
+    expect(ptyLooksIdle(now - 799, now, 800)).toBe(false);
+  });
+  it("is ready once output has been quiet for the idle window", () => {
+    expect(ptyLooksIdle(now - 800, now, 800)).toBe(true);
+    expect(ptyLooksIdle(now - 60_000, now, 800)).toBe(true); // long-idle session
   });
 });

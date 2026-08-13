@@ -1016,6 +1016,7 @@ export function App() {
             number={active.pr}
             sessionId={active.id}
             autoReview={autoReviewPr === active.pr}
+            onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}
             terminal={
               <TerminalView

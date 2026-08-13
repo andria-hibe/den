@@ -13,36 +13,50 @@ describe("summarizeChecks", () => {
     expect(summarizeChecks([]).state).toBe("none");
   });
 
-  it("fails if any CheckRun concluded in failure", () => {
-    const r = summarizeChecks([
-      { status: "COMPLETED", conclusion: "SUCCESS" },
-      { status: "COMPLETED", conclusion: "FAILURE" },
-    ]);
+  it("fails if any check's latest run failed", () => {
+    const r = summarizeChecks([{ bucket: "pass" }, { bucket: "fail" }]);
     expect(r.state).toBe("failing");
     expect(r.counts).toMatchObject({ passed: 1, failed: 1 });
   });
 
-  it("is pending while a CheckRun is still running", () => {
-    const r = summarizeChecks([
-      { status: "COMPLETED", conclusion: "SUCCESS" },
-      { status: "IN_PROGRESS" },
-    ]);
+  it("is pending while a check is still running", () => {
+    const r = summarizeChecks([{ bucket: "pass" }, { bucket: "pending" }]);
     expect(r.state).toBe("pending");
   });
 
-  it("ignores neutral/skipped conclusions", () => {
+  it("counts a fully green PR as passing", () => {
+    const r = summarizeChecks([{ bucket: "pass" }, { bucket: "pass" }]);
+    expect(r.state).toBe("passing");
+    expect(r.counts).toMatchObject({ passed: 2, failed: 0, pending: 0, total: 2 });
+  });
+
+  it("ignores skipped and cancelled checks", () => {
     const r = summarizeChecks([
-      { status: "COMPLETED", conclusion: "SKIPPED" },
-      { status: "COMPLETED", conclusion: "SUCCESS" },
+      { bucket: "skipping" },
+      { bucket: "cancel" },
+      { bucket: "pass" },
     ]);
     expect(r.state).toBe("passing");
     expect(r.counts.total).toBe(1);
   });
 
-  it("handles legacy StatusContext rows (state field)", () => {
-    expect(summarizeChecks([{ state: "FAILURE" }]).state).toBe("failing");
-    expect(summarizeChecks([{ state: "SUCCESS" }]).state).toBe("passing");
-    expect(summarizeChecks([{ state: "PENDING" }]).state).toBe("pending");
+  it("ignores an unrecognized bucket rather than inventing a failure", () => {
+    const r = summarizeChecks([{ bucket: "pass" }, { bucket: "something-new" }, {}]);
+    expect(r.state).toBe("passing");
+    expect(r.counts.total).toBe(1);
+  });
+
+  // The bug this source change fixes: the old statusCheckRollup kept superseded
+  // runs, so a re-run that went green still carried its stale FAILURE row and
+  // the PR read as failing forever. gh pr checks gives one row per check.
+  it("passes a PR whose failing check was re-run green (deduped input)", () => {
+    const r = summarizeChecks([
+      { bucket: "pass" }, // "Validate PR title", latest run
+      { bucket: "pass" },
+      { bucket: "skipping" },
+    ]);
+    expect(r.state).toBe("passing");
+    expect(r.counts.failed).toBe(0);
   });
 });
 

@@ -61,6 +61,24 @@ async function gh(args: string[]): Promise<string> {
   return stdout;
 }
 
+/**
+ * Like `gh()`, but for subcommands that use the **exit code as a status** and
+ * still print their `--json` payload. `gh pr checks` exits non-zero when checks
+ * are failing (1) or still running (8) — exactly the cases we most need to
+ * read — so a thrown error must not lose the output. promisified `execFile`
+ * attaches the captured streams to the error, so recover `stdout` from there.
+ */
+async function ghAllowFail(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    const { stdout, stderr } = await exec("gh", args, { maxBuffer: 20 * 1024 * 1024 });
+    return { stdout, stderr };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string };
+    if (typeof e.stdout !== "string") throw err; // a real spawn failure, not a status
+    return { stdout: e.stdout, stderr: e.stderr ?? "" };
+  }
+}
+
 interface SearchRow {
   number: number;
   title: string;
@@ -83,51 +101,62 @@ async function search(filter: string): Promise<SearchRow[]> {
   return JSON.parse(out) as SearchRow[];
 }
 
-interface RollupItem {
-  __typename?: string;
-  status?: string; // CheckRun: QUEUED|IN_PROGRESS|COMPLETED|PENDING|WAITING
-  conclusion?: string; // CheckRun: SUCCESS|FAILURE|SKIPPED|NEUTRAL|...
-  state?: string; // StatusContext: SUCCESS|FAILURE|ERROR|PENDING|EXPECTED
+/** One row of `gh pr checks --json bucket` (one check, latest run only). */
+export interface CheckRow {
+  /** gh's own rollup of a check's state: pass|fail|pending|skipping|cancel. */
+  bucket?: string;
 }
 
-const FAIL_CONCLUSIONS = new Set([
-  "FAILURE",
-  "TIMED_OUT",
-  "STARTUP_FAILURE",
-  "ACTION_REQUIRED",
-]);
-const NEUTRAL_CONCLUSIONS = new Set(["SKIPPED", "NEUTRAL", "CANCELLED"]);
-
-export function summarizeChecks(rollup: RollupItem[]): {
+/**
+ * Summarize a PR's CI from `gh pr checks` buckets.
+ *
+ * Sourced from `gh pr checks` rather than `gh pr view --json statusCheckRollup`
+ * on purpose: the rollup lists **every** check run including superseded ones, so
+ * a re-run that has since gone green still carries its old FAILURE row and the
+ * PR reads as failing forever (seen on Runn-Fast/runn#20662: 116 rollup rows vs
+ * 99 real checks, one stale "Validate PR title" failure). It is also capped at
+ * ~100 contexts, which runn PRs sit right at. `gh pr checks` is deduped to the
+ * latest run per check and uncapped, so it matches what GitHub shows you.
+ *
+ * `skipping`/`cancel` don't count either way (as SKIPPED/CANCELLED didn't
+ * before); an unrecognized bucket is ignored rather than invented as a failure.
+ */
+export function summarizeChecks(rows: CheckRow[]): {
   state: CheckState;
   counts: PullRequest["checkCounts"];
 } {
   let passed = 0;
   let failed = 0;
   let pending = 0;
-  for (const it of rollup) {
-    if (it.state !== undefined) {
-      // StatusContext
-      if (it.state === "FAILURE" || it.state === "ERROR") failed++;
-      else if (it.state === "SUCCESS") passed++;
-      else if (it.state === "PENDING" || it.state === "EXPECTED") pending++;
-      continue;
-    }
-    // CheckRun
-    if (it.status !== "COMPLETED") {
-      pending++;
-    } else if (it.conclusion && FAIL_CONCLUSIONS.has(it.conclusion)) {
-      failed++;
-    } else if (it.conclusion && NEUTRAL_CONCLUSIONS.has(it.conclusion)) {
-      // ignore for pass/fail
-    } else if (it.conclusion === "SUCCESS") {
-      passed++;
-    }
+  for (const r of rows) {
+    if (r.bucket === "pass") passed++;
+    else if (r.bucket === "fail") failed++;
+    else if (r.bucket === "pending") pending++;
   }
   const total = passed + failed + pending;
   const state: CheckState =
     total === 0 ? "none" : failed > 0 ? "failing" : pending > 0 ? "pending" : "passing";
   return { state, counts: { passed, failed, pending, total } };
+}
+
+/**
+ * `gh pr checks <n> --json bucket` for one PR, tolerant of its status exit
+ * codes. A PR with no CI at all exits 1 with an empty payload ("no checks
+ * reported on the 'x' branch") — that's a legitimate `none`, not an error.
+ */
+async function fetchChecks(repo: string, number: number): Promise<CheckRow[]> {
+  const { stdout, stderr } = await ghAllowFail([
+    "pr", "checks", String(number), "--repo", repo, "--json", "bucket",
+  ]);
+  if (!stdout.trim()) {
+    // Expected for a branch with no checks; anything else is worth surfacing.
+    if (!/no checks reported/i.test(stderr)) {
+      logWarn(`github.checks pr#${number} empty payload`, stderr.trim());
+    }
+    return [];
+  }
+  const parsed = JSON.parse(stdout) as CheckRow[];
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 export function reviewFrom(decision: string | null): ReviewState {
@@ -155,28 +184,39 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
   let branch: string | undefined;
   let checks = summarizeChecks([]);
   let review: ReviewState = "none";
-  try {
-    const out = await gh([
+  // Branch/review and CI come from two different gh subcommands (see
+  // summarizeChecks on why CI can't come from the rollup), so fetch them
+  // together and let each fail on its own — a CI hiccup shouldn't cost us the
+  // branch name, and vice versa.
+  const [meta, rows] = await Promise.allSettled([
+    gh([
       "pr",
       "view",
       String(row.number),
       "--repo",
       repo,
       "--json",
-      "headRefName,reviewDecision,statusCheckRollup",
-    ]);
-    const j = JSON.parse(out) as {
-      headRefName?: string;
-      reviewDecision?: string | null;
-      statusCheckRollup?: RollupItem[];
-    };
-    branch = j.headRefName;
-    checks = summarizeChecks(j.statusCheckRollup ?? []);
-    review = reviewFrom(j.reviewDecision ?? null);
-  } catch (err) {
+      "headRefName,reviewDecision",
+    ]),
+    fetchChecks(repo, row.number),
+  ]);
+  if (meta.status === "fulfilled") {
+    try {
+      const j = JSON.parse(meta.value) as {
+        headRefName?: string;
+        reviewDecision?: string | null;
+      };
+      branch = j.headRefName;
+      review = reviewFrom(j.reviewDecision ?? null);
+    } catch (err) {
+      logWarn(`github.enrich parse pr#${row.number}`, err);
+    }
+  } else {
     // Enrichment is best-effort; fall back to the search-level data.
-    logWarn(`github.enrich pr#${row.number}`, err);
+    logWarn(`github.enrich pr#${row.number}`, meta.reason);
   }
+  if (rows.status === "fulfilled") checks = summarizeChecks(rows.value);
+  else logWarn(`github.enrich checks pr#${row.number}`, rows.reason);
   return {
     number: row.number,
     title: row.title,
@@ -457,31 +497,3 @@ export async function reviewPr(repo: string, number: number): Promise<string> {
   return claudePrint(prompt, diff);
 }
 
-export interface FileSummary {
-  file: string;
-  summary: string;
-}
-
-/** Per-file one-line summaries of a PR's diff, for a scannable side column. */
-export async function summarizePrDiff(
-  repo: string,
-  number: number,
-): Promise<FileSummary[]> {
-  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
-  const prompt =
-    "Summarize this PR's unified diff (on stdin), one entry per changed file. " +
-    'Return ONLY a JSON array, no prose or code fences: [{"file": "<the path ' +
-    'exactly as it appears after "b/" in the file\'s "diff --git a/… b/…" ' +
-    'line>", "summary": "<one concise sentence: what changed in this file and ' +
-    'why>"}].';
-  const raw = await claudePrint(prompt, diff);
-  const m = raw.match(/\[[\s\S]*\]/);
-  if (!m) return [];
-  try {
-    const parsed = JSON.parse(m[0]) as FileSummary[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    logWarn("github.summarizePrDiff parse", err);
-    return [];
-  }
-}

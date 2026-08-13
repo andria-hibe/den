@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { DiffView, DiffHunk } from "./DiffView.tsx";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { DiffView, DiffHunk, diffFiles } from "./DiffView.tsx";
+import { Fox } from "./Fox.tsx";
 import { renderMarkdown } from "./markdown.ts";
+import { parseReview } from "./reviewNotes.ts";
 import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
 import { ToClaude } from "./ToClaude.tsx";
 
@@ -160,12 +162,15 @@ function InlineComments({
   );
 }
 
-/** Reviewing someone else's PR: diff on top, session + description/review below. */
+/** Reviewing someone else's PR: one tabbed pane above (the review — general
+ * notes then the diff, annotated per file — or the PR description), session
+ * below. Two regions, one splitter: it has to work on a small screen. */
 export function PrReviewView({
   repo,
   number,
   sessionId,
   autoReview,
+  onAutoReviewStarted,
   header,
   terminal,
 }: {
@@ -173,21 +178,30 @@ export function PrReviewView({
   number: number;
   sessionId: string;
   autoReview: boolean;
+  /** Fired once the auto pre-review has been sent, so it only ever fires once. */
+  onAutoReviewStarted?: () => void;
   header: ReactNode;
   terminal: ReactNode;
 }) {
   const detail = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
-  const [summaries, setSummaries] = useState<Record<string, string>>({});
-  const [loadingSummaries, setLoadingSummaries] = useState(true);
   const [review, setReview] = useState<string>("");
+  // A review has been asked for but hasn't landed in the notepad yet — the only
+  // state where a walking fox is honest (an empty notepad on its own just means
+  // nobody has asked yet).
+  const [requested, setRequested] = useState(false);
   const started = useRef(false);
-  const [diffFrac, setDiffFrac] = usePersistentNumber("den.prDiffFrac", 0.55);
-  const [reviewFrac, setReviewFrac] = usePersistentNumber("den.prReviewFrac", 0.62);
-  const [sessFrac, setSessFrac] = usePersistentNumber("den.prSessFrac", 0.55);
+  const [upperFrac, setUpperFrac] = usePersistentNumber("den.prDiffFrac", 0.6);
+  const [tab, setTab] = usePersistentString("den.prReviewTab", "review", [
+    "review",
+    "description",
+  ] as const);
   const rootRef = useRef<HTMLDivElement>(null);
-  const topRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // The review is filed per file by `## <path>` headings, so each file's
+  // comments can sit beside that file's diff; the rest is the general review.
+  const files = useMemo(() => diffFiles(diff), [diff]);
+  const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
 
   useEffect(() => {
     fetch(`/api/github/pr/diff?repo=${encodeURIComponent(repo)}&number=${number}`)
@@ -197,8 +211,8 @@ export function PrReviewView({
   }, [repo, number]);
 
   // The session writes its finished review to the workspace notepad (see
-  // reviewInstruction, server-side); poll it so the review column fills in as
-  // Claude produces it. sessionId === groupId for single-pane review panes.
+  // reviewInstruction, server-side); poll it so the review fills in as Claude
+  // produces it. sessionId === groupId for single-pane review panes.
   useEffect(() => {
     let stop = false;
     const load = () =>
@@ -214,123 +228,126 @@ export function PrReviewView({
     };
   }, [sessionId]);
 
-  // Per-file summaries for the side column (headless Claude — takes a bit).
-  useEffect(() => {
-    setLoadingSummaries(true);
-    fetch("/api/github/pr/diff-summary", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ repo, number }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        const map: Record<string, string> = {};
-        for (const s of d.summaries ?? []) map[s.file] = s.summary;
-        setSummaries(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingSummaries(false));
-  }, [repo, number]);
-
-  // Have the interactive Claude session (bottom-left) do the review, rather than
-  // a one-shot headless pass rendered into this pane. The PR is checked out in
-  // the session's worktree, so Claude can read the diff + surrounding code, and
-  // you can follow up with questions right there.
+  // Have the interactive Claude session (below) do the review, rather than a
+  // one-shot headless pass rendered into this pane. The PR is checked out in the
+  // session's worktree, so Claude can read the diff + surrounding code, and you
+  // can follow up with questions right there. The structure mirrors
+  // reviewInstruction (server/sessions.ts) so den can file it per file.
   const reviewPrompt =
     `Please review pull request #${number} (${repo}). This is a read-only review ` +
     `session with no shell — the PR's full diff has been saved to a file for you ` +
     `(see your instructions) and the PR is checked out in your working directory. ` +
-    `Read the diff, then read the changed files for context, and give a concise, ` +
-    `skimmable code review in markdown with sections: **Summary**, **Potential ` +
-    `bugs**, **Risky changes**, **Suggestions**. Reference specific files and ` +
-    `lines. If it looks solid, say so briefly.`;
+    `Read the diff, then read the changed files for context, and write your review ` +
+    `to the notepad as markdown in this shape: first the general review (a short ` +
+    `**Summary**, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
+    `heading per file you have comments on — exact path as it appears in the diff ` +
+    `— with your comments on that file as bullets citing line numbers. Skip files ` +
+    `you have nothing to say about. If it all looks solid, say so briefly.`;
 
-  // "Pre-review the diff": prime the session with the prompt once, shortly after
-  // mount so Claude has a moment to be ready. Like the → Claude buttons, the
-  // paste doesn't auto-submit — press Enter in the session to run it.
+  // "Have Claude pre-review the diff": send the prompt AND submit it — picking
+  // that option means "start the review", so it shouldn't also need an Enter in
+  // the session. No client-side delay: the server holds the request until the
+  // pane is ready (see the paste route), which a fixed timeout can't get right.
+  // onAutoReviewStarted lets App clear its flag, so coming back to this session
+  // later doesn't kick off the whole review a second time.
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
-    const t = setTimeout(() => {
-      fetch(`/api/sessions/${sessionId}/paste`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: reviewPrompt }),
-      }).catch(() => {});
-    }, 2000);
-    return () => clearTimeout(t);
+    setRequested(true);
+    fetch(`/api/sessions/${sessionId}/paste`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: reviewPrompt, submit: true }),
+    })
+      .then(() => onAutoReviewStarted?.())
+      .catch(() => setRequested(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReview]);
 
   return (
     <div className="pr-review" ref={rootRef}>
-      <div className="pr-top-split" ref={topRef} style={{ flex: `${diffFrac} 1 0` }}>
-        <div className="pr-diff-wrap" style={{ flex: `${reviewFrac} 1 0` }}>
-          <DiffView
-            diff={diff}
-            summaries={summaries}
-            loadingSummaries={loadingSummaries}
-            sessionId={sessionId}
-            prNumber={number}
-          />
+      <div className="ws-pane pr-info" style={{ flex: `${upperFrac} 1 0` }}>
+        <div className="pr-info-head">
+          <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
+          <div className="ticket-look-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "review"}
+              className={`look-tab${tab === "review" ? " active" : ""}`}
+              onClick={() => setTab("review")}
+            >
+              Review
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "description"}
+              className={`look-tab${tab === "description" ? " active" : ""}`}
+              onClick={() => setTab("description")}
+            >
+              Description
+            </button>
+          </div>
         </div>
-        <Splitter
-          dir="x"
-          onDrag={(d) =>
-            setReviewFrac((f) =>
-              clamp(f + d / (topRef.current?.clientWidth ?? 1), 0.3, 0.85),
-            )
-          }
-        />
-        <div className="pr-review-col" style={{ flex: `${1 - reviewFrac} 1 0` }}>
-          <div className="pr-review-head">
-            <h4>den&apos;s review</h4>
-            <ToClaude
+        {tab === "review" ? (
+          // One scroll region: the general review, then the diff with each
+          // file's comments beside it.
+          <div className="pr-review-scroll">
+            <div className="pr-review-overall">
+              <div className="pr-review-head">
+                <h4>den&apos;s review</h4>
+                <ToClaude
+                  sessionId={sessionId}
+                  text={reviewPrompt}
+                  label="review in session"
+                  title="Ask the Claude session below to review this diff"
+                  submit
+                  onSent={() => setRequested(true)}
+                />
+              </div>
+              {overall ? (
+                <Md text={overall} />
+              ) : requested ? (
+                <div className="loading-row">
+                  <Fox pose="walk" size={22} /> reviewing the diff… the general
+                  review lands here, and each file&apos;s comments beside its diff,
+                  as Claude writes.
+                </div>
+              ) : (
+                <div className="placeholder">
+                  Claude reviews the diff in the session below — click “review in
+                  session”, then press Enter. Its general review lands here and
+                  its per-file comments beside each file, as it writes.
+                </div>
+              )}
+            </div>
+            <DiffView
+              diff={diff}
+              notes={byFile}
+              noteState={review.trim() ? "ready" : requested ? "waiting" : "idle"}
               sessionId={sessionId}
-              text={reviewPrompt}
-              label="review in session"
-              title="Ask the Claude session below to review this diff"
+              prNumber={number}
             />
           </div>
-          <div className="pr-review-body">
-            {review.trim() ? (
-              <Md text={review} />
+        ) : (
+          <div className="pr-info-scroll">
+            <h4>Description</h4>
+            {detail ? (
+              <Md text={detail.body || "_(no description)_"} />
             ) : (
-              <div className="placeholder">
-                Claude reviews the diff in the session below — click “review in
-                session”, then press Enter. Its review shows up here (and is saved
-                to the progress notepad) as it writes.
-              </div>
+              <div className="placeholder">loading…</div>
             )}
           </div>
-        </div>
+        )}
       </div>
       <Splitter
         dir="y"
         onDrag={(d) =>
-          setDiffFrac((f) => clamp(f + d / (rootRef.current?.clientHeight ?? 1), 0.2, 0.8))
+          setUpperFrac((f) => clamp(f + d / (rootRef.current?.clientHeight ?? 1), 0.2, 0.85))
         }
       />
-      <div className="pr-bottom" ref={bottomRef} style={{ flex: `${1 - diffFrac} 1 0` }}>
-        <div className="ws-main" style={{ flex: `${sessFrac} 1 0` }}>
-          {header}
-          {terminal}
-        </div>
-        <Splitter
-          dir="x"
-          onDrag={(d) =>
-            setSessFrac((f) => clamp(f + d / (bottomRef.current?.clientWidth ?? 1), 0.25, 0.8))
-          }
-        />
-        <div className="ws-pane pr-info" style={{ flex: `${1 - sessFrac} 1 0` }}>
-          <div className="pr-info-scroll">
-            <div className="pr-info-title">
-              {detail?.title ?? `PR #${number}`}
-            </div>
-            <h4>Description</h4>
-            {detail ? <Md text={detail.body || "_(no description)_"} /> : <div className="placeholder">loading…</div>}
-          </div>
-        </div>
+      <div className="ws-main" style={{ flex: `${1 - upperFrac} 1 0` }}>
+        {header}
+        {terminal}
       </div>
     </div>
   );
