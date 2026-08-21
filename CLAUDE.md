@@ -126,6 +126,34 @@ WebSocket; everything else is REST.
     workspace notepad `~/.den/progress/<groupId>.md`, structured as general review
     then one `## <file path>` heading per file; the view polls that notepad, so the
     review is shown next to the code it's about *and* kept as a record.
+    **The review's house style is part of that instruction**, because andria
+    copies the comments straight into GitHub: **plain ASCII only** (no em dash,
+    curly quote, arrow, ellipsis char or emoji — they survive a paste as
+    mojibake or break a code span), and **short ranked bullets** (one issue per
+    bullet, `path:line` first, then problem then fix, max 5 per file, worst
+    first, no praise/preamble/recap). Those bullet rules are Claude Code's
+    built-in **Concise** output style plus the **`i-have-adhd`** skill, the two
+    andria runs — including Concise's *"while doing the work just as
+    thoroughly"* clause, which is load-bearing: the **writing** is terse, the
+    review is not. Don't let the 5-bullet cap become a reading cap.
+    **The finding pass runs through Claude Code's built-in `code-review`
+    skill** (adversarially verified findings), which `reviewInstruction` tells
+    the session to run at high effort against the PR's branch before writing
+    the notepad — with `--comment` (posts to GitHub) and `--fix` (edits the
+    working tree) explicitly forbidden, and the notepad review still the
+    deliverable (the skill's report renders only in the terminal). The skill
+    is a first pass, not the review: the instruction says to also cover what
+    its correctness/simplification scope misses. The paste prompt in
+    `PrViews.tsx` names the skill too so the two don't drift. Verified live
+    2026-08-22: a den-spawned review session lists the skill and invokes it
+    (it runs as a background agent); note its shell commands surface as the
+    review pane's normal permission prompts, so a review still needs the
+    developer around to approve reads.
+    The instruction string is itself written
+    in ASCII — an instruction full of em dashes teaches the model to write
+    them back — and `reviewInstruction.test.ts` asserts that with `isAscii`.
+    The headless `reviewPr` prompt (`github.ts`, unused by the UI) carries the
+    same rules so the two review paths do not drift.
     Review panes carry a notepad — `create()`/`restartArgs` wire it for
     `view === "review"`. **A review pane has a full shell** (running the tests or
     trying a fix is part of reviewing) but **must never commit or push** — see
@@ -353,8 +381,12 @@ local control plane, not a public API:
      `gh pr view|diff|checks` stay open for reading. It is a backstop, **not** a
      sandbox: a shell can still reach those places another way (`git -C`, a
      wrapper script, an alias), which is why the instruction carries the weight.
-  The one `allow` is the notepad (`Edit(//<notepad>)`), so the finished review
-  saves without a prompt; everything else prompts as usual. The diff is still
+  The `allow` list is the notepad (`Edit(//<notepad>)`, so the finished review
+  saves without a prompt) plus the reads a review runs constantly — `git
+  log/show/diff/status/blame/grep/fetch`, `rg`/`grep`, `gh pr view|diff|checks`
+  — so the code-review skill's finding pass doesn't stall on a prompt per
+  `git show` (deny beats allow, so the write backstop is untouched); everything
+  else prompts as usual. The diff is still
   handed over as a file (`~/.den/review/<groupId>.diff`) so the whole change is
   in front of the session immediately.
 - The Linear key lives only in `~/.den/den.db` (gitignored) or `$LINEAR_API_KEY`;

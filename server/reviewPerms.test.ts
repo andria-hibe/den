@@ -31,12 +31,25 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
   });
 
   it("allows editing the exact notepad file, root-anchored and not a wildcard", () => {
-    expect(permissions.allow).toEqual([`Edit(//${NOTEPAD.replace(/^\/+/, "")})`]);
+    expect(permissions.allow).toContain(`Edit(//${NOTEPAD.replace(/^\/+/, "")})`);
     expect(permissions.allow[0]).not.toContain("**");
   });
 
-  it("grants nothing else — the allow list is the notepad alone", () => {
-    expect(permissions.allow).toHaveLength(1);
+  it("allows the read-only commands a review runs constantly", () => {
+    for (const cmd of ["git log", "git show", "git diff", "git status", "git blame", "git grep", "git fetch", "rg", "grep", "gh pr view", "gh pr diff", "gh pr checks"]) {
+      expect(permissions.allow).toContain(`Bash(${cmd}:*)`);
+    }
+  });
+
+  it("never allows a command the deny list guards (deny still wins anyway)", () => {
+    for (const guarded of ["git push", "git commit", "gh api", "gh pr merge", "gh pr review", "gh pr comment", "gh issue"]) {
+      expect(permissions.allow.some((r) => r.includes(guarded))).toBe(false);
+    }
+  });
+
+  it("grants Edit only on the notepad — no other Edit or Write allows", () => {
+    const edits = permissions.allow.filter((r) => !r.startsWith("Bash("));
+    expect(edits).toEqual([`Edit(//${NOTEPAD.replace(/^\/+/, "")})`]);
   });
 });
 

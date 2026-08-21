@@ -78,9 +78,17 @@ const reviewSettingsPath = (groupId: string) => {
  * determined shell can still reach the same place by another route (a wrapper
  * script, `git -C`, an alias). The instruction does the real work.
  *
- * The one `allow` is the notepad, so the finished review saves without a prompt.
- * Everything else follows den's normal permission behaviour (`--permission-mode
- * default`), i.e. Claude asks before it acts, exactly like any other pane.
+ * The `allow` list is the notepad (so the finished review saves without a
+ * prompt) plus the commands a review runs constantly that are read-only toward
+ * the repo and GitHub: `git log/show/diff/status/blame/grep/fetch`, `rg`/`grep`,
+ * and the `gh pr view|diff|checks` reads. Without these, the code-review
+ * skill's finding pass stalls on a prompt for every `git show` (seen live
+ * 2026-08-22). `git fetch` is included: it only updates local refs, and a
+ * review often needs it to compare a stale worktree against the PR head.
+ * Deny beats allow in Claude's permission rules, so none of this loosens the
+ * push/commit/gh-write backstop. Everything else follows den's normal
+ * permission behaviour (`--permission-mode default`), i.e. Claude asks before
+ * it acts, exactly like any other pane.
  *
  * Pure (no I/O) so it's unit-testable. `notepadAbs` must be absolute; it's
  * emitted as Claude's "//<path>" root-anchored specifier. */
@@ -101,7 +109,21 @@ export function buildReviewPermissions(notepadAbs: string) {
         "Bash(gh issue comment:*)",
         "Bash(gh api:*)",
       ],
-      allow: [`Edit(${root(notepadAbs)})`],
+      allow: [
+        `Edit(${root(notepadAbs)})`,
+        "Bash(git log:*)",
+        "Bash(git show:*)",
+        "Bash(git diff:*)",
+        "Bash(git status:*)",
+        "Bash(git blame:*)",
+        "Bash(git grep:*)",
+        "Bash(git fetch:*)",
+        "Bash(rg:*)",
+        "Bash(grep:*)",
+        "Bash(gh pr view:*)",
+        "Bash(gh pr diff:*)",
+        "Bash(gh pr checks:*)",
+      ],
     },
   };
 }
@@ -132,8 +154,31 @@ function progressInstruction(file: string): string {
  * live here: never commit, never push, and any change it needs to make goes on a
  * local scratch branch. It reads the diff from a file den provides and saves its
  * review to the notepad, which den renders beside the diff. Shared by create()
- * and restart() so the wiring survives a restart. */
-function reviewInstruction(
+ * and restart() so the wiring survives a restart.
+ *
+ * It also fixes the *shape* of the review, because the developer copies these
+ * comments straight into GitHub:
+ * - **Plain ASCII only.** An em dash or a curly quote survives a copy-paste as a
+ *   character that reads as mojibake in some boxes and breaks a code snippet in
+ *   others. The instruction below is itself ASCII-only for the same reason -- an
+ *   instruction full of em dashes teaches the model to write them back.
+ *   The `isAscii` test guards that.
+ * - **Short, ranked, actionable bullets.** One issue per bullet, "path:line"
+ *   first, five bullets per file, worst first, no praise or recap. Shaped for a
+ *   reader who acts off the first line of each bullet -- Claude Code's built-in
+ *   "Concise" style plus the `i-have-adhd` skill, both of which andria runs.
+ *   Note the "just as thoroughly" clause: Concise makes the *writing* terse, not
+ *   the review. Do not let a later edit turn the bullet cap into a reading cap.
+ *
+ * The finding pass runs through Claude Code's built-in code-review skill
+ * (adversarially verified findings, ranked worst-first) targeted at the PR's
+ * branch, with --comment and --fix explicitly forbidden (--comment posts to
+ * GitHub; --fix edits the working tree). The skill is a first pass, not the
+ * review: its report renders only in the terminal, so the instruction tells the
+ * session to fold the findings into the notepad and cover what the skill's
+ * correctness/simplification scope misses.
+ */
+export function reviewInstruction(
   notepad: string,
   diffFile: string,
   branch: string | null | undefined,
@@ -142,32 +187,64 @@ function reviewInstruction(
   return (
     `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
     `someone else's work and your job is to review it, not to change it. You have ` +
-    `a full shell and can run anything you need to understand the change — the ` +
+    `a full shell and can run anything you need to understand the change: the ` +
     `tests, a build, git history, gh reads. But these rules are absolute:\n` +
     `1. NEVER commit. Not on the PR's branch, not anywhere.\n` +
-    `2. NEVER push, and never post anything to GitHub — no \`git push\`, no ` +
+    `2. NEVER push, and never post anything to GitHub. No \`git push\`, no ` +
     `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
-    `review goes in the notepad file named below and nowhere else — the developer ` +
+    `review goes in the notepad file named below and nowhere else; the developer ` +
     `decides what, if anything, reaches GitHub.\n` +
-    `3. If you need to change files — to test a fix, reproduce a bug, or check a ` +
-    `suspicion — first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
+    `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
+    `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
     `(or \`git checkout ${scratch}\` if it already exists), then edit there. Keep ` +
     `it local and uncommitted, and say so in your review rather than leaving it ` +
     `as a surprise. Never leave the PR's own branch modified.\n` +
     `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +
     `read the changed files in your working directory for surrounding context. ` +
+    `Start the finding pass by running Claude Code's built-in code-review skill ` +
+    `at high effort against this PR's ` +
+    (branch ? `branch (${branch})` : `checked-out branch`) +
+    `; it hunts correctness bugs and verifies its findings before reporting. ` +
+    `Never pass --comment (posts to GitHub) or --fix (edits the working tree). ` +
+    `Its report renders in the terminal only and is not the deliverable: fold ` +
+    `the verified findings into the notepad review described next, and cover ` +
+    `yourself what its scope misses (design, tests, naming, missing cases). If ` +
+    `the skill is unavailable, do the whole review by hand.\n` +
     `Save your finished review as markdown to the absolute path ${notepad} ` +
-    `(create or overwrite it) — that file is where the review lives. den splits ` +
+    `(create or overwrite it). That file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
-    `structure it exactly like this: first the general review (short summary, ` +
-    `then any cross-cutting risks), then one "## <file path>" heading per file ` +
-    `you have comments on — the path exactly as it appears after "b/" in the ` +
-    `diff's "diff --git" line — followed by your comments on that file as ` +
-    `bullets, citing line numbers. Put nothing but that file's comments under ` +
-    `its heading, and skip files you have nothing to say about. Write the clean, ` +
-    `finished review there, not a running log; don't mention these files in ` +
-    `your replies.`
+    `structure it exactly like this: first the general review (a two or three ` +
+    `line summary, then any cross-cutting risk), then one "## <file path>" ` +
+    `heading per file you have comments on, the path exactly as it appears after ` +
+    `"b/" in the diff's "diff --git" line, followed by that file's comments as ` +
+    `bullets. Put nothing but that file's comments under its heading, and skip ` +
+    `files you have nothing to say about.\n` +
+    `WRITE THE WHOLE REVIEW IN PLAIN ASCII. The developer copies these comments ` +
+    `straight into GitHub, so every character must survive a copy-paste. Use "-" ` +
+    `for a dash, "'" for an apostrophe, '"' for a quote, "->" for an arrow, and ` +
+    `"..." for an ellipsis. Never write an em dash, an en dash, a curly quote, a ` +
+    `curly apostrophe, a real arrow, a non-breaking space, box drawing, or an ` +
+    `emoji. If a line you quote from the diff already holds a non-ASCII ` +
+    `character, keep it inside a code span, but never add one of your own.\n` +
+    `KEEP THE WRITING SHORT AND DIRECT WHILE DOING THE REVIEW JUST AS ` +
+    `THOROUGHLY. Read as widely as the change needs; it is the prose that is ` +
+    `terse, never the work behind it. Lead with the result and skip preamble ` +
+    `and narration. One issue per bullet, one or two sentences. Open the bullet ` +
+    `with "path:line" (or "path:start-end"), then the problem, then the fix. Say ` +
+    `what to change, not how you feel about it. Give each file at most 5 ` +
+    `bullets, worst first; if a file has more, keep the top 5 and add one bullet ` +
+    `naming what you left out. No praise, no preamble, no closing recap, no ` +
+    `hedging adverbs. A file you are happy with gets no heading at all.\n` +
+    `Write the clean, finished review there, not a running log; don't mention ` +
+    `these files in your replies.`
   );
+}
+
+/** True if `s` is pure 7-bit ASCII (tab and newline allowed). The review
+ * instruction and the review it asks for must both pass this: see
+ * reviewInstruction. Exported for the test. */
+export function isAscii(s: string): boolean {
+  return !/[^\t\n\x20-\x7e]/.test(s);
 }
 
 /**

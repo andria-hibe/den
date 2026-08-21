@@ -492,8 +492,13 @@ export async function reviewPr(repo: string, number: number): Promise<string> {
   const prompt =
     "You are reviewing a GitHub pull request. The unified diff follows on " +
     "stdin. Give a concise, skimmable code review in markdown with sections: " +
-    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. Be " +
-    "specific and reference file names. If it looks solid, say so briefly.";
+    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. " +
+    "Write the whole review in plain ASCII so it survives a copy-paste into " +
+    "GitHub: no em dashes, curly quotes, arrows, ellipsis characters or emoji. " +
+    "One issue per bullet, one or two sentences, opening with \"path:line\", " +
+    "then the problem, then the fix. Rank each section worst first and cap it " +
+    "at 5 bullets. No praise and no closing recap. If it looks solid, say so " +
+    "in one line.";
   return claudePrint(prompt, diff);
 }
 
