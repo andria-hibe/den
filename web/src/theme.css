@@ -1858,6 +1858,10 @@ body {
   border-color: var(--pink-deep);
   color: var(--pink-deep);
 }
+.link-chip.review {
+  background: var(--peach);
+  color: #6b4423;
+}
 .link-chip:hover {
   filter: brightness(1.05);
 }

@@ -599,7 +599,7 @@ export function App() {
     // closed, someone else's) — a chip without a link, so it's still correct.
     const ticketId = issue?.identifier ?? explicitTicket;
     const prNum = pr?.number ?? (s.pr && s.prRepo ? s.pr : null);
-    if (!ticketId && !prNum) return null;
+    if (!ticketId && !prNum && s.view !== "review") return null;
 
     const check =
       pr?.checks === "passing"
@@ -611,6 +611,11 @@ export function App() {
             : "";
     return (
       <>
+        {s.view === "review" && (
+          <span className="link-chip review" title="reviewing this PR — read-only toward GitHub">
+            review
+          </span>
+        )}
         {ticketId &&
           (issue ? (
             <a
