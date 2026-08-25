@@ -59,6 +59,24 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+/** Wrap an async fetcher in a TTL cache (the GitHub-PR and Linear polls share
+ * this shape). `get(true)` bypasses the cache; `invalidate()` empties it (e.g.
+ * when the Linear key changes). Errors are not cached — the next get retries. */
+function ttlCache<T>(ttlMs: number, fn: () => Promise<T>) {
+  let hit: { at: number; data: T } | null = null;
+  return {
+    async get(fresh = false): Promise<T> {
+      if (!fresh && hit && Date.now() - hit.at < ttlMs) return hit.data;
+      const data = await fn();
+      hit = { at: Date.now(), data };
+      return data;
+    },
+    invalidate() {
+      hit = null;
+    },
+  };
+}
+
 export interface StartOptions {
   /** Port to bind. 0 = ephemeral (recommended for the desktop app). */
   port?: number;
@@ -380,17 +398,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- GitHub PRs (cached) ---
-  const PR_TTL_MS = 30_000;
-  let prCache: { at: number; data: PrBuckets } | null = null;
+  const prCache = ttlCache<PrBuckets>(30_000, getMyPullRequests);
   app.get("/api/github/prs", async (req, reply) => {
     const fresh = (req.query as { refresh?: string })?.refresh === "1";
-    if (!fresh && prCache && Date.now() - prCache.at < PR_TTL_MS) {
-      return prCache.data;
-    }
     try {
-      const data = await getMyPullRequests();
-      prCache = { at: Date.now(), data };
-      return data;
+      return await prCache.get(fresh);
     } catch (err) {
       logWarn("github", err);
       reply.code(502);
@@ -433,6 +445,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- Linear (cached) ---
+  const linearCache = ttlCache<LinearData>(30_000, getAssignedIssues);
   app.get("/api/linear/status", async () => ({ connected: hasKey() }));
 
   app.post("/api/linear/key", async (req, reply) => {
@@ -444,7 +457,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     try {
       const viewer = await validateKey(key.trim());
       setKey(key.trim());
-      linearCache = null;
+      linearCache.invalidate();
       return { connected: true, viewer };
     } catch (err) {
       reply.code(401);
@@ -454,25 +467,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.delete("/api/linear/key", async () => {
     clearKey();
-    linearCache = null;
+    linearCache.invalidate();
     return { connected: false };
   });
 
-  const LINEAR_TTL_MS = 30_000;
-  let linearCache: { at: number; data: LinearData } | null = null;
   app.get("/api/linear/issues", async (req, reply) => {
     if (!hasKey()) {
       reply.code(409);
       return { error: "not_connected" };
     }
     const fresh = (req.query as { refresh?: string })?.refresh === "1";
-    if (!fresh && linearCache && Date.now() - linearCache.at < LINEAR_TTL_MS) {
-      return linearCache.data;
-    }
     try {
-      const data = await getAssignedIssues();
-      linearCache = { at: Date.now(), data };
-      return data;
+      return await linearCache.get(fresh);
     } catch (err) {
       const msg = (err as Error).message;
       reply.code(msg === "unauthorized" ? 401 : 502);

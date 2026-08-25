@@ -24,20 +24,7 @@ import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
-
-// 9 pastels spread across the hue wheel so sessions stay easy to tell apart.
-// Keep this in sync with server/sessions.ts (auto-assign cycles the same list).
-const COLORS = [
-  "#ffb2d8", // pink
-  "#ffcaa3", // peach
-  "#f7e79c", // yellow
-  "#c9e9a0", // lime
-  "#a5e6c4", // mint
-  "#a2dfe8", // aqua
-  "#abc9f6", // sky
-  "#bcb8f6", // periwinkle
-  "#d7b3f4", // violet
-];
+import { COLORS } from "../../shared/colors.ts";
 
 // Modifier symbol shown in the shortcuts hint (⌘ on macOS, Ctrl elsewhere).
 const MOD =

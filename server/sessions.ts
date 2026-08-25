@@ -6,6 +6,7 @@ import {
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { COLORS } from "../shared/colors.ts";
 import { store, type SessionRow } from "./store.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
@@ -298,6 +299,20 @@ export interface SessionMeta {
 
 type Listener = (msg: ServerMessage) => void;
 
+/** Everything a DenSession is born with — named, because nine positional
+ * strings/numbers in a row invite silently transposed arguments. */
+interface SessionInit {
+  id: string;
+  name: string;
+  color: string;
+  cwd: string;
+  shell: boolean;
+  createdAt: number;
+  lastActive: number;
+  groupId: string;
+  role: "main" | "shell";
+}
+
 /**
  * One session = one long-lived PTY (Claude Code by default) that outlives any
  * particular WebSocket. It buffers recent output so a (re)attaching client can
@@ -336,17 +351,27 @@ class DenSession {
   pr: number | null = null;
   prRepo: string | null = null;
 
-  constructor(
-    public id: string,
-    public name: string,
-    public color: string,
-    public cwd: string,
-    public shell: boolean,
-    public createdAt: number,
-    public lastActive: number,
-    public groupId: string,
-    public role: "main" | "shell",
-  ) {}
+  id: string;
+  name: string;
+  color: string;
+  cwd: string;
+  shell: boolean;
+  createdAt: number;
+  lastActive: number;
+  groupId: string;
+  role: "main" | "shell";
+
+  constructor(init: SessionInit) {
+    this.id = init.id;
+    this.name = init.name;
+    this.color = init.color;
+    this.cwd = init.cwd;
+    this.shell = init.shell;
+    this.createdAt = init.createdAt;
+    this.lastActive = init.lastActive;
+    this.groupId = init.groupId;
+    this.role = init.role;
+  }
 
   spawn() {
     const loginShell = process.env.SHELL ?? "/bin/zsh";
@@ -561,20 +586,6 @@ class DenSession {
   }
 }
 
-// 9 pastels spread across the hue wheel (kept in sync with web/src/App.tsx's
-// picker). New sessions cycle through these for an easy-to-distinguish colour.
-const COLORS = [
-  "#ffb2d8", // pink
-  "#ffcaa3", // peach
-  "#f7e79c", // yellow
-  "#c9e9a0", // lime
-  "#a5e6c4", // mint
-  "#a2dfe8", // aqua
-  "#abc9f6", // sky
-  "#bcb8f6", // periwinkle
-  "#d7b3f4", // violet
-];
-
 // How often to flush changed scrollback to the store. A crash loses at most
 // this much recent output; keeping it coarse avoids constant disk writes.
 const SCROLLBACK_FLUSH_MS = 5000;
@@ -597,17 +608,17 @@ class SessionManager {
   hydrate() {
     store.markAllExited();
     for (const row of store.all()) {
-      const s = new DenSession(
-        row.id,
-        row.name,
-        row.color,
-        row.cwd,
-        row.shell === 1,
-        row.createdAt,
-        row.lastActive,
-        row.groupId ?? row.id,
-        (row.role as "main" | "shell") ?? "main",
-      );
+      const s = new DenSession({
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        cwd: row.cwd,
+        shell: row.shell === 1,
+        createdAt: row.createdAt,
+        lastActive: row.lastActive,
+        groupId: row.groupId ?? row.id,
+        role: (row.role as "main" | "shell") ?? "main",
+      });
       s.status = "exited";
       s.claudeSessionId = row.claudeSessionId ?? null;
       s.branch = row.branch ?? null;
@@ -664,9 +675,10 @@ class SessionManager {
 
     if (shell) {
       const name = opts.name ?? "shell";
-      const s = new DenSession(
-        groupId, name, color, cwd, true, now, now, groupId, "main",
-      );
+      const s = new DenSession({
+        id: groupId, name, color, cwd, shell: true,
+        createdAt: now, lastActive: now, groupId, role: "main",
+      });
       s.branch = branch;
       this.spawnSession(s);
       return s.meta();
@@ -677,9 +689,10 @@ class SessionManager {
     if (opts.look || opts.view) {
       const name =
         opts.name ?? opts.ticket ?? (opts.pr ? `PR #${opts.pr}` : "look");
-      const s = new DenSession(
-        groupId, name, color, cwd, false, now, now, groupId, "main",
-      );
+      const s = new DenSession({
+        id: groupId, name, color, cwd, shell: false,
+        createdAt: now, lastActive: now, groupId, role: "main",
+      });
       s.claudeSessionId = randomUUID();
       // A "review" pane keeps a workspace notepad: Claude saves its finished
       // review there and den renders it beside the diff (and it's a record for
@@ -710,9 +723,10 @@ class SessionManager {
     const file = this.ensureNotepad(groupId, opts.notepadSeed);
     const instruction = progressInstruction(file);
 
-    const main = new DenSession(
-      randomUUID(), name, color, cwd, false, now, now, groupId, "main",
-    );
+    const main = new DenSession({
+      id: randomUUID(), name, color, cwd, shell: false,
+      createdAt: now, lastActive: now, groupId, role: "main",
+    });
     // Pin the conversation id (or adopt the one we're resuming) so a later
     // restart can bring back THIS exact conversation.
     main.claudeSessionId = opts.resumeId ?? randomUUID();
@@ -733,9 +747,10 @@ class SessionManager {
     if (opts.ticket) main.titleLocked = true;
     this.spawnSession(main);
 
-    const term = new DenSession(
-      randomUUID(), "terminal", color, cwd, true, now, now, groupId, "shell",
-    );
+    const term = new DenSession({
+      id: randomUUID(), name: "terminal", color, cwd, shell: true,
+      createdAt: now, lastActive: now, groupId, role: "shell",
+    });
     term.branch = branch;
     this.spawnSession(term);
 
@@ -753,10 +768,11 @@ class SessionManager {
     );
     if (!sibling) return null;
     const now = Date.now();
-    const term = new DenSession(
-      randomUUID(), "terminal", sibling.color, sibling.cwd, true, now, now,
-      groupId, "shell",
-    );
+    const term = new DenSession({
+      id: randomUUID(), name: "terminal", color: sibling.color,
+      cwd: sibling.cwd, shell: true, createdAt: now, lastActive: now,
+      groupId, role: "shell",
+    });
     term.branch = sibling.branch;
     this.spawnSession(term);
     return term.meta();

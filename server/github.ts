@@ -334,9 +334,15 @@ export interface PrDetail {
 }
 
 export async function getPrDetail(repo: string, number: number): Promise<PrDetail> {
-  const out = await gh([
-    "pr", "view", String(number), "--repo", repo,
-    "--json", "number,title,url,body,headRefName,author,reviews,comments",
+  // Three independent gh round-trips (PR body/reviews, viewer login, inline
+  // review threads) — run them together; the my-PR pane opens on this.
+  const [out, me, reviewComments] = await Promise.all([
+    gh([
+      "pr", "view", String(number), "--repo", repo,
+      "--json", "number,title,url,body,headRefName,author,reviews,comments",
+    ]),
+    viewerLogin(),
+    getReviewComments(repo, number),
   ]);
   const j = JSON.parse(out) as {
     number: number;
@@ -348,7 +354,6 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
     reviews: { author?: { login: string }; state: string; body: string; submittedAt: string }[];
     comments: { author?: { login: string }; body: string; createdAt: string }[];
   };
-  const me = await viewerLogin();
   return {
     number: j.number,
     repo,
@@ -370,7 +375,7 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
       body: c.body ?? "",
       at: c.createdAt,
     })),
-    reviewComments: await getReviewComments(repo, number),
+    reviewComments,
   };
 }
 
