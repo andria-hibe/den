@@ -80,24 +80,38 @@ WebSocket; everything else is REST.
   repo that "Work" sessions and PR/ticket checkouts default into, resolved via
   `$DEN_WORK_DIR` → the `work_dir` setting → the sole git repo under
   `~/Documents/work` → `~/Documents/work` (see `workDir()`).
-- `web/src/App.tsx` — the whole UI: 3-column flex layout, session rail, center
-  (terminal / 3-pane claude workspace / look / PR review / my-PR), work panel,
-  all dialogs + handlers. Still the largest file, but the cross-cutting concerns
-  now live in their own modules (below).
+- `web/src/App.tsx` — the UI's composition root: 3-column flex layout, topbar
+  (fox + shortcuts popover), the center-pane switch (terminal / 3-pane claude
+  workspace / look / PR review / my-PR), and the ticket/PR open-session flows +
+  dialogs. The pieces it used to hold inline now live in their own modules:
+  session state + CRUD in `useSessions.ts` (the list, selection, shell-tab map,
+  and the 4s merge-only poll — anything that creates a session out-of-band must
+  refetch the full list, which the hook's mutators do), the rail in
+  `SessionRail.tsx`, ticket/PR chips in `WorkLinkChips.tsx`, and the ticket-look
+  layout in `TicketLookView.tsx`.
 - `web/src/WorkData.tsx` — **single source of truth** for GitHub PRs + Linear
   issues. A `WorkDataProvider` (mounted in `main.tsx`) polls each endpoint **once**
   (60s) and shares it via `useWorkData()`; App (fox + linking), `WorkPanel`, and
   `LinearSection` all read from it, so they never drift out of phase. Previously
   each polled independently (four loops for two resources).
-- `web/src/` hooks/helpers extracted from App: `useRovingFocus` (arrow-key focus
-  ring), `useKeyboardShortcuts` (Cmd/Ctrl+N/T/W/1–9), `useNotifications` (native
-  OS notifications on attention/PR transitions), `foxPose.ts` (pure
-  `deriveFoxPose` + the pose cast/titles), `TerminalView`, `TicketComments`,
-  `api.ts` (the fetch wrapper). Each is small and unit-testable where pure.
-- `web/src/` components: `WorkPanel` (Linear + GitHub cards), `LinearPanel`,
-  `TicketDialog`, `PrDialog`, `PrViews` (PrReviewView/PrMyView), `DiffView`,
-  `NotepadPane`, `NewSessionDialog`, `Fox`/`foxSprites` + `PixelFox`, `Splitter`,
-  `useTerminal`, `markdown.ts`, `theme.css`.
+- `web/src/` hooks/helpers extracted from App: `useSessions` (session list +
+  mutations + poll), `useRovingFocus` (arrow-key focus ring),
+  `useKeyboardShortcuts` (Cmd/Ctrl+N/T/W/1–9), `useNotifications` (native
+  OS notifications on attention/PR transitions), `usePersistent.ts` (the
+  localStorage-backed number/string/JSON hooks), `foxPose.ts` (pure
+  `deriveFoxPose` + the pose cast/titles), `format.ts` (relTime/relTimeAgo,
+  card accentStyle, prKey), `TerminalView`, `TicketComments`, `api.ts` (the
+  fetch wrapper — use it for every REST call so non-2xx surfaces as a throw;
+  the one deliberate exception is WorkData's `refreshIssues`, which needs the
+  raw 409 = "no Linear key"). Each is small and unit-testable where pure.
+- `web/src/` components: `SessionRail` (the left column), `WorkLinkChips`
+  (ticket/PR chips — explicit link wins, branch hint is the fallback),
+  `TicketLookView` (ticket detail + Claude pane), `WorkPanel` (Linear + GitHub
+  cards), `LinearPanel`, `TicketDialog`, `PrDialog`, `PrViews`
+  (PrReviewView/PrMyView), `DiffView`, `NotepadPane`, `NewSessionDialog`,
+  `Fox`/`foxSprites` + `PixelFox`, `Splitter` (divider + `clamp`),
+  `useTerminal`, `markdown.ts`, `theme.css`. `shared/colors.ts` holds the
+  9-pastel palette both the server (auto-assign) and the picker import.
   - `DiffView.tsx` exports `classify(line)` (diff-line CSS class), `DiffHunk`
     (renders one `diff_hunk`, marks the anchored last line), `lineNumbers(lines)`
     (old/new file line numbers walked from each `@@ -a,b +c,d @@` header — only
@@ -269,7 +283,7 @@ back exited, and one click revives it.
 - **Linear ticket → Look / Work**. Work creates the branch (worktree or local),
   seeds the notepad with a ticket summary, and **primes Claude** with the ticket
   to explain the issue + propose a solution before coding. Look = ticket detail
-  with **Description / Comments tabs** (`lookTab` state) + a Claude pane; comments
+  with **Description / Comments tabs** (`TicketLookView`) + a Claude pane; comments
   via `getIssueComments` → `/api/linear/comments` (bot/integration comments show
   their `botActor` name).
 - **Linear notifications nudge**: `getAssignedIssues` also returns
