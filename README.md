@@ -21,13 +21,22 @@ you. Sessions are server-owned, so they outlive any window and survive restarts.
 - **Tied to your work.** Open a Linear ticket or GitHub PR and den spins up a
   Claude session on the right branch (local or a git worktree), tagged with its
   ticket/PR so you always know what a session is for.
-- **Review PRs in-app.** For others' PRs: the diff with a per-file Claude
-  summary column and an optional written review. For your own: description,
-  reviews, and inline comments grouped by file with the code they point at —
-  resolved threads tucked behind a toggle. Every comment has a **“→ Claude”**
-  button that hands it to the session's Claude to action.
+- **Review PRs in-app.** For others' PRs, the Claude session below the diff
+  does the reviewing: it gets the full diff as a file, runs the finding pass,
+  and writes its review to the workspace notepad — den renders the general
+  review up top and **each file's comments beside that file's hunks**. The
+  session has a full shell (running the tests is part of reviewing) but is
+  instructed, with a permission-deny backstop, to never commit, push, or post
+  to GitHub.
 
-  ![Reviewing a PR with inline comments](docs/pr.png)
+  ![Reviewing a PR — the review beside the diff](docs/review.png)
+
+  For your own PRs: description, reviews, and inline comments grouped by file
+  with the code they point at — resolved threads tucked behind a toggle. Every
+  comment has a **“→ Claude”** button that hands it to the session's Claude to
+  action.
+
+  ![Your PR's inline comments, each with its hunk](docs/pr.png)
 
 - **A fox that reads the room.** The topbar fox goes **alert** when a PR needs
   you (failing CI, changes requested, or a review you owe) or Linear has unread
@@ -76,6 +85,8 @@ Requires the `claude` and `gh` CLIs on your `PATH`; Linear is optional (paste a
 personal API key in the work panel).
 
 ## How it works
+
+![den's architecture](docs/architecture.svg)
 
 - A Node/TypeScript backend runs **inside** Electron's main process (also
   runnable standalone via a CLI). Terminals stream over a WebSocket; everything
