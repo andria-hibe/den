@@ -56,12 +56,13 @@ WebSocket; everything else is REST.
   **inline review comments** with `path`/`line`/`diffHunk` + a `resolved` flag,
   fetched via `gh api graphql` **reviewThreads** — the thread carries
   `isResolved`, which the REST comments endpoint omits, so the my-PR UI can hide
-  resolved comments); `getPrDiff`; and `reviewPr` (headless `claude -p` fed the
-  diff → markdown, via `claudePrint`) — note `reviewPr` / `POST /api/github/pr/review`
-  are **currently unused by the UI**: the interactive review session does the
-  reviewing now. (`summarizePrDiff`, a second headless pass that produced one-line
-  per-file summaries for the review diff's side column, was removed when that
-  column became the session's own per-file review comments.)
+  resolved comments); and `getPrDiff`. (Two headless `claude -p` passes used to
+  live here and are both **removed** — `summarizePrDiff` when the review diff's
+  side column became the session's own per-file comments, and `reviewPr` /
+  `POST /api/github/pr/review` once the interactive review session did the
+  reviewing; its house-style rules live only in `reviewInstruction` now, so
+  there's no second copy to drift. `discover.ts` still filters their old
+  transcripts out of the resume list.)
 - `server/linear.ts` — Linear GraphQL (`@linear/sdk` not used; raw fetch).
   Assigned issues + `branchName` + `description`. Key in the settings table or
   `LINEAR_API_KEY`. Scoped to whatever workspace the key belongs to (runn, for
@@ -152,8 +153,8 @@ WebSocket; everything else is REST.
     The instruction string is itself written
     in ASCII — an instruction full of em dashes teaches the model to write
     them back — and `reviewInstruction.test.ts` asserts that with `isAscii`.
-    The headless `reviewPr` prompt (`github.ts`, unused by the UI) carries the
-    same rules so the two review paths do not drift.
+    (`reviewInstruction` is the only copy of these rules — the headless
+    `reviewPr` duplicate was removed 2026-08-25.)
     Review panes carry a notepad — `create()`/`restartArgs` wire it for
     `view === "review"`. **A review pane has a full shell** (running the tests or
     trying a fix is part of reviewing) but **must never commit or push** — see
@@ -465,10 +466,10 @@ testable (export it) and add a case. Beyond that, verification is scripted + vis
    **Done** — `web/src/useNotifications.ts` fires OS notifications on
    *transitions* (a background session ringing the bell; a PR newly needing you),
    seeding startup state silently so a launch never spams.
-9. **Token awareness**: headless PR review + progress logging spend tokens — add
-   visible toggles / cost hints. (One spend removed: the review diff's per-file
-   column is now filled by the review session itself, so the separate headless
-   `summarizePrDiff` pass is gone.)
+9. **Token awareness**: progress logging + the in-session review spend tokens —
+   add visible toggles / cost hints. (Both headless spends are gone: the
+   `summarizePrDiff` and `reviewPr` `claude -p` passes were removed once the
+   review session itself did that work.)
 10. **Diff view**: grouped per file, with the review's per-file comments beside
     each file (review) and per-comment hunks (my-PR). Still missing: syntax
     highlighting + collapsible files. **Notepad**: auto-scroll to newest.

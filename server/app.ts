@@ -8,7 +8,6 @@ import {
   getMyPullRequests,
   getPrDetail,
   getPrDiff,
-  reviewPr,
   isValidRepo,
   type PrBuckets,
 } from "./github.ts";
@@ -430,26 +429,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       logWarn("github", err);
       reply.code(502);
       return { error: "gh_failed", message: "GitHub request failed." };
-    }
-  });
-
-  // Claude's written review of a PR (headless; may take a while).
-  app.post("/api/github/pr/review", async (req, reply) => {
-    const { repo, number } = (req.body ?? {}) as {
-      repo?: string;
-      number?: number;
-    };
-    const n = prNumber(number);
-    if (!repo || !isValidRepo(repo) || n === null) {
-      reply.code(400);
-      return { error: "repo_and_number_required" };
-    }
-    try {
-      return { review: await reviewPr(repo, n) };
-    } catch (err) {
-      logWarn("github.review", err);
-      reply.code(502);
-      return { error: "review_failed", message: "Claude review failed." };
     }
   });
 

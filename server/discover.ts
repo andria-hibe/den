@@ -45,9 +45,10 @@ function userText(msg: unknown): string | null {
   return null;
 }
 
-// den spawns one-shot `claude -p` helpers (PR diff summaries, PR reviews — see
-// server/github.ts). Those write transcripts too, but you'd never resume them,
-// so we detect them by their prompt and drop them from the resume list.
+// den used to spawn one-shot `claude -p` helpers (PR diff summaries, PR
+// reviews; both removed — the interactive review session does that work now).
+// Their transcripts are still on disk and you'd never resume one, so keep
+// detecting them by their prompt and dropping them from the resume list.
 const HEADLESS_PROMPTS = [
   "Summarize this PR's unified diff",
   "You are reviewing a GitHub pull request",

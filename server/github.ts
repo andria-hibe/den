@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { logWarn } from "./log.ts";
 
@@ -306,7 +306,7 @@ export async function getMyPullRequests(): Promise<PrBuckets> {
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
 }
 
-// --- PR detail, diff, and Claude review -------------------------------------
+// --- PR detail and diff ------------------------------------------------------
 
 export interface PrReviewNote {
   author: string;
@@ -466,40 +466,4 @@ async function viewerLogin(): Promise<string> {
   }
 }
 
-const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
-
-/** Run `claude -p <prompt>` with `input` on stdin; resolve its stdout. */
-function claudePrint(prompt: string, input: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(CLAUDE_BIN, ["-p", prompt], { timeout: 180_000 });
-    let out = "";
-    let err = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
-    child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0
-        ? resolve(out.trim())
-        : reject(new Error(err.trim() || `claude exited ${code}`)),
-    );
-    child.stdin.write(input);
-    child.stdin.end();
-  });
-}
-
-/** Ask Claude (headless) for a written review of a PR's diff. */
-export async function reviewPr(repo: string, number: number): Promise<string> {
-  const diff = (await getPrDiff(repo, number)).slice(0, 200_000);
-  const prompt =
-    "You are reviewing a GitHub pull request. The unified diff follows on " +
-    "stdin. Give a concise, skimmable code review in markdown with sections: " +
-    "**Summary**, **Potential bugs**, **Risky changes**, **Suggestions**. " +
-    "Write the whole review in plain ASCII so it survives a copy-paste into " +
-    "GitHub: no em dashes, curly quotes, arrows, ellipsis characters or emoji. " +
-    "One issue per bullet, one or two sentences, opening with \"path:line\", " +
-    "then the problem, then the fix. Rank each section worst first and cap it " +
-    "at 5 bullets. No praise and no closing recap. If it looks solid, say so " +
-    "in one line.";
-  return claudePrint(prompt, diff);
-}
 
