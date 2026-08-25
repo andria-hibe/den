@@ -554,6 +554,15 @@ export function App() {
                   </div>
                 ))}
               </div>
+              <a
+                className="fox-pop-arch"
+                href="/architecture.svg"
+                target="_blank"
+                rel="noreferrer"
+                title="how den fits together — renderer, server, PTYs, and everything they touch"
+              >
+                🗺 den&apos;s architecture ↗
+              </a>
             </div>
           )}
         </span>

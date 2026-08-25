@@ -1801,6 +1801,20 @@ body {
   line-height: 1.35;
   align-self: start;
 }
+/* Footer link to the architecture map (web/public/architecture.svg). */
+.fox-pop-arch {
+  display: block;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.fox-pop-arch:hover {
+  color: var(--pink-deep);
+}
 .loading-row {
   display: flex;
   align-items: center;

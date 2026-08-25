@@ -86,7 +86,9 @@ personal API key in the work panel).
 
 ## How it works
 
-![den's architecture](docs/architecture.svg)
+![den's architecture](web/public/architecture.svg)
+
+(The same map lives inside the app — click the topbar status fox.)
 
 - A Node/TypeScript backend runs **inside** Electron's main process (also
   runnable standalone via a CLI). Terminals stream over a WebSocket; everything

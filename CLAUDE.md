@@ -245,8 +245,10 @@ back exited, and one click revives it.
   just means nobody asked yet, and a fox walking then would be a lie.
   Sprites in `foxSprites.ts`; keep integer scale + stepped animation
   or they blur. **Click the status fox** for a popover showing all five poses
-  (current one badged "now"); **hover the `den` wordmark** for the keyboard-shortcut
-  cheat sheet.
+  (current one badged "now") plus a link to the architecture map
+  (`web/public/architecture.svg` — served by the app at `/architecture.svg`,
+  embedded in the README, and drawn by hand: update it when the architecture
+  changes); **hover the `den` wordmark** for the keyboard-shortcut cheat sheet.
 - **PR cards flag what needs you**: cards with `needsAttention` get a pink accent
   + pulsing `!` (tooltip = `attentionReason`), so the "review requested" and "my
   open PRs" sections show at a glance which ones are on you. Already-approved
