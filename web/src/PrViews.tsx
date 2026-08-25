@@ -1,38 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api } from "./api.ts";
 import { DiffView, DiffHunk, diffFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { parseReview } from "./reviewNotes.ts";
-import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
+import { Splitter, clamp } from "./Splitter.tsx";
+import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { ToClaude } from "./ToClaude.tsx";
-
-interface PrNote {
-  author: string;
-  state?: string;
-  body: string;
-  at: string;
-  path?: string;
-  line?: number;
-  diffHunk?: string;
-  resolved?: boolean;
-  outdated?: boolean;
-}
-interface PrDetail {
-  number: number;
-  title: string;
-  url: string;
-  body: string;
-  reviews: PrNote[];
-  comments: PrNote[];
-  reviewComments: PrNote[];
-}
+import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
 function usePrDetail(repo: string, number: number) {
   const [detail, setDetail] = useState<PrDetail | null>(null);
   useEffect(() => {
-    fetch(`/api/github/pr?repo=${encodeURIComponent(repo)}&number=${number}`)
-      .then((r) => r.json())
-      .then((d) => !d.error && setDetail(d))
+    api<PrDetail>(`/api/github/pr?repo=${encodeURIComponent(repo)}&number=${number}`)
+      .then(setDetail)
       .catch(() => {});
   }, [repo, number]);
   return detail;
@@ -45,7 +26,7 @@ function Md({ text }: { text: string }) {
 }
 
 /** Build the prompt Claude receives when actioning a comment. */
-function notePrompt(prNumber: number, n: PrNote & { kind: string }): string {
+function notePrompt(prNumber: number, n: PrReviewNote & { kind: string }): string {
   const where = n.path
     ? ` on \`${n.path}\`${n.line ? ` (line ${n.line})` : ""}`
     : "";
@@ -105,7 +86,7 @@ function InlineComments({
   const resolvedCount = all.filter((c) => c.resolved).length;
   const shown = showResolved ? all : all.filter((c) => !c.resolved);
 
-  const byFile = new Map<string, PrNote[]>();
+  const byFile = new Map<string, PrReviewNote[]>();
   for (const c of shown) {
     const key = c.path ?? "(general)";
     (byFile.get(key) ?? byFile.set(key, []).get(key)!).push(c);
@@ -204,9 +185,10 @@ export function PrReviewView({
   const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
 
   useEffect(() => {
-    fetch(`/api/github/pr/diff?repo=${encodeURIComponent(repo)}&number=${number}`)
-      .then((r) => r.json())
-      .then((d) => !d.error && setDiff(d.diff ?? ""))
+    api<{ diff: string }>(
+      `/api/github/pr/diff?repo=${encodeURIComponent(repo)}&number=${number}`,
+    )
+      .then((d) => setDiff(d.diff ?? ""))
       .catch(() => {});
   }, [repo, number]);
 
@@ -216,8 +198,7 @@ export function PrReviewView({
   useEffect(() => {
     let stop = false;
     const load = () =>
-      fetch(`/api/notepad/${sessionId}`)
-        .then((r) => r.json())
+      api<{ content: string }>(`/api/notepad/${sessionId}`)
         .then((d) => !stop && setReview(d.content ?? ""))
         .catch(() => {});
     load();
@@ -256,9 +237,8 @@ export function PrReviewView({
     if (!autoReview || started.current) return;
     started.current = true;
     setRequested(true);
-    fetch(`/api/sessions/${sessionId}/paste`, {
+    api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: reviewPrompt, submit: true }),
     })
       .then(() => onAutoReviewStarted?.())

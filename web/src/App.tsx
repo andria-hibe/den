@@ -8,7 +8,8 @@ import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
-import { Splitter, usePersistentNumber, usePersistentString, clamp } from "./Splitter.tsx";
+import { Splitter, clamp } from "./Splitter.tsx";
+import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
 import { AppRunButton } from "./AppRunButton.tsx";
@@ -90,8 +91,7 @@ export function App() {
   const [denRoot, setDenRoot] = useState<string>("");
 
   useEffect(() => {
-    fetch("/api/fs/roots")
-      .then((r) => r.json())
+    api<{ workRepo?: string; den?: string }>("/api/fs/roots")
       .then((d) => {
         setWorkRepoRoot(d.workRepo ?? "");
         setDenRoot(d.den ?? "");

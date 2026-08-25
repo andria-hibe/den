@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { api } from "./api.ts";
 import { PixelFox } from "./PixelFox.tsx";
+import { relTimeAgo } from "./format.ts";
 
 interface Roots {
   home: string;
@@ -39,8 +41,7 @@ export function NewSessionDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/fs/roots")
-      .then((r) => r.json())
+    api<Roots>("/api/fs/roots")
       .then(setRoots)
       .catch(() => setError("could not load folders"));
   }, []);
@@ -54,14 +55,15 @@ export function NewSessionDialog({
     async (p: string) => {
       setError(null);
       const expanded = roots && p.startsWith("~") ? roots.home + p.slice(1) : p;
-      const res = await fetch(`/api/fs/dirs?path=${encodeURIComponent(expanded)}`);
-      const d = await res.json();
-      if (d.error) {
-        setError(`can't open ${short(expanded)} (${d.error})`);
-        return;
+      try {
+        const d = await api<Listing>(
+          `/api/fs/dirs?path=${encodeURIComponent(expanded)}`,
+        );
+        setListing(d);
+        setPath(d.path);
+      } catch (e) {
+        setError(`can't open ${short(expanded)} (${(e as Error).message})`);
       }
-      setListing(d);
-      setPath(d.path);
     },
     [roots, short],
   );
@@ -70,8 +72,7 @@ export function NewSessionDialog({
     setMode(m);
     if (m === "resume") {
       setPast(null);
-      fetch("/api/sessions/past")
-        .then((r) => r.json())
+      api<{ sessions: PastSession[] }>("/api/sessions/past")
         .then((d) => setPast(d.sessions ?? []))
         .catch(() => setPast([]));
       return;
@@ -82,30 +83,19 @@ export function NewSessionDialog({
     navigate(start);
   };
 
-  const relTime = (ms: number) => {
-    const m = Math.round((Date.now() - ms) / 60000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.round(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.round(h / 24)}d ago`;
-  };
-  const shortPath = (p: string) =>
-    roots && p.startsWith(roots.home) ? "~" + p.slice(roots.home.length) : p;
 
   const createFolder = async () => {
     if (!newName.trim()) return;
-    const res = await fetch("/api/fs/dirs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ parent: path, name: newName }),
-    });
-    const d = await res.json();
-    if (d.error) {
-      setError(d.error);
-      return;
+    try {
+      const d = await api<{ path: string }>("/api/fs/dirs", {
+        method: "POST",
+        body: JSON.stringify({ parent: path, name: newName }),
+      });
+      setNewName("");
+      navigate(d.path); // step into the folder we just made
+    } catch (e) {
+      setError((e as Error).message);
     }
-    setNewName("");
-    navigate(d.path); // step into the folder we just made
   };
 
   return (
@@ -180,7 +170,7 @@ export function NewSessionDialog({
                 >
                   <div className="resume-title">{p.title}</div>
                   <div className="resume-meta">
-                    {shortPath(p.cwd)} · {relTime(p.updatedAt)}
+                    {short(p.cwd)} · {relTimeAgo(p.updatedAt)}
                   </div>
                 </button>
               ))}

@@ -1,7 +1,7 @@
-import { type CSSProperties } from "react";
 import type { PullRequest } from "../../server/github.ts";
 import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
+import { accentStyle, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
@@ -17,26 +17,6 @@ const REVIEW_LABEL: Record<PullRequest["review"], string | null> = {
   review_required: "needs review",
   none: null,
 };
-
-function relTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.round(diff / 60000);
-  if (m < 60) return `${m}m`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.round(h / 24)}d`;
-}
-
-// A card linked to an open session is tinted with that session's colour (left
-// stripe + faint wash) so related work reads at a glance.
-function accentStyle(color?: string): CSSProperties | undefined {
-  if (!color) return undefined;
-  return {
-    borderLeftColor: color,
-    borderLeftWidth: 5,
-    background: `color-mix(in srgb, ${color} 16%, var(--bg-rail))`,
-  };
-}
 
 function PrCard({
   pr,

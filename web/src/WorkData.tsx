@@ -9,7 +9,9 @@ import {
 } from "react";
 import type { PrBuckets, PullRequest } from "../../server/github.ts";
 import type { LinearData, LinearIssue } from "../../server/linear.ts";
-import { usePersistentJson } from "./Splitter.tsx";
+import { api } from "./api.ts";
+import { prKey } from "./format.ts";
+import { usePersistentJson } from "./usePersistent.ts";
 
 // Single source of truth for GitHub PRs + Linear issues. Previously App, the
 // WorkPanel, and the LinearSection each ran their own 60s poll of the same two
@@ -52,11 +54,7 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     setPrsLoading(true);
     setPrsError(null);
     try {
-      const res = await fetch(`/api/github/prs${refresh ? "?refresh=1" : ""}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as PrBuckets & { error?: string };
-      if (json.error) throw new Error(json.error);
-      setPrs(json);
+      setPrs(await api<PrBuckets>(`/api/github/prs${refresh ? "?refresh=1" : ""}`));
     } catch (e) {
       setPrsError((e as Error).message);
     } finally {
@@ -74,7 +72,6 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
   // it. The dismissal is scoped to that snapshot — if the PR later changes
   // (a new push / comment / review), the "!" comes back, mirroring how the OS
   // notifications only react to transitions.
-  const prKey = (p: PullRequest) => `${p.repo}#${p.number}`;
   const [dismissed, setDismissed] = usePersistentJson<Record<string, string>>(
     "den.dismissedPrAttn",
     {},
@@ -135,6 +132,8 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
   const [linearError, setLinearError] = useState<string | null>(null);
   const [linearLoading, setLinearLoading] = useState(false);
 
+  // Raw fetch (not api()): a 409 means "no Linear key yet", which is a state,
+  // not an error — it needs the status code, which api() folds into a throw.
   const refreshIssues = useCallback(async (refresh = false) => {
     setLinearLoading(true);
     setLinearError(null);
@@ -157,8 +156,7 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
 
   // Initial connection check, then load if connected.
   useEffect(() => {
-    fetch("/api/linear/status")
-      .then((r) => r.json())
+    api<{ connected: boolean }>("/api/linear/status")
       .then((s) => {
         setLinearConnected(s.connected);
         if (s.connected) refreshIssues();
@@ -174,7 +172,7 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
   }, [linearConnected, refreshIssues]);
 
   const disconnectLinear = useCallback(async () => {
-    await fetch("/api/linear/key", { method: "DELETE" });
+    await api("/api/linear/key", { method: "DELETE" });
     setLinear(null);
     setLinearConnected(false);
   }, []);

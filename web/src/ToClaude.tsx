@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api } from "./api.ts";
 
 /** Button that pastes a framed instruction into a session's Claude prompt via
  * bracketed paste (keeps multi-line as one entry, does not auto-submit). Shared
@@ -25,9 +26,8 @@ export function ToClaude({
 }) {
   const [sent, setSent] = useState(false);
   const send = () => {
-    fetch(`/api/sessions/${sessionId}/paste`, {
+    api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, submit }),
     })
       .then(() => {

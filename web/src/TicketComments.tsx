@@ -1,15 +1,8 @@
 import { useEffect, useState } from "react";
+import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { relTimeAgo } from "./format.ts";
 import type { LinearComment } from "../../server/linear.ts";
-
-function relTime(iso: string): string {
-  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
 
 // Comments on a Linear ticket, shown in the read-only "look" view. Fetches
 // lazily per ticket; stays quiet (renders nothing) on error or when empty.
@@ -21,13 +14,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     let alive = true;
     setComments(null);
     setFailed(false);
-    fetch(`/api/linear/comments?id=${encodeURIComponent(ticketId)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        if (d.error) setFailed(true);
-        else setComments((d.comments ?? []) as LinearComment[]);
-      })
+    api<{ comments: LinearComment[] }>(
+      `/api/linear/comments?id=${encodeURIComponent(ticketId)}`,
+    )
+      .then((d) => alive && setComments(d.comments ?? []))
       .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
@@ -47,7 +37,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         <div className="ticket-comment" key={i}>
           <div className="ticket-comment-meta">
             <strong>{c.author}</strong>
-            <span className="ticket-comment-time">{relTime(c.at)}</span>
+            <span className="ticket-comment-time">{relTimeAgo(c.at)}</span>
           </div>
           <div
             className="md"

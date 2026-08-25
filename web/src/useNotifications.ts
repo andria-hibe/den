@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { PullRequest } from "../../server/github.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
+import { prKey } from "./format.ts";
 
 // Native OS notifications for the two things that need you when den isn't in
 // focus: a background session ringing the bell, and a PR newly needing your
@@ -16,8 +17,6 @@ function notify(title: string, body: string) {
     // some environments throw if construction isn't allowed — ignore
   }
 }
-
-const prKey = (p: PullRequest) => `${p.repo}#${p.number}`;
 
 export function useNotifications({
   sessions,

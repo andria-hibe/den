@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
 
 // Progress log for a workspace. Renders markdown in view mode; edit + save.
@@ -13,8 +14,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   const refresh = useCallback(async () => {
     if (busyRef.current) return; // don't clobber an in-progress edit
     try {
-      const res = await fetch(`/api/notepad/${groupId}`);
-      const d = await res.json();
+      const d = await api<{ content: string }>(`/api/notepad/${groupId}`);
       setContent((prev) => (prev === d.content ? prev : d.content ?? ""));
     } catch {
       // keep what we have
@@ -32,9 +32,8 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      await fetch(`/api/notepad/${groupId}`, {
+      await api(`/api/notepad/${groupId}`, {
         method: "PUT",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({ content }),
       });
       setDirty(false);

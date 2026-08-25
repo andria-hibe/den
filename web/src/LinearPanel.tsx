@@ -1,7 +1,9 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import type { LinearIssue } from "../../server/linear.ts";
+import { api } from "./api.ts";
 import { Fox } from "./Fox.tsx";
-import { usePersistentString } from "./Splitter.tsx";
+import { accentStyle, relTime } from "./format.ts";
+import { usePersistentString } from "./usePersistent.ts";
 import { useWorkData } from "./WorkData.tsx";
 
 // The Linear section splits assigned tickets by their identifier prefix into
@@ -20,25 +22,6 @@ const PRIORITY_CLASS: Record<number, string> = {
   3: "prio-medium",
   4: "prio-low",
 };
-
-function relTime(iso: string): string {
-  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 60) return `${m}m`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.round(h / 24)}d`;
-}
-
-// A ticket linked to an open session is tinted with that session's colour
-// (left stripe + faint wash), matching the accent Pr cards use.
-function accentStyle(color?: string): CSSProperties | undefined {
-  if (!color) return undefined;
-  return {
-    borderLeftColor: color,
-    borderLeftWidth: 5,
-    background: `color-mix(in srgb, ${color} 16%, var(--bg-rail))`,
-  };
-}
 
 function IssueCard({
   issue,
@@ -100,13 +83,10 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/linear/key", {
+      await api("/api/linear/key", {
         method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({ key: key.trim() }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
       setKey("");
       onConnected();
     } catch (e) {
