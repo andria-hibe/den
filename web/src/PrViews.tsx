@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.ts";
 import { DiffView, DiffHunk, diffFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
-import { renderMarkdown } from "./markdown.ts";
+import { Md } from "./Md.tsx";
+import { PrGuideTab } from "./PrGuide.tsx";
 import { parseReview } from "./reviewNotes.ts";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
@@ -17,12 +18,6 @@ function usePrDetail(repo: string, number: number) {
       .catch(() => {});
   }, [repo, number]);
   return detail;
-}
-
-function Md({ text }: { text: string }) {
-  return (
-    <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
-  );
 }
 
 /** Build the prompt Claude receives when actioning a comment. */
@@ -172,13 +167,18 @@ export function PrReviewView({
   const detail = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
   const [review, setReview] = useState<string>("");
+  const [guide, setGuide] = useState<string>("");
   // A review has been asked for but hasn't landed in the notepad yet — the only
   // state where a walking fox is honest (an empty notepad on its own just means
-  // nobody has asked yet).
+  // nobody has asked yet). The guide has its own flag: either can be asked for
+  // alone.
   const [requested, setRequested] = useState(false);
+  const [guideRequested, setGuideRequested] = useState(false);
   const started = useRef(false);
   const [upperFrac, setUpperFrac] = usePersistentNumber("den.prDiffFrac", 0.6);
-  const [tab, setTab] = usePersistentString("den.prReviewTab", "review", [
+  // Guide first: it is the orientation you want before the findings.
+  const [tab, setTab] = usePersistentString("den.prReviewTab", "guide", [
+    "guide",
     "review",
     "description",
   ] as const);
@@ -188,6 +188,10 @@ export function PrReviewView({
   // comments can sit beside that file's diff; the rest is the general review.
   const files = useMemo(() => diffFiles(diff), [diff]);
   const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
+  // Why a file shows no comments: nobody asked yet, the review is being written,
+  // or it landed with nothing to say. Both tabs render the notes column, so they
+  // read the same state.
+  const noteState = review.trim() ? "ready" : requested ? "waiting" : "idle";
 
   useEffect(() => {
     api<{ diff: string }>(
@@ -197,15 +201,19 @@ export function PrReviewView({
       .catch(() => {});
   }, [repo, number]);
 
-  // The session writes its finished review to the workspace notepad (see
-  // reviewInstruction, server-side); poll it so the review fills in as Claude
-  // produces it.
+  // The session writes its finished review to the workspace notepad and its
+  // reading guide to a sibling guide file (see reviewInstruction, server-side);
+  // poll both on one timer so each fills in as Claude produces it.
   useEffect(() => {
     let stop = false;
-    const load = () =>
+    const load = () => {
       api<{ content: string }>(`/api/notepad/${groupId}`)
         .then((d) => !stop && setReview(d.content ?? ""))
         .catch(() => {});
+      api<{ content: string }>(`/api/review/guide/${groupId}`)
+        .then((d) => !stop && setGuide(d.content ?? ""))
+        .catch(() => {});
+    };
     load();
     const t = setInterval(load, 4000);
     return () => {
@@ -213,6 +221,20 @@ export function PrReviewView({
       clearInterval(t);
     };
   }, [groupId]);
+
+  // The guide is a separate, cheaper ask than the review: group the diff and
+  // explain each group. It lands first and gives you something to read while the
+  // finding pass runs. The shape mirrors reviewInstruction (server/sessions.ts)
+  // so den can render each section above its own diffs.
+  const guidePrompt =
+    `Please write the reading guide for pull request #${number} (${repo}) to the ` +
+    `guide file named in your instructions. Read the saved diff first, and the ` +
+    `changed files for context. Group the changed files into sections by what ` +
+    `they do, most important first (the core of the change, then supporting ` +
+    `changes, then low-signal churn), and give each section a \`## \` heading, ` +
+    `two to four lines on its purpose and impact, and a \`Files:\` line naming ` +
+    `its files exactly as they appear in the diff. Every changed file goes in ` +
+    `exactly one section. Don't review in the guide - findings go in the review.`;
 
   // Have the interactive Claude session (below) do the review, rather than a
   // one-shot headless pass rendered into this pane. The PR is checked out in the
@@ -238,16 +260,26 @@ export function PrReviewView({
   // pane is ready (see the paste route), which a fixed timeout can't get right.
   // onAutoReviewStarted lets App clear its flag, so coming back to this session
   // later doesn't kick off the whole review a second time.
+  // The auto path asks for both, guide first: it is the reading order for the
+  // review that follows, and it lands while the finding pass is still running.
+  const autoPrompt =
+    `${guidePrompt}\n\nThen, once the guide file is saved, review the PR too. ` +
+    reviewPrompt;
+
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
     setRequested(true);
+    setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
-      body: JSON.stringify({ text: reviewPrompt, submit: true }),
+      body: JSON.stringify({ text: autoPrompt, submit: true }),
     })
       .then(() => onAutoReviewStarted?.())
-      .catch(() => setRequested(false));
+      .catch(() => {
+        setRequested(false);
+        setGuideRequested(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReview]);
 
@@ -257,6 +289,15 @@ export function PrReviewView({
         <div className="pr-info-head">
           <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
           <div className="ticket-look-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "guide"}
+              className={`look-tab${tab === "guide" ? " active" : ""}`}
+              onClick={() => setTab("guide")}
+              title="The change grouped into sections, each explained above its own diffs"
+            >
+              Guide
+            </button>
             <button
               role="tab"
               aria-selected={tab === "review"}
@@ -275,7 +316,20 @@ export function PrReviewView({
             </button>
           </div>
         </div>
-        {tab === "review" ? (
+        {tab === "guide" ? (
+          <PrGuideTab
+            guide={guide}
+            diff={diff}
+            files={files}
+            notes={byFile}
+            noteState={noteState}
+            sessionId={sessionId}
+            prNumber={number}
+            prompt={guidePrompt}
+            requested={guideRequested}
+            onRequested={() => setGuideRequested(true)}
+          />
+        ) : tab === "review" ? (
           // One scroll region: the general review, then the diff with each
           // file's comments beside it.
           <div className="pr-review-scroll">
@@ -310,7 +364,7 @@ export function PrReviewView({
             <DiffView
               diff={diff}
               notes={byFile}
-              noteState={review.trim() ? "ready" : requested ? "waiting" : "idle"}
+              noteState={noteState}
               sessionId={sessionId}
               prNumber={number}
             />

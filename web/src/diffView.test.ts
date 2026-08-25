@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classify, diffFiles, lineNumbers } from "./DiffView.tsx";
+import { classify, diffFiles, diffForFiles, lineNumbers } from "./DiffView.tsx";
 
 const DIFF = [
   "diff --git a/server/git.ts b/server/git.ts",
@@ -93,5 +93,34 @@ describe("classify", () => {
 describe("diffFiles", () => {
   it("lists the paths a diff touches", () => {
     expect(diffFiles(DIFF)).toEqual(["server/git.ts"]);
+  });
+});
+
+describe("diffForFiles", () => {
+  const TWO = [
+    "diff --git a/b.ts b/b.ts",
+    "@@ -1 +1 @@",
+    "-b old",
+    "+b new",
+    "diff --git a/a.ts b/a.ts",
+    "@@ -1 +1 @@",
+    "-a old",
+    "+a new",
+  ].join("\n");
+
+  it("returns just the named files, in the order asked for (the guide's order)", () => {
+    const out = diffForFiles(TWO, ["a.ts", "b.ts"]);
+    expect(out.indexOf("a/a.ts")).toBeLessThan(out.indexOf("a/b.ts"));
+    expect(out).toContain("+a new");
+    expect(out).toContain("+b new");
+  });
+
+  it("skips a path the diff doesn't have", () => {
+    expect(diffForFiles(TWO, ["gone.ts", "a.ts"])).not.toContain("b.ts");
+    expect(diffForFiles(TWO, ["gone.ts"])).toBe("");
+  });
+
+  it("drops the diff's leading preamble, keeping only file blocks", () => {
+    expect(diffForFiles(`noise\n${TWO}`, ["a.ts"])).not.toContain("noise");
   });
 });

@@ -102,6 +102,19 @@ export function diffFiles(diff: string): string[] {
     .filter((f): f is string => !!f);
 }
 
+/** The sub-diff covering just `files`, in the order given — how the guide view
+ * renders one section's changes (its own order, not the diff's). Files the diff
+ * doesn't contain are skipped. */
+export function diffForFiles(diff: string, files: string[]): string {
+  const byFile = new Map<string, string[]>();
+  for (const b of parseFiles(diff)) if (b.file) byFile.set(b.file, b.lines);
+  return files
+    .map((f) => byFile.get(f))
+    .filter((lines): lines is string[] => !!lines)
+    .map((lines) => lines.join("\n"))
+    .join("\n");
+}
+
 function parseFiles(diff: string): FileBlock[] {
   const blocks: FileBlock[] = [];
   let cur: FileBlock | null = null;

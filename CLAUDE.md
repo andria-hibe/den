@@ -46,6 +46,9 @@ WebSocket; everything else is REST.
   (independent of any WS), 256KB scrollback ring (replays on attach), OSC
   title capture, attention (bell) flag, **workspace grouping** (groupId/role),
   and ticket/PR/look/view metadata. Spawns `claude -n <name> [flags] [prompt]`.
+  `reviewInstruction` asks a review pane for **two** deliverables: the reading
+  guide (`~/.den/review/<groupId>.guide.md`, grouped by purpose) and the review
+  (the notepad, filed per file).
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot).
@@ -110,14 +113,19 @@ WebSocket; everything else is REST.
   cards), `LinearPanel`, `TicketDialog`, `PrDialog`, `PrViews`
   (PrReviewView/PrMyView), `DiffView`, `NotepadPane`, `NewSessionDialog`,
   `Fox`/`foxSprites` + `PixelFox`, `Splitter` (divider + `clamp`),
-  `useTerminal`, `markdown.ts`, `theme.css`. `shared/colors.ts` holds the
+  `useTerminal`, `markdown.ts` (line-oriented mini-renderer; a **soft line break
+  continues its paragraph or `<li>`** instead of starting a new block, because
+  the review and its guide are hard-wrapped prose — `NEW_BLOCK` keeps a numbered
+  list from being swallowed; `markdown.test.ts`), `theme.css`. `shared/colors.ts` holds the
   9-pastel palette both the server (auto-assign) and the picker import.
   - `DiffView.tsx` exports `classify(line)` (diff-line CSS class), `DiffHunk`
     (renders one `diff_hunk`, marks the anchored last line), `lineNumbers(lines)`
     (old/new file line numbers walked from each `@@ -a,b +c,d @@` header — only
     *inside* a hunk, since the `---`/`+++` preamble also starts with `-`/`+`), and
     `diffFiles(diff)` (the paths a diff touches — the keys review comments are
-    filed under), besides `DiffView` (per-file blocks: the review's comments for
+    filed under), `diffForFiles(diff, files)` (the sub-diff for just those
+    files, in the order given — how the Guide tab renders one section), besides
+    `DiffView` (per-file blocks: the review's comments for
     that file in a sticky left column, diff right). Every line renders a two-column
     number gutter (`.diff-gutter`, old then new) so a review saying "line 448" can
     be found in the diff; the gutter is `position: sticky; left: 0` and repaints
@@ -132,9 +140,29 @@ WebSocket; everything else is REST.
     `_` wholesale broke every snake_case path (`query_notification_subscriptions.test.ts`);
     and a heading that `looksLikePath` but matches no file in the diff ends the
     current section and is appended to `overall` instead of misfiling.
+  - `reviewGuide.ts` + `PrGuide.tsx` — the **Guide tab**: the PR read in the
+    order it was *written*, not file-alphabetical order (den's take on Linear's
+    diff guides). The review session writes a reading guide to
+    `~/.den/review/<groupId>.guide.md` — a short intro, then one
+    `## <section title>` per group of related changes (core implementation
+    first, churn last), each with two to four lines on its purpose and impact
+    and a `Files: a.ts, b.ts` line. Pure `parseGuide(md, files)` →
+    `{ intro, sections: [{title, body, files}], leftover }`; `PrGuideTab`
+    renders each section's prose above **that section's own diffs**
+    (`diffForFiles` in `DiffView.tsx` slices the diff per section), with the
+    review's per-file comments still beside each file. Parsing is forgiving the
+    same way `reviewNotes.ts` is and reuses its `matchFile`/`looksLikePath`:
+    bulleted or comma-separated paths, `Paths:` as the label, a shortened path,
+    a heading that is itself a path (a one-file section), backticked paths in
+    the prose as a fallback. **The first section to claim a file keeps it**, so
+    no diff renders twice, and `leftover` (files no section grouped, or the
+    whole diff before a guide exists) goes in a collapsed `<details>` at the
+    bottom — nothing is ever hidden. Unit-tested in `reviewGuide.test.ts`.
+    Why its own file and not the notepad: the review's `## <path>` headings and
+    the guide's `## <section title>` ones would otherwise share a parser.
   - `PrViews.tsx`: `PrReviewView` (others' PRs — **two regions, one splitter**, so
-    it works on a small screen: a tabbed pane above (**Review** / **Description**)
-    and the session below. The Review tab is one scroll region — the general review
+    it works on a small screen: a tabbed pane above (**Guide** / **Review** /
+    **Description**) and the session below. The Review tab is one scroll region — the general review
     first, then the diff with **each file's review comments beside that file's
     hunks** (sticky, via `parseReview` → `DiffView notes=`). The session is told
     (via `reviewInstruction`) to save its finished review as markdown to the
@@ -169,8 +197,9 @@ WebSocket; everything else is REST.
     them back — and `reviewInstruction.test.ts` asserts that with `isAscii`.
     (`reviewInstruction` is the only copy of these rules — the headless
     `reviewPr` duplicate was removed 2026-08-25.)
-    Review panes carry a notepad — `create()`/`restartArgs` wire it for
-    `view === "review"`. **A review pane has a full shell** (running the tests or
+    Review panes carry a notepad **and a guide file** — `create()`/`restartArgs`
+    wire both for `view === "review"`, and `remove()` deletes them with the diff
+    and settings file when the workspace closes. **A review pane has a full shell** (running the tests or
     trying a fix is part of reviewing) but **must never commit or push** — see
     Security posture for the instruction + deny backstop that holds that line. den
     still fetches the diff (`app.ts`) into `~/.den/review/<groupId>.diff` so the
@@ -293,13 +322,24 @@ back exited, and one click revives it.
   panel's linear header (links to the workspace inbox) and unread notifications
   push the topbar fox to `alert`.
 - **GitHub PR → Review / Edit**. Others' PRs: check out into a worktree, then
-  **one tabbed pane above (Review / Description) + the Claude session below** —
+  **one tabbed pane above (Guide / Review / Description) + the Claude session
+  below** —
   two regions, one splitter (it used to be four panes and three splitters, which
   didn't fit a small screen). The Review tab reads top-to-bottom: the general
   review, then the diff per file with **that file's review comments in the column
   beside its hunks** (sticky, so they stay put while you scroll the code). Your
   PRs: description + colleagues' reviews/comments + a Claude session on the
   branch. Sessions are named `FAST-1234: title` / `PR #123: title`.
+- **Reading guide for a PR** (the Guide tab, den's take on Linear's diff
+  guides): instead of the diff in file-alphabetical order, the session groups
+  the change into sections — the core of the implementation first, supporting
+  changes next, churn (lockfiles, generated files, formatting) last — writes
+  two to four lines on each group's purpose and impact, and den renders that
+  explanation above **that group's own diffs**. It lands before the review does,
+  so there's something to read while the finding pass runs. Anything the guide
+  doesn't group sits in a collapsed block at the bottom, so no change is hidden.
+  Guide and review are separate asks: `build guide` on the Guide tab, `review in
+  session` on the Review tab; the auto pre-review asks for both, guide first.
 - **Inline comments → Claude** (your PRs). The my-PR info pane has **two tabs**
   (`PrMyView`): *Description & comments* (description + top-level reviews/comments)
   and *Inline comments* — line-level review comments grouped by file, each rendered
@@ -398,8 +438,9 @@ local control plane, not a public API:
      `gh pr view|diff|checks` stay open for reading. It is a backstop, **not** a
      sandbox: a shell can still reach those places another way (`git -C`, a
      wrapper script, an alias), which is why the instruction carries the weight.
-  The `allow` list is the notepad (`Edit(//<notepad>)`, so the finished review
-  saves without a prompt) plus the reads a review runs constantly — `git
+  The `allow` list is the notepad and the guide file (`Edit(//<notepad>)`,
+  `Edit(//<guide>)`, so the finished review and its reading guide save without a
+  prompt) plus the reads a review runs constantly — `git
   log/show/diff/status/blame/grep/fetch`, `rg`/`grep`, `gh pr view|diff|checks`
   — so the code-review skill's finding pass doesn't stall on a prompt per
   `git show` (deny beats allow, so the write backstop is untouched); everything

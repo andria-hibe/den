@@ -1362,6 +1362,68 @@ body {
   letter-spacing: 0.5px;
   color: var(--ink-soft);
 }
+/* ---- Reading guide (Review pane, "Guide" tab) ----
+   Each section is an explanation with its own diffs under it, so the change
+   reads in the order it was written rather than in file order. */
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 2px;
+  border-top: 1.5px solid var(--border);
+}
+.guide-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.guide-section-num {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--pink-deep);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+.guide-section-title {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.guide-section-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.guide-section .md {
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 0;
+}
+.guide-section .md > :first-child { margin-top: 0; }
+.guide-section .md > :last-child { margin-bottom: 0; }
+/* Churn the guide didn't group (or, before a guide exists, the whole diff). */
+.guide-leftover {
+  border-top: 1.5px solid var(--border);
+  padding-top: 10px;
+}
+.guide-leftover > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+.guide-leftover > summary:hover {
+  color: var(--ink);
+}
+
 /* Scrolls with .pr-review-scroll — the diff is part of that one region. No
    `overflow` here: it would become the scrollport the sticky notes column sticks
    to (and can't scroll), so the notes would never follow the hunks. The corners

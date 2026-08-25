@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import { buildReviewPermissions, scratchBranch } from "./sessions.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
+const GUIDE = "/Users/x/.den/review/abc-123.guide.md";
 
 describe("buildReviewPermissions (PR review guardrails)", () => {
-  const { permissions } = buildReviewPermissions(NOTEPAD);
+  const { permissions } = buildReviewPermissions(NOTEPAD, GUIDE);
 
   it("leaves the shell available — a review needs to run things", () => {
     expect(permissions.deny).not.toContain("Bash");
@@ -30,9 +31,11 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
     }
   });
 
-  it("allows editing the exact notepad file, root-anchored and not a wildcard", () => {
+  it("allows editing the exact notepad and guide files, root-anchored and not wildcards", () => {
     expect(permissions.allow).toContain(`Edit(//${NOTEPAD.replace(/^\/+/, "")})`);
+    expect(permissions.allow).toContain(`Edit(//${GUIDE.replace(/^\/+/, "")})`);
     expect(permissions.allow[0]).not.toContain("**");
+    expect(permissions.allow[1]).not.toContain("**");
   });
 
   it("allows the read-only commands a review runs constantly", () => {
@@ -47,9 +50,12 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
     }
   });
 
-  it("grants Edit only on the notepad — no other Edit or Write allows", () => {
+  it("grants Edit only on the two files it writes — no other Edit or Write allows", () => {
     const edits = permissions.allow.filter((r) => !r.startsWith("Bash("));
-    expect(edits).toEqual([`Edit(//${NOTEPAD.replace(/^\/+/, "")})`]);
+    expect(edits).toEqual([
+      `Edit(//${NOTEPAD.replace(/^\/+/, "")})`,
+      `Edit(//${GUIDE.replace(/^\/+/, "")})`,
+    ]);
   });
 });
 

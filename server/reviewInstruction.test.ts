@@ -3,7 +3,8 @@ import { reviewInstruction, isAscii } from "./sessions.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 const DIFF = "/Users/x/.den/review/abc-123.diff";
-const INSTRUCTION = reviewInstruction(NOTEPAD, DIFF, "feature/thing");
+const GUIDE = "/Users/x/.den/review/abc-123.guide.md";
+const INSTRUCTION = reviewInstruction(NOTEPAD, DIFF, "feature/thing", GUIDE);
 
 describe("isAscii", () => {
   it("accepts plain ASCII, tabs and newlines", () => {
@@ -25,6 +26,7 @@ describe("reviewInstruction", () => {
   it("names the files it hands over", () => {
     expect(INSTRUCTION).toContain(NOTEPAD);
     expect(INSTRUCTION).toContain(DIFF);
+    expect(INSTRUCTION).toContain(GUIDE);
   });
 
   it("keeps the three absolute guardrails", () => {
@@ -55,8 +57,18 @@ describe("reviewInstruction", () => {
     expect(INSTRUCTION).toContain("--fix");
   });
 
+  it("asks for the reading guide, grouped by purpose and ordered by importance", () => {
+    expect(INSTRUCTION).toContain("THE READING GUIDE");
+    expect(INSTRUCTION).toContain('"## <section title>"');
+    expect(INSTRUCTION).toContain("most important first");
+    expect(INSTRUCTION).toContain('"Files: path/one.ts, path/two.ts"');
+    // The guide orients; findings belong to the review, which den files per file.
+    expect(INSTRUCTION).toContain("it does not review");
+    expect(INSTRUCTION).toContain("exactly one section");
+  });
+
   it("still targets the checkout when the branch is unknown", () => {
-    const noBranch = reviewInstruction(NOTEPAD, DIFF, null);
+    const noBranch = reviewInstruction(NOTEPAD, DIFF, null, GUIDE);
     expect(noBranch).toContain("checked-out branch");
     expect(isAscii(noBranch)).toBe(true);
   });

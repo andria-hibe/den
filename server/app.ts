@@ -397,6 +397,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true };
   });
 
+  // The review pane's reading guide (written by the review session; see
+  // reviewInstruction). Read-only from the client: only Claude writes it.
+  app.get("/api/review/guide/:groupId", async (req, reply) => {
+    const { groupId } = req.params as { groupId: string };
+    if (!isValidGroupId(groupId)) {
+      reply.code(400);
+      return { error: "bad_group_id" };
+    }
+    return { content: sessions.readReviewGuide(groupId) };
+  });
+
   // --- GitHub PRs (cached) ---
   const prCache = ttlCache<PrBuckets>(30_000, getMyPullRequests);
   app.get("/api/github/prs", async (req, reply) => {

@@ -103,7 +103,7 @@
   <rect x="1024" y="622" width="312" height="88" rx="9" fill="#2b2233" stroke="#abc9f6" stroke-opacity="0.6" stroke-width="1.5"/>
   <text x="1042" y="648" font-size="14" font-weight="bold" fill="#f3e9f7">notepads + review files</text>
   <text x="1042" y="668" font-size="12.5" fill="#b9a8c9">progress log per workspace,</text>
-  <text x="1042" y="686" font-size="12.5" fill="#b9a8c9">PR diff + permission settings</text>
+  <text x="1042" y="686" font-size="12.5" fill="#b9a8c9">PR diff, reading guide, settings</text>
 
   <!-- arrows to the world -->
   <line x1="200" y1="752" x2="200" y2="822" stroke="#b9a8c9" stroke-width="2" marker-end="url(#arrow)"/>

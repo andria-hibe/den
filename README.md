@@ -31,6 +31,11 @@ you. Sessions are server-owned, so they outlive any window and survive restarts.
 
   ![Reviewing a PR — the review beside the diff](docs/review.png)
 
+  A **Guide** tab reads the PR in the order it was written instead of file
+  order: Claude groups the changed files into sections — the core of the change
+  first, churn last — explains what each group does and what it risks, and den
+  renders that explanation above that group's own diffs.
+
   For your own PRs: description, reviews, and inline comments grouped by file
   with the code they point at — resolved threads tucked behind a toggle. Every
   comment has a **“→ Claude”** button that hands it to the session's Claude to

@@ -58,6 +58,15 @@ const reviewSettingsPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.settings.json`);
 };
+// The reading guide: the review session's grouping of the change (see
+// reviewInstruction), which den renders as the review pane's Guide tab. Kept
+// beside the diff rather than in the notepad, so the review's `## <path>`
+// sections and the guide's `## <section title>` ones never have to share a
+// parser.
+export const reviewGuidePath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(REVIEW_DIR, `${groupId}.guide.md`);
+};
 
 /** The Claude permission rules for a PR-review pane.
  *
@@ -75,7 +84,8 @@ const reviewSettingsPath = (groupId: string) => {
  * determined shell can still reach the same place by another route (a wrapper
  * script, `git -C`, an alias). The instruction does the real work.
  *
- * The `allow` list is the notepad (so the finished review saves without a
+ * The `allow` list is the notepad and the guide file (so the finished review and
+ * its reading guide both save without a
  * prompt) plus the commands a review runs constantly that are read-only toward
  * the repo and GitHub: `git log/show/diff/status/blame/grep/fetch`, `rg`/`grep`,
  * and the `gh pr view|diff|checks` reads. Without these, the code-review
@@ -87,9 +97,9 @@ const reviewSettingsPath = (groupId: string) => {
  * permission behaviour (`--permission-mode default`), i.e. Claude asks before
  * it acts, exactly like any other pane.
  *
- * Pure (no I/O) so it's unit-testable. `notepadAbs` must be absolute; it's
- * emitted as Claude's "//<path>" root-anchored specifier. */
-export function buildReviewPermissions(notepadAbs: string) {
+ * Pure (no I/O) so it's unit-testable. `notepadAbs` and `guideAbs` must be
+ * absolute; they're emitted as Claude's "//<path>" root-anchored specifier. */
+export function buildReviewPermissions(notepadAbs: string, guideAbs: string) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
     permissions: {
@@ -108,6 +118,7 @@ export function buildReviewPermissions(notepadAbs: string) {
       ],
       allow: [
         `Edit(${root(notepadAbs)})`,
+        `Edit(${root(guideAbs)})`,
         "Bash(git log:*)",
         "Bash(git show:*)",
         "Bash(git diff:*)",
@@ -167,6 +178,14 @@ function progressInstruction(file: string): string {
  *   Note the "just as thoroughly" clause: Concise makes the *writing* terse, not
  *   the review. Do not let a later edit turn the bullet cap into a reading cap.
  *
+ * It asks for two deliverables, both files den renders:
+ * - the **reading guide** (guideFile): the change grouped into sections by what
+ *   they do, most important first, each explained. This is den's answer to
+ *   reading a PR in file-alphabetical order -- the Guide tab renders each
+ *   section's prose above that section's own diffs (`parseGuide` +
+ *   `PrGuide.tsx`). It orients, it does not review.
+ * - the **review** (notepad): the findings, filed per file.
+ *
  * The finding pass runs through Claude Code's built-in code-review skill
  * (adversarially verified findings, ranked worst-first) targeted at the PR's
  * branch, with --comment and --fix explicitly forbidden (--comment posts to
@@ -179,6 +198,7 @@ export function reviewInstruction(
   notepad: string,
   diffFile: string,
   branch: string | null | undefined,
+  guideFile: string,
 ): string {
   const scratch = scratchBranch(branch);
   return (
@@ -198,6 +218,24 @@ export function reviewInstruction(
     `as a surprise. Never leave the PR's own branch modified.\n` +
     `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +
     `read the changed files in your working directory for surrounding context. ` +
+    `You have two deliverables: a reading guide and a review. Write the guide ` +
+    `first when asked for both - it is quick and it orients the developer while ` +
+    `the finding pass runs.\n` +
+    `THE READING GUIDE goes in markdown at the absolute path ${guideFile} ` +
+    `(create or overwrite it). It is how the developer reads the diff: it ` +
+    `replaces file-alphabetical order with the order the change makes sense in. ` +
+    `Structure it exactly like this: two or three lines saying what the PR does ` +
+    `and how to read it, then one "## <section title>" heading per group of ` +
+    `related changes, most important first - the core of the implementation, ` +
+    `then the supporting changes, then low-signal churn (generated files, ` +
+    `lockfiles, formatting, fixtures) last. Under each heading write two to ` +
+    `four lines on what that group does and what its impact or risk is, then a ` +
+    `line "Files: path/one.ts, path/two.ts" naming every file in the group, ` +
+    `each path exactly as it appears after "b/" in the diff's "diff --git" ` +
+    `line. Put every changed file in exactly one section, and put no other ` +
+    `heading in the file. den renders each section's prose above that section's ` +
+    `own diffs. The guide orients, it does not review: no findings there, they ` +
+    `go in the review below.\n` +
     `Start the finding pass by running Claude Code's built-in code-review skill ` +
     `at high effort against this PR's ` +
     (branch ? `branch (${branch})` : `checked-out branch`) +
@@ -207,7 +245,7 @@ export function reviewInstruction(
     `the verified findings into the notepad review described next, and cover ` +
     `yourself what its scope misses (design, tests, naming, missing cases). If ` +
     `the skill is unavailable, do the whole review by hand.\n` +
-    `Save your finished review as markdown to the absolute path ${notepad} ` +
+    `THE REVIEW goes as markdown at the absolute path ${notepad} ` +
     `(create or overwrite it). That file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
     `structure it exactly like this: first the general review (a two or three ` +
@@ -222,7 +260,8 @@ export function reviewInstruction(
     `"..." for an ellipsis. Never write an em dash, an en dash, a curly quote, a ` +
     `curly apostrophe, a real arrow, a non-breaking space, box drawing, or an ` +
     `emoji. If a line you quote from the diff already holds a non-ASCII ` +
-    `character, keep it inside a code span, but never add one of your own.\n` +
+    `character, keep it inside a code span, but never add one of your own. The ` +
+    `guide obeys the same rule.\n` +
     `KEEP THE WRITING SHORT AND DIRECT WHILE DOING THE REVIEW JUST AS ` +
     `THOROUGHLY. Read as widely as the change needs; it is the prose that is ` +
     `terse, never the work behind it. Lead with the result and skip preamble ` +
@@ -233,7 +272,8 @@ export function reviewInstruction(
     `naming what you left out. No praise, no preamble, no closing recap, no ` +
     `hedging adverbs. A file you are happy with gets no heading at all.\n` +
     `Write the clean, finished review there, not a running log; don't mention ` +
-    `these files in your replies.`
+    `these files in your replies. If you are asked for only one of the two ` +
+    `deliverables, write only that file and leave the other alone.`
   );
 }
 
@@ -830,13 +870,14 @@ class SessionManager {
   private reviewArgs(groupId: string, branch: string | null, diff?: string): string[] {
     const file = this.ensureNotepad(groupId, "");
     const diffFile = this.ensureReviewDiff(groupId, diff);
+    const guideFile = this.ensureReviewGuide(groupId);
     const settingsFile = this.ensureReviewPerms(groupId);
     return [
       "--settings", settingsFile,
       "--permission-mode", "default",
       "--add-dir", PROGRESS_DIR,
       "--add-dir", REVIEW_DIR,
-      "--append-system-prompt", reviewInstruction(file, diffFile, branch),
+      "--append-system-prompt", reviewInstruction(file, diffFile, branch, guideFile),
     ];
   }
 
@@ -923,6 +964,7 @@ class SessionManager {
       // Review panes also leave a diff + settings file behind — clear those too.
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
+      rmSync(reviewGuidePath(groupId), { force: true });
     } catch {
       // invalid id / already gone — nothing to clean up
     }
@@ -943,12 +985,35 @@ class SessionManager {
     return file;
   }
 
+  /** Make sure the review pane's guide file exists (empty), so the Guide tab has
+   * something to poll and Claude's `Edit` allow rule has a target from the
+   * start. Kept across restart like the notepad. Returns the file path. */
+  private ensureReviewGuide(groupId: string): string {
+    mkdirSync(REVIEW_DIR, { recursive: true });
+    const file = reviewGuidePath(groupId);
+    if (!existsSync(file)) writeFileSync(file, "");
+    return file;
+  }
+
+  /** The reading guide as the review session has written it so far (empty until
+   * it has). Polled by the review pane's Guide tab. */
+  readReviewGuide(groupId: string): string {
+    try {
+      return readFileSync(reviewGuidePath(groupId), "utf8");
+    } catch {
+      return "";
+    }
+  }
+
   /** Write a per-session Claude settings file carrying a review pane's deny
    * backstop + notepad allow (see buildReviewPermissions) and return its path,
    * for `--settings`. */
   private ensureReviewPerms(groupId: string): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
-    const settings = buildReviewPermissions(notepadPath(groupId));
+    const settings = buildReviewPermissions(
+      notepadPath(groupId),
+      reviewGuidePath(groupId),
+    );
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));
     return file;
