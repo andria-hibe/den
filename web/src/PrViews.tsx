@@ -150,6 +150,7 @@ export function PrReviewView({
   repo,
   number,
   sessionId,
+  groupId,
   autoReview,
   onAutoReviewStarted,
   header,
@@ -158,6 +159,10 @@ export function PrReviewView({
   repo: string;
   number: number;
   sessionId: string;
+  /** The session's workspace group — the notepad (where the review lands) is
+   * keyed by it. Happens to equal sessionId for single-pane review sessions,
+   * but that's the server's implementation detail, not ours to rely on. */
+  groupId: string;
   autoReview: boolean;
   /** Fired once the auto pre-review has been sent, so it only ever fires once. */
   onAutoReviewStarted?: () => void;
@@ -194,11 +199,11 @@ export function PrReviewView({
 
   // The session writes its finished review to the workspace notepad (see
   // reviewInstruction, server-side); poll it so the review fills in as Claude
-  // produces it. sessionId === groupId for single-pane review panes.
+  // produces it.
   useEffect(() => {
     let stop = false;
     const load = () =>
-      api<{ content: string }>(`/api/notepad/${sessionId}`)
+      api<{ content: string }>(`/api/notepad/${groupId}`)
         .then((d) => !stop && setReview(d.content ?? ""))
         .catch(() => {});
     load();
@@ -207,7 +212,7 @@ export function PrReviewView({
       stop = true;
       clearInterval(t);
     };
-  }, [sessionId]);
+  }, [groupId]);
 
   // Have the interactive Claude session (below) do the review, rather than a
   // one-shot headless pass rendered into this pane. The PR is checked out in the

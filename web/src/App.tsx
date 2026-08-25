@@ -5,19 +5,21 @@ import { NotepadPane } from "./NotepadPane.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
-import { renderMarkdown } from "./markdown.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
-import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
+import { usePersistentNumber } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
 import { AppRunButton } from "./AppRunButton.tsx";
-import { TicketComments } from "./TicketComments.tsx";
+import { SessionRail } from "./SessionRail.tsx";
+import { TicketLookView } from "./TicketLookView.tsx";
+import { WorkLinkChips } from "./WorkLinkChips.tsx";
 import { deriveFoxPose, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
 import { useRovingFocus } from "./useRovingFocus.ts";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts.ts";
 import { useNotifications } from "./useNotifications.ts";
+import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
@@ -44,11 +46,30 @@ const MOD =
     : "Ctrl";
 
 export function App() {
-  const [sessions, setSessions] = useState<SessionMeta[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // The session list + everything that mutates it (create/rename/restart/close,
+  // shell tabs, selection, the 4s server poll).
+  const {
+    sessions,
+    activeId,
+    shellTab,
+    setShellTab,
+    addSession,
+    patch,
+    restartSession,
+    closeSession,
+    addShellTab,
+    launchApp,
+    closeShellTab,
+    markExited,
+    selectSession,
+    applyTitle,
+  } = useSessions({ editingId, onError: setErrMsg });
+
   // GitHub PRs + Linear issues come from one shared poll (WorkData), so the
   // topbar fox and the work panels never drift out of phase.
   const work = useWorkData();
@@ -63,15 +84,6 @@ export function App() {
     prCount: prs.length,
     linearNotifs: work.linearNotifs,
   });
-  // groupId → the shell-tab id currently shown in that workspace's shell pane.
-  const [shellTab, setShellTab] = useState<Record<string, string>>({});
-  // Ticket "look" view: which tab (description vs comments) is showing —
-  // remembered across sessions + restarts.
-  const [lookTab, setLookTab] = usePersistentString(
-    "den.lookTab",
-    "description",
-    ["description", "comments"] as const,
-  );
   // Click the topbar fox to open a popover showing the whole cast.
   const [foxPopOpen, setFoxPopOpen] = useState(false);
   const foxPopRef = useRef<HTMLSpanElement>(null);
@@ -83,7 +95,6 @@ export function App() {
   } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   const [autoReviewPr, setAutoReviewPr] = useState<number | null>(null);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   // Collapse the colour picker whenever we switch sessions.
   useEffect(() => setColorPickerOpen(false), [activeId]);
@@ -104,10 +115,8 @@ export function App() {
   const [workW, setWorkW] = usePersistentNumber("den.workW", 300);
   const [mainFrac, setMainFrac] = usePersistentNumber("den.wsMainFrac", 0.6);
   const [shellFrac, setShellFrac] = usePersistentNumber("den.wsShellFrac", 0.5);
-  const [lookFrac, setLookFrac] = usePersistentNumber("den.lookFrac", 0.42);
   const wsRef = useRef<HTMLDivElement>(null);
   const wsBottomRef = useRef<HTMLDivElement>(null);
-  const lookRef = useRef<HTMLDivElement>(null);
 
   // Close the fox popover on an outside click or Escape.
   useEffect(() => {
@@ -137,15 +146,9 @@ export function App() {
     prsNeedingAttention: prs.filter((p) => p.needsAttention),
   });
 
-  // Match a session's branch ticket hint to a PR / Linear ticket.
-  const prByHint = (hint: string | null) =>
-    hint ? prs.find((p) => p.ticketHint?.toLowerCase() === hint) : undefined;
-  const issueByHint = (hint: string | null) =>
-    hint ? issues.find((i) => i.ticketHint.toLowerCase() === hint) : undefined;
-
-  // The reverse: the colour of a session working on a given ticket / PR, so the
-  // work-panel card can be tinted to match its session (running sessions win
-  // over exited ones). Lets you see at a glance which cards have a live session.
+  // The colour of a session working on a given ticket / PR, so the work-panel
+  // card can be tinted to match its session (running sessions win over exited
+  // ones). Lets you see at a glance which cards have a live session.
   const hintEq = (a?: string | null, b?: string | null) =>
     !!a && !!b && a.toLowerCase() === b.toLowerCase();
   const sessionColor = (match: (s: SessionMeta) => boolean) => {
@@ -158,17 +161,6 @@ export function App() {
     sessionColor(
       (s) => (s.pr === number && s.prRepo === repo) || hintEq(s.ticketHint, hint),
     );
-
-  useEffect(() => {
-    api<{ sessions: SessionMeta[] }>("/api/sessions")
-      .then((d) => {
-        setSessions(d.sessions);
-        const mains = d.sessions.filter((s) => s.role === "main");
-        const running = mains.find((s) => s.status === "running");
-        setActiveId((running ?? mains[0])?.id ?? null);
-      })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!errMsg) return;
@@ -192,153 +184,10 @@ export function App() {
     groupShells[0] ??
     null;
 
-  const addSession = async (opts: {
-    shell?: boolean;
-    cwd?: string;
-    resumeId?: string;
-    ticket?: string;
-    look?: boolean;
-    branch?: string;
-    env?: "local" | "worktree";
-    name?: string;
-    notepadSeed?: string;
-    view?: "review" | "mypr";
-    pr?: number;
-    prRepo?: string;
-    initialPrompt?: string;
-  }) => {
-    try {
-      const meta = await api<SessionMeta>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify(opts),
-      });
-      // Refetch so a Claude workspace's sibling shell pane lands in state too.
-      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
-      setSessions(d.sessions);
-      setActiveId(meta.id);
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    }
-  };
-
-  const patch = async (id: string, body: { name?: string; color?: string }) => {
-    const meta = await api<SessionMeta>(`/api/sessions/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-    // A recolour applies to the whole workspace server-side; mirror that.
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === meta.id
-          ? meta
-          : body.color !== undefined && s.groupId === meta.groupId
-            ? { ...s, color: body.color }
-            : s,
-      ),
-    );
-  };
-
-  // Re-spawn an exited session's PTY in place (keeps cwd/name/branch/ticket/PR).
-  // The terminal is keyed by `id:status`, so flipping to running remounts it and
-  // reconnects to the fresh process.
-  const restartSession = async (id: string) => {
-    try {
-      const meta = await api<SessionMeta>(`/api/sessions/${id}/restart`, {
-        method: "POST",
-      });
-      setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
-      setActiveId(meta.id);
-    } catch (e) {
-      // 409 cannot_restart just means it's already running (e.g. a double-click);
-      // that's benign, so don't nag with a toast.
-      if ((e as Error).message !== "cannot_restart") setErrMsg((e as Error).message);
-    }
-  };
-
-  const closeSession = async (id: string) => {
-    const groupId = sessions.find((s) => s.id === id)?.groupId;
-    await api(`/api/sessions/${id}`, { method: "DELETE" });
-    setSessions((prev) => {
-      const next = prev.filter((s) => s.groupId !== groupId);
-      if (activeId === id) {
-        setActiveId(next.find((s) => s.role === "main")?.id ?? null);
-      }
-      return next;
-    });
-  };
-
-  // Add another shell tab to the given workspace and switch to it. Refetches
-  // the full list (the 4s poll only merges existing rows, never adds new ones).
-  const addShellTab = async (anyIdInGroup: string, groupId: string) => {
-    try {
-      const meta = await api<SessionMeta>(
-        `/api/sessions/${anyIdInGroup}/shell`,
-        { method: "POST" },
-      );
-      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
-      setSessions(d.sessions);
-      setShellTab((m) => ({ ...m, [groupId]: meta.id }));
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    }
-  };
-
-  // Spin up the workspace's app in a fresh shell tab (server adds the shell and
-  // types the run command into it), then switch to that tab.
-  const launchApp = async (sessionId: string) => {
-    const group = sessions.find((s) => s.id === sessionId)?.groupId;
-    try {
-      const meta = await api<SessionMeta>("/api/app/run", {
-        method: "POST",
-        body: JSON.stringify({ sessionId }),
-      });
-      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
-      setSessions(d.sessions);
-      if (group) setShellTab((m) => ({ ...m, [group]: meta.id }));
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    }
-  };
-
-  // Close a single shell tab (leaves the rest of the workspace intact).
-  const closeShellTab = async (shellId: string, groupId: string) => {
-    try {
-      await api(`/api/sessions/${shellId}?scope=one`, { method: "DELETE" });
-      setSessions((prev) => {
-        const next = prev.filter((s) => s.id !== shellId);
-        // If the closed tab was active, fall back to another shell in the group.
-        setShellTab((m) => {
-          if (m[groupId] !== shellId) return m;
-          const fallback = next.find(
-            (s) => s.groupId === groupId && s.role === "shell",
-          );
-          return { ...m, [groupId]: fallback?.id ?? "" };
-        });
-        return next;
-      });
-    } catch (e) {
-      setErrMsg((e as Error).message);
-    }
-  };
-
   const commitRename = (id: string) => {
     const name = draft.trim();
     if (name) patch(id, { name });
     setEditingId(null);
-  };
-
-  const markExited = (id: string) =>
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: "exited" } : s)),
-    );
-
-  // Selecting a session views it — clear its attention nudge optimistically
-  // (the server also clears it when the terminal re-attaches).
-  const selectSession = (id: string) => {
-    setActiveId(id);
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, attention: false } : s)),
-    );
   };
 
   // Cmd/Ctrl+N new claude · Cmd/Ctrl+T new shell · Cmd/Ctrl+1–9 switch to the
@@ -485,15 +334,6 @@ export function App() {
     });
   };
 
-  // Terminal-set title (Claude/shell) for the active session — apply unless
-  // the user is mid-rename of it.
-  const applyTitle = (id: string, name: string) =>
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === id && editingId !== id ? { ...s, name } : s,
-      ),
-    );
-
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       <span className="color-picker">
@@ -531,7 +371,7 @@ export function App() {
           ⎇ {s.branch}
         </span>
       )}
-      {renderWorkLinks(s)}
+      <WorkLinkChips s={s} issues={issues} prs={prs} />
       <span
         style={{
           marginLeft: "auto",
@@ -577,82 +417,6 @@ export function App() {
       </span>
     </div>
   );
-
-  // Ticket / PR chips for a session. The session's *explicit* link (the ticket
-  // or PR it was opened for) wins — that's what makes the chip correct per
-  // session. Only sessions that were never linked to one explicitly fall back to
-  // matching their branch's ticket hint against your open work.
-  const renderWorkLinks = (s: SessionMeta) => {
-    // A real Linear identifier looks like ABC-123 (skips sentinels like
-    // "den:self-edit").
-    const explicitTicket =
-      s.ticket && /^[A-Za-z]+-\d+$/.test(s.ticket) ? s.ticket : null;
-    const issue = explicitTicket
-      ? issues.find((i) => i.identifier === explicitTicket)
-      : issueByHint(s.ticketHint);
-    const pr =
-      s.pr && s.prRepo
-        ? prs.find((p) => p.number === s.pr && p.repo === s.prRepo)
-        : prByHint(s.ticketHint);
-
-    // Show the id/number even if the item isn't in your current lists (merged,
-    // closed, someone else's) — a chip without a link, so it's still correct.
-    const ticketId = issue?.identifier ?? explicitTicket;
-    const prNum = pr?.number ?? (s.pr && s.prRepo ? s.pr : null);
-    if (!ticketId && !prNum && s.view !== "review") return null;
-
-    const check =
-      pr?.checks === "passing"
-        ? "✓"
-        : pr?.checks === "failing"
-          ? "✕"
-          : pr?.checks === "pending"
-            ? "◐"
-            : "";
-    return (
-      <>
-        {s.view === "review" && (
-          <span className="link-chip review" title="reviewing this PR — read-only toward GitHub">
-            review
-          </span>
-        )}
-        {ticketId &&
-          (issue ? (
-            <a
-              className="link-chip issue"
-              href={issue.url}
-              target="_blank"
-              rel="noreferrer"
-              title={issue.title}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {ticketId}
-            </a>
-          ) : (
-            <span className="link-chip issue" title="linked ticket">
-              {ticketId}
-            </span>
-          ))}
-        {prNum &&
-          (pr ? (
-            <a
-              className={`link-chip pr ${pr.checks}`}
-              href={pr.url}
-              target="_blank"
-              rel="noreferrer"
-              title={pr.title}
-              onClick={(e) => e.stopPropagation()}
-            >
-              PR #{prNum} {check}
-            </a>
-          ) : (
-            <span className="link-chip pr" title="linked PR">
-              PR #{prNum}
-            </span>
-          ))}
-      </>
-    );
-  };
 
   // --- GitHub PR → review / edit ---
   const sessionForPr = (pr: PullRequest) =>
@@ -704,105 +468,6 @@ export function App() {
       name: pr.title,
     });
   };
-
-  // Ticket detail shown atop a "just looking" session.
-  const renderTicketDetail = (ticketId: string | null) => {
-    const issue = issues.find((i) => i.identifier === ticketId);
-    return (
-      <div className="ticket-detail">
-        <div className="ticket-detail-head">
-          {issue && (
-            <span className="state-dot" style={{ background: issue.state.color }} />
-          )}
-          <strong>{ticketId}</strong>
-          {issue && <span className="issue-state">{issue.state.name}</span>}
-          {issue && (
-            <a
-              className="link-chip issue"
-              href={issue.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Linear ↗
-            </a>
-          )}
-          <button
-            className="btn btn-primary"
-            style={{ marginLeft: "auto" }}
-            disabled={!issue}
-            onClick={() => issue && setTicketModal({ issue, startAtWork: true })}
-          >
-            work on it
-          </button>
-        </div>
-        {issue && <div className="ticket-detail-title">{issue.title}</div>}
-        <div className="ticket-look-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={lookTab === "description"}
-            className={`look-tab${lookTab === "description" ? " active" : ""}`}
-            onClick={() => setLookTab("description")}
-          >
-            Description
-          </button>
-          <button
-            role="tab"
-            aria-selected={lookTab === "comments"}
-            className={`look-tab${lookTab === "comments" ? " active" : ""}`}
-            onClick={() => setLookTab("comments")}
-          >
-            Comments
-          </button>
-        </div>
-        <div className="ticket-detail-body">
-          {lookTab === "description" ? (
-            !issue ? (
-              <div className="placeholder">
-                Ticket details aren't in your assigned list right now.
-              </div>
-            ) : issue.description ? (
-              <div
-                className="ticket-detail-desc md"
-                dangerouslySetInnerHTML={{
-                  __html: renderMarkdown(issue.description),
-                }}
-              />
-            ) : (
-              <div className="placeholder">No description.</div>
-            )
-          ) : ticketId ? (
-            <TicketComments ticketId={ticketId} />
-          ) : null}
-        </div>
-      </div>
-    );
-  };
-
-  // Poll so auto-titles (and exits) on background sessions reach the rail.
-  useEffect(() => {
-    const t = setInterval(async () => {
-      try {
-        const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
-        setSessions((prev) =>
-          prev.map((loc) => {
-            const s = d.sessions.find((x) => x.id === loc.id);
-            return s && editingId !== loc.id
-              ? {
-                  ...loc,
-                  name: s.name,
-                  status: s.status,
-                  color: s.color,
-                  attention: s.attention,
-                }
-              : loc;
-          }),
-        );
-      } catch {
-        // transient; try again next tick
-      }
-    }, 4000);
-    return () => clearInterval(t);
-  }, [editingId]);
 
   return (
     <div className="app">
@@ -909,93 +574,28 @@ export function App() {
 
       <div className="app-body">
       {/* Left: sessions */}
-      <aside className="panel rail" style={{ width: railW }}>
-        <h2>sessions</h2>
-        <div className="session-list">
-        {rail.map((s) => {
-          const links = renderWorkLinks(s);
-          return (
-          <div
-            key={s.id}
-            className={`session ${s.id === activeId ? "active" : ""} ${s.attention ? "attn-row" : ""}`}
-            onClick={() => selectSession(s.id)}
-            tabIndex={0}
-          >
-            <span
-              className="dot"
-              style={{ background: s.color, opacity: s.status === "exited" ? 0.4 : 1 }}
-            />
-            {editingId === s.id ? (
-              <input
-                className="rename-input"
-                autoFocus
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => commitRename(s.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename(s.id);
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <span
-                className="label"
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setEditingId(s.id);
-                  setDraft(s.name);
-                }}
-                title={s.name}
-              >
-                {s.name}
-              </span>
-            )}
-            {s.attention && (
-              <span className="attn-dot" title="waiting for you">
-                !
-              </span>
-            )}
-            <span className="status">{s.status === "running" ? "●" : "○"}</span>
-            {s.status === "exited" && (
-              <button
-                className="session-restart"
-                title="restart session"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  restartSession(s.id);
-                }}
-              >
-                ↻
-              </button>
-            )}
-            <button
-              className="session-close"
-              title="close session"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeSession(s.id);
-              }}
-            >
-              ×
-            </button>
-            {links && <span className="session-links">{links}</span>}
-          </div>
-          );
-        })}
-        {rail.length === 0 && (
-          <div className="placeholder">no sessions yet — start one below 🌱</div>
+      <SessionRail
+        rail={rail}
+        activeId={activeId}
+        width={railW}
+        editingId={editingId}
+        draft={draft}
+        onDraftChange={setDraft}
+        onStartRename={(id, name) => {
+          setEditingId(id);
+          setDraft(name);
+        }}
+        onCommitRename={commitRename}
+        onCancelRename={() => setEditingId(null)}
+        onSelect={selectSession}
+        onRestart={restartSession}
+        onClose={closeSession}
+        onNewClaude={() => setShowNew(true)}
+        onNewShell={() => addSession({ shell: true })}
+        renderLinks={(s) => (
+          <WorkLinkChips s={s} issues={issues} prs={prs} wrapClass="session-links" />
         )}
-        </div>
-        <div className="rail-actions">
-          <button className="btn btn-primary" onClick={() => setShowNew(true)}>
-            + claude
-          </button>
-          <button className="btn btn-ghost-outline" onClick={() => addSession({ shell: true })}>
-            + shell
-          </button>
-        </div>
-      </aside>
+      />
 
       <Splitter
         dir="x"
@@ -1020,6 +620,7 @@ export function App() {
             repo={active.prRepo}
             number={active.pr}
             sessionId={active.id}
+            groupId={active.groupId}
             autoReview={autoReviewPr === active.pr}
             onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}
@@ -1049,30 +650,21 @@ export function App() {
             }
           />
         ) : active.look ? (
-          <div className="look-view" ref={lookRef}>
-            <div className="ws-pane" style={{ flex: `${lookFrac} 1 0` }}>
-              {renderTicketDetail(active.ticket)}
-            </div>
-            <Splitter
-              dir="y"
-              onDrag={(d) => {
-                const h = lookRef.current?.clientHeight ?? 1;
-                setLookFrac((f) => clamp(f + d / h, 0.15, 0.8));
-              }}
-            />
-            <div
-              className="ws-main"
-              style={{ flex: `${1 - lookFrac} 1 0` }}
-            >
-              {renderHeader(active)}
+          <TicketLookView
+            key={active.id}
+            ticketId={active.ticket}
+            issues={issues}
+            onWork={(issue) => setTicketModal({ issue, startAtWork: true })}
+            header={renderHeader(active)}
+            terminal={
               <TerminalView
                 key={`${active.id}:${active.status}`}
                 session={active}
                 onExit={() => markExited(active.id)}
                 onTitle={(name) => applyTitle(active.id, name)}
               />
-            </div>
-          </div>
+            }
+          />
         ) : active.shell ? (
           <>
             {renderHeader(active)}
