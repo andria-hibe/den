@@ -173,10 +173,11 @@ export function reviewFrom(decision: string | null): ReviewState {
 }
 
 // Branch names look like "jordan-fast-5979-stretch-..." — pull the "fast-NNNN".
-export function parseTicketHint(branch?: string): string | undefined {
-  if (!branch) return undefined;
-  const m = branch.match(/([a-z]+-\d+)/i);
-  return m?.[1];
+// Lowercased, matching LinearIssue.ticketHint, so hints compare directly.
+// (Also used by sessions.ts for a session's branch → ticket chip.)
+export function parseTicketHint(branch?: string | null): string | undefined {
+  const m = branch?.match(/([a-z]+-\d+)/i);
+  return m ? m[1].toLowerCase() : undefined;
 }
 
 async function enrich(row: SearchRow): Promise<PullRequest> {

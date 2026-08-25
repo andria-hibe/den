@@ -200,7 +200,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         reply.code(500);
         return { error: "git_failed", message: "Could not check out the PR." };
       }
-      // A review pane has no shell, so hand it the diff via a file it can read.
+      // Hand the review session the diff as a file so the whole change is in
+      // front of it immediately, without a `gh pr diff` round-trip of its own.
       if (body.view === "review") {
         try {
           body.reviewDiff = (await getPrDiff(body.prRepo, pr)).slice(0, 200_000);

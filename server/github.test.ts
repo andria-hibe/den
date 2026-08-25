@@ -73,7 +73,8 @@ describe("reviewFrom", () => {
 describe("parseTicketHint", () => {
   it("pulls fast-NNNN out of a branch name", () => {
     expect(parseTicketHint("jordan-fast-5979-stretch")).toBe("fast-5979");
-    expect(parseTicketHint("FAST-6115")).toBe("FAST-6115");
+    // Lowercased so it matches LinearIssue.ticketHint without case games.
+    expect(parseTicketHint("FAST-6115")).toBe("fast-6115");
   });
   it("returns undefined without a ticket", () => {
     expect(parseTicketHint("main")).toBeUndefined();

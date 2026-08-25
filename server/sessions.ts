@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { store, type SessionRow } from "./store.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
+import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 
@@ -27,11 +28,6 @@ function gitBranch(cwd: string): string | null {
   }
 }
 
-/** Parse a ticket id like "fast-6115" from a branch name (for ticket/PR links). */
-function ticketHintFrom(branch: string | null): string | null {
-  const m = branch?.match(/([a-z]+-\d+)/i);
-  return m ? m[1].toLowerCase() : null;
-}
 const SCROLLBACK_CAP = 256 * 1024; // bytes of raw terminal output kept per session
 
 // Per-workspace progress notepads live here (outside the project so we never
@@ -507,7 +503,7 @@ class DenSession {
       groupId: this.groupId,
       role: this.role,
       branch: this.branch,
-      ticketHint: ticketHintFrom(this.branch),
+      ticketHint: parseTicketHint(this.branch) ?? null,
       attention: this.attention,
       ticket: this.ticket,
       look: this.look,
@@ -690,19 +686,9 @@ class SessionManager {
       // the developer). Seeded empty so the review column shows its prompt until
       // Claude writes. Other single-pane views (look / mypr) don't.
       if (opts.view === "review") {
-        const file = this.ensureNotepad(groupId, "");
-        const diffFile = this.ensureReviewDiff(groupId, opts.reviewDiff);
-        const settingsFile = this.ensureReviewPerms(groupId);
         s.spawnArgs = [
           "--session-id", s.claudeSessionId, "-n", name,
-          // The pane has a normal shell; the settings file carries the deny
-          // backstop (no push/commit/gh writes) and the notepad allow.
-          // --permission-mode default keeps the deny rules in force.
-          "--settings", settingsFile,
-          "--permission-mode", "default",
-          "--add-dir", PROGRESS_DIR,
-          "--add-dir", REVIEW_DIR,
-          "--append-system-prompt", reviewInstruction(file, diffFile, branch),
+          ...this.reviewArgs(groupId, branch, opts.reviewDiff),
         ];
       } else {
         s.spawnArgs = ["--session-id", s.claudeSessionId, "-n", name];
@@ -812,20 +798,30 @@ class SessionManager {
     // A review pane keeps its guardrails + notepad wiring so a revived review
     // still won't commit/push the PR and still saves (and shows) its review.
     if (s.view === "review") {
-      mkdirSync(PROGRESS_DIR, { recursive: true });
-      const file = notepadPath(s.groupId);
-      const diffFile = this.ensureReviewDiff(s.groupId);
-      const settingsFile = this.ensureReviewPerms(s.groupId);
-      return [
-        ...resume,
-        "--settings", settingsFile,
-        "--permission-mode", "default",
-        "--add-dir", PROGRESS_DIR,
-        "--add-dir", REVIEW_DIR,
-        "--append-system-prompt", reviewInstruction(file, diffFile, s.branch),
-      ];
+      return [...resume, ...this.reviewArgs(s.groupId, s.branch)];
     }
     return resume;
+  }
+
+  /** The guardrail + notepad wiring for a PR-review pane's Claude args, shared
+   * by create() and restartArgs() — ONE builder, so the deny backstop and the
+   * review instruction can never drift between a fresh review and a revived
+   * one. The pane has a normal shell; the settings file carries the deny
+   * backstop (no push/commit/gh writes) and the notepad allow, and
+   * `--permission-mode default` keeps those deny rules in force. Pass `diff`
+   * on create to capture the PR's diff; omit on restart to keep what was
+   * captured before (and the notepad, seeded empty, keeps its content too). */
+  private reviewArgs(groupId: string, branch: string | null, diff?: string): string[] {
+    const file = this.ensureNotepad(groupId, "");
+    const diffFile = this.ensureReviewDiff(groupId, diff);
+    const settingsFile = this.ensureReviewPerms(groupId);
+    return [
+      "--settings", settingsFile,
+      "--permission-mode", "default",
+      "--add-dir", PROGRESS_DIR,
+      "--add-dir", REVIEW_DIR,
+      "--append-system-prompt", reviewInstruction(file, diffFile, branch),
+    ];
   }
 
   /** Pick which conversation a restarting Claude pane reopens:
