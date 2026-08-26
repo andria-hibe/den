@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "./api.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { relTimeAgo } from "./format.ts";
+import { isValidBranch } from "../../shared/branch.ts";
+import type { Worktree } from "../../server/git.ts";
 
 interface Roots {
   home: string;
@@ -16,6 +18,14 @@ interface Listing {
   dirs: { name: string; path: string }[];
 }
 type Mode = "work" | "personal" | "other" | "resume";
+/**
+ * Work sessions live in a *workspace* — one checkout of the work repo: its own
+ * working copy or a `git worktree`. Rather than always dropping into the repo
+ * root, "Work" first asks which workspace to open in ("where"), then either
+ * lists the ones that already exist ("existing") or takes a branch name for a
+ * fresh worktree ("new"). `null` means we fell through to folder browsing.
+ */
+type WorkStep = "where" | "existing" | "new" | null;
 interface PastSession {
   sessionId: string;
   cwd: string;
@@ -25,10 +35,13 @@ interface PastSession {
 
 export function NewSessionDialog({
   onCreate,
+  onCreateWorktree,
   onResume,
   onClose,
 }: {
   onCreate: (cwd: string) => void;
+  /** New workspace: the server creates the worktree for `branch`, then opens there. */
+  onCreateWorktree: (branch: string) => void;
   onResume: (cwd: string, resumeId: string) => void;
   onClose: () => void;
 }) {
@@ -39,6 +52,10 @@ export function NewSessionDialog({
   const [listing, setListing] = useState<Listing | null>(null);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [workStep, setWorkStep] = useState<WorkStep>(null);
+  // null while the worktree list is still loading.
+  const [worktrees, setWorktrees] = useState<Worktree[] | null>(null);
+  const [branch, setBranch] = useState("");
 
   useEffect(() => {
     api<Roots>("/api/fs/roots")
@@ -70,6 +87,7 @@ export function NewSessionDialog({
 
   const choose = (m: Mode) => {
     setMode(m);
+    setWorkStep(null);
     if (m === "resume") {
       setPast(null);
       api<{ sessions: PastSession[] }>("/api/sessions/past")
@@ -78,10 +96,38 @@ export function NewSessionDialog({
       return;
     }
     if (!roots) return;
-    const start =
-      m === "work" ? roots.workRepo : m === "personal" ? roots.projects : roots.documents;
+    if (m === "work") {
+      // Ask which workspace first. Load the checkouts in the background; if the
+      // work dir isn't a git repo (workDir() can fall back to ~/Documents/work)
+      // there are no workspaces to offer, so drop straight to folder browsing.
+      setWorkStep("where");
+      setWorktrees(null);
+      setBranch("");
+      api<{ worktrees: Worktree[] }>("/api/git/worktrees")
+        .then((d) => setWorktrees(d.worktrees.filter((w) => !w.bare)))
+        .catch(() => {
+          setWorkStep(null);
+          navigate(roots.workRepo);
+        });
+      return;
+    }
+    const start = m === "personal" ? roots.projects : roots.documents;
     navigate(start);
   };
+
+  // Back to the four top-level cards.
+  const backToModes = () => {
+    setMode(null);
+    setWorkStep(null);
+  };
+
+  // Leave the workspace flow and browse folders under the work repo instead.
+  const browseWorkRepo = () => {
+    setWorkStep(null);
+    if (roots) navigate(roots.workRepo);
+  };
+
+  const branchOk = isValidBranch(branch.trim());
 
 
   const createFolder = async () => {
@@ -147,7 +193,7 @@ export function NewSessionDialog({
         ) : mode === "resume" ? (
           <div className="browser">
             <div className="browser-bar">
-              <button className="btn-ghost" onClick={() => setMode(null)} title="back">
+              <button className="btn-ghost" onClick={backToModes} title="back">
                 ‹
               </button>
               <span className="path-input" style={{ display: "flex", alignItems: "center" }}>
@@ -176,10 +222,142 @@ export function NewSessionDialog({
               ))}
             </div>
           </div>
+        ) : mode === "work" && workStep === "where" ? (
+          <div className="browser">
+            <div className="browser-bar">
+              <button className="btn-ghost" onClick={backToModes} title="back">
+                ‹
+              </button>
+              <span className="path-input" style={{ display: "flex", alignItems: "center" }}>
+                {short(roots?.workRepo ?? "")} — which workspace?
+              </span>
+            </div>
+            <div className="choose-grid">
+              <button
+                className="choose-card work"
+                onClick={() => setWorkStep("existing")}
+                disabled={!worktrees?.length}
+              >
+                <div className="choose-emoji">🌿</div>
+                <div className="choose-text">
+                  <div className="choose-title">Existing workspace</div>
+                  <div className="choose-sub">
+                    {worktrees === null
+                      ? "looking…"
+                      : worktrees.length === 1
+                        ? "just the repo itself so far"
+                        : `${worktrees.length} checkouts to pick from`}
+                  </div>
+                </div>
+              </button>
+              <button className="choose-card other" onClick={() => setWorkStep("new")}>
+                <div className="choose-emoji">✨</div>
+                <div className="choose-text">
+                  <div className="choose-title">New workspace</div>
+                  <div className="choose-sub">a fresh git worktree on its own branch</div>
+                </div>
+              </button>
+            </div>
+            <button
+              className="btn btn-ghost-outline"
+              style={{ marginTop: 10 }}
+              onClick={browseWorkRepo}
+            >
+              📁 browse folders instead
+            </button>
+          </div>
+        ) : mode === "work" && workStep === "existing" ? (
+          <div className="browser">
+            <div className="browser-bar">
+              <button
+                className="btn-ghost"
+                onClick={() => setWorkStep("where")}
+                title="back"
+              >
+                ‹
+              </button>
+              <span className="path-input" style={{ display: "flex", alignItems: "center" }}>
+                open in an existing workspace
+              </span>
+            </div>
+            <div className="browser-list">
+              {worktrees?.map((w) => (
+                <button
+                  key={w.path}
+                  className="resume-row"
+                  onClick={() => onCreate(w.path)}
+                  title={w.path}
+                >
+                  <div className="wt-row-head">
+                    <div className="resume-title">
+                      🌿 {w.branch ?? `detached @ ${w.head}`}
+                    </div>
+                    {w.main && <span className="dir-tag">★ main checkout</span>}
+                    {w.locked && <span className="dir-tag">locked</span>}
+                  </div>
+                  <div className="resume-meta">{short(w.path)}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : mode === "work" && workStep === "new" ? (
+          <div className="browser">
+            <div className="browser-bar">
+              <button
+                className="btn-ghost"
+                onClick={() => setWorkStep("where")}
+                title="back"
+              >
+                ‹
+              </button>
+              <span className="path-input" style={{ display: "flex", alignItems: "center" }}>
+                new workspace
+              </span>
+            </div>
+            <div className="ticket-branch">
+              worktree:{" "}
+              <code>
+                {short(
+                  `${roots?.workRepo ?? ""}/.claude-worktrees/${
+                    // prepareWork flattens slashes into the directory name.
+                    branch.trim().replace(/[/\\]/g, "-") || "…"
+                  }`,
+                )}
+              </code>
+            </div>
+            <div className="new-folder">
+              <input
+                placeholder="branch name, e.g. andria/fast-1234-thing"
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && branchOk && onCreateWorktree(branch.trim())
+                }
+                spellCheck={false}
+              />
+              <button
+                className="btn btn-primary"
+                disabled={!branchOk}
+                onClick={() => onCreateWorktree(branch.trim())}
+              >
+                🌿 create &amp; open
+              </button>
+            </div>
+            {branch.trim() !== "" && !branchOk && (
+              <div className="browser-error">
+                ⚠️ letters, numbers and . _ / - only, and no leading dash
+              </div>
+            )}
+            <div className="modal-foot">
+              <span className="foot-path">
+                off a fresh origin/master; an existing branch is reused
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="browser">
             <div className="browser-bar">
-              <button className="btn-ghost" onClick={() => setMode(null)} title="back">
+              <button className="btn-ghost" onClick={backToModes} title="back">
                 ‹
               </button>
               <button

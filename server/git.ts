@@ -2,15 +2,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { logWarn } from "./log.ts";
+import { isValidBranch } from "../shared/branch.ts";
 
-// Branch names flow in from Linear / PR data and are passed as positional args
-// to git. All calls use execFile (no shell), so there's no command injection —
-// but a value starting with "-" could still be misread as a git flag. Restrict
-// to git's safe ref charset and reject a leading dash before using one.
-const BRANCH_RE = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
-export function isValidBranch(branch: string): boolean {
-  return BRANCH_RE.test(branch) && !branch.includes("..");
-}
+// The branch-name rule lives in shared/ so the New Session dialog can apply it
+// too; re-exported here because git.ts is where the server reaches for it.
+export { isValidBranch } from "../shared/branch.ts";
+
 function assertValidBranch(branch: string): void {
   if (!isValidBranch(branch)) throw new Error("invalid_branch");
 }
@@ -23,20 +20,63 @@ function git(cwd: string, args: string[], timeout = 20000): string {
   }).trim();
 }
 
+/**
+ * One checkout of a repo — the primary working copy or an added worktree.
+ * These are what den calls "workspaces" in the UI: the New Session dialog lists
+ * them so a Work session can join one you already have instead of making
+ * another.
+ */
+export interface Worktree {
+  path: string;
+  /** Branch name, or null when the worktree is on a detached HEAD. */
+  branch: string | null;
+  /** Short HEAD sha, "" for a bare repo. */
+  head: string;
+  /** The repo's own checkout (git lists it first), not an added worktree. */
+  main: boolean;
+  locked: boolean;
+  bare: boolean;
+}
+
+/**
+ * Parse `git worktree list --porcelain`. Each record is a blank-line-separated
+ * block starting with `worktree <path>`, then `HEAD <sha>` and either
+ * `branch refs/heads/<name>` or `detached`, plus optional `bare`/`locked`/
+ * `prunable` flags. Split out from the git call so it can be unit-tested.
+ */
+export function parseWorktrees(out: string): Worktree[] {
+  const trees: Worktree[] = [];
+  for (const block of out.split(/\n\s*\n+/)) {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
+    if (!path) continue;
+    const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
+    trees.push({
+      path,
+      branch: ref ? ref.replace(/^refs\/heads\//, "") : null,
+      head: lines.find((l) => l.startsWith("HEAD "))?.slice(5, 12) ?? "",
+      // git always lists the repo's own checkout first.
+      main: trees.length === 0,
+      locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+      bare: lines.includes("bare"),
+    });
+  }
+  return trees;
+}
+
+/** Every checkout of `repo` — its own working copy first, then added worktrees. */
+export function listWorktrees(repo: string): Worktree[] {
+  return parseWorktrees(git(repo, ["worktree", "list", "--porcelain"]));
+}
+
 /** If a branch is already checked out in a worktree, return that path. */
 function worktreeForBranch(repo: string, branch: string): string | null {
   try {
-    const out = git(repo, ["worktree", "list", "--porcelain"]);
-    for (const block of out.split(/\n\n+/)) {
-      const lines = block.split("\n");
-      const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
-      const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
-      if (path && ref && ref.replace("refs/heads/", "") === branch) return path;
-    }
+    return listWorktrees(repo).find((w) => w.branch === branch)?.path ?? null;
   } catch {
     // not a repo / no worktrees
+    return null;
   }
-  return null;
 }
 
 function branchExists(repo: string, branch: string): boolean {

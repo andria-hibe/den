@@ -781,6 +781,12 @@ export function App() {
             setShowNew(false);
             addSession({ cwd });
           }}
+          onCreateWorktree={(branch) => {
+            setShowNew(false);
+            // The server creates (or reuses) the worktree for the branch and
+            // opens the session there — same path a ticket's "Work on it" takes.
+            addSession({ branch, env: "worktree" });
+          }}
           onResume={(cwd, resumeId) => {
             setShowNew(false);
             addSession({ cwd, resumeId });

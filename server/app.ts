@@ -22,7 +22,7 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
-import { prepareWork, checkoutPr, type WorkEnv } from "./git.ts";
+import { prepareWork, checkoutPr, listWorktrees, type WorkEnv } from "./git.ts";
 import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
@@ -135,6 +135,23 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       reply.code(400);
       return { error: (err as Error).message };
+    }
+  });
+
+  // Existing checkouts of the work repo — its own working copy plus every
+  // `git worktree`. The New Session dialog offers these as "workspaces" so a
+  // Work session can join one instead of always making another. The repo is
+  // resolved server-side (workDir()), so nothing here takes a caller path.
+  app.get("/api/git/worktrees", async (req, reply) => {
+    const repo = roots().workRepo;
+    try {
+      return { repo, worktrees: listWorktrees(repo) };
+    } catch (err) {
+      // Not a git repo (workDir() falls back to ~/Documents/work) — the dialog
+      // drops to plain folder browsing.
+      logWarn("git.worktrees", err);
+      reply.code(400);
+      return { error: "not_a_repo" };
     }
   });
 

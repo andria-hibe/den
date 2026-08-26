@@ -71,8 +71,13 @@ WebSocket; everything else is REST.
   `LINEAR_API_KEY`. Scoped to whatever workspace the key belongs to (runn, for
   the maintainer).
 - `server/git.ts` — `prepareWork` (ticket branch: worktree or local, off a fresh
-  `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local), and
-  `worktreeForBranch` (reuse an existing worktree instead of erroring).
+  `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local),
+  `worktreeForBranch` (reuse an existing worktree instead of erroring), and
+  `listWorktrees` / pure `parseWorktrees` (every checkout of the work repo, its
+  own working copy first — behind `GET /api/git/worktrees`, which the New
+  Session dialog lists as "workspaces"). The branch-name rule lives in
+  `shared/branch.ts` (re-exported as `isValidBranch`) so the dialog can reject a
+  bad name without a second copy to drift.
 - `server/discover.ts` — lists past Claude sessions from
   `~/.claude/projects/**/*.jsonl` (for resume). Titles each from its `summary`
   or first real user message; **drops** den's own headless `claude -p` helpers
@@ -255,6 +260,13 @@ back exited, and one click revives it.
   scrollback-on-switch; attach-by-id WebSocket.
 - New Session dialog: **Work / Personal / Other / Resume** with a folder browser
   (create folders, type paths). Sessions default to `~/Documents`.
+- **Work asks which workspace** (= one checkout of the work repo): *existing*
+  lists every `git worktree` (the repo's own checkout tagged "main checkout",
+  each row branch + path) and opens the session there; *new* takes a branch name
+  and creates the worktree via the same `prepareWork` the ticket flow uses, so
+  an existing branch reuses its worktree rather than duplicating it. "Browse
+  folders instead" keeps the old free-browsing path, and a work dir that isn't a
+  git repo drops straight to it.
 - Claude workspace = **main + shell + progress notepad**; notepad renders
   markdown, is editable/savable; the main Claude is told to log progress to it.
 - **Resizable** panels (draggable splitters, sizes persisted to localStorage).

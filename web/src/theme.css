@@ -2116,6 +2116,18 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Worktree ("workspace") row in the New Session dialog: branch on the left,
+   tags pushed to the right, path underneath. */
+.wt-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wt-row-head .resume-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .dir-tag {
   margin-left: auto;
   font-size: 10px;
