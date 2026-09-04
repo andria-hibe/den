@@ -454,6 +454,33 @@ body {
 .session.attn-row {
   border-color: var(--pink-deep);
 }
+/* Reordering the rail: the row being dragged fades, and the row it would land
+   on grows an insertion line on the edge it would land against. The line is a
+   pseudo-element, not a box-shadow — a shadow follows the row's border radius
+   and reads as a ring around the row rather than a line between two rows. */
+.session.dragging {
+  opacity: 0.45;
+}
+.session.drop-above,
+.session.drop-below {
+  position: relative;
+}
+.session.drop-above::before,
+.session.drop-below::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pink-deep);
+}
+.session.drop-above::before {
+  top: -6px;
+}
+.session.drop-below::after {
+  bottom: -6px;
+}
 @keyframes attn-pulse {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 143, 190, 0.5); }
   50% { transform: scale(1.12); box-shadow: 0 0 0 5px rgba(255, 143, 190, 0); }
@@ -1121,6 +1148,13 @@ body {
   background: var(--pink);
   color: #7a2a45;
   border-color: transparent;
+}
+/* A PR you've already reviewed: it stays in "review requested" until it merges,
+   so mark why it's still listed (quietly — it isn't waiting on you). */
+.pr-badge.reviewed {
+  background: transparent;
+  color: var(--ink-soft);
+  border-style: dashed;
 }
 /* Your own approved + green-CI PRs: brighter than a plain "approved" badge. */
 .pr-badge.ready {

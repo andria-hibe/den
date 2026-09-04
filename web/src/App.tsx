@@ -52,6 +52,7 @@ export function App() {
     addShellTab,
     launchApp,
     closeShellTab,
+    reorderRail,
     markExited,
     selectSession,
     applyTitle,
@@ -501,6 +502,10 @@ export function App() {
                 <span className="keys"><kbd>{MOD}</kbd><kbd>W</kbd></span>
                 <span>close session</span>
               </li>
+              <li>
+                <span className="keys"><kbd>alt</kbd><kbd>↑</kbd>/<kbd>↓</kbd></span>
+                <span>reorder session</span>
+              </li>
             </ul>
           </div>
         </span>
@@ -588,6 +593,7 @@ export function App() {
         onClose={closeSession}
         onNewClaude={() => setShowNew(true)}
         onNewShell={() => addSession({ shell: true })}
+        onReorder={reorderRail}
         renderLinks={(s) => (
           <WorkLinkChips s={s} issues={issues} prs={prs} wrapClass="session-links" />
         )}

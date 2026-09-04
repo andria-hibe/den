@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { SessionMeta } from "../../server/sessions.ts";
+import { moveItem } from "./reorder.ts";
 
 // The left column: one row per workspace (role === "main"), with rename-in-place,
 // attention nudges, restart/close buttons, and the new-session actions below.
@@ -19,6 +20,7 @@ export function SessionRail({
   onClose,
   onNewClaude,
   onNewShell,
+  onReorder,
   renderLinks,
 }: {
   rail: SessionMeta[];
@@ -35,19 +37,75 @@ export function SessionRail({
   onClose: (id: string) => void;
   onNewClaude: () => void;
   onNewShell: () => void;
+  /** New rail order after a drag (or alt+arrow), as workspace ids top to bottom. */
+  onReorder: (groupIds: string[]) => void;
   /** The ticket/PR chips for a row (App owns the issue/PR data they match). */
   renderLinks: (s: SessionMeta) => ReactNode;
 }) {
+  // Drag state is view-local: the index being dragged and the row it's over.
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  // Move the row at `from` to `to` and hand the new workspace order upwards.
+  const commitMove = (from: number, to: number) => {
+    const next = moveItem(rail, from, to);
+    if (next !== rail) onReorder(next.map((s) => s.groupId));
+  };
+
+  const endDrag = () => {
+    setDragFrom(null);
+    setDragOver(null);
+  };
+
   return (
     <aside className="panel rail" style={{ width }}>
       <h2>sessions</h2>
       <div className="session-list">
-        {rail.map((s) => (
+        {rail.map((s, i) => (
           <div
             key={s.id}
-            className={`session ${s.id === activeId ? "active" : ""} ${s.attention ? "attn-row" : ""}`}
+            className={`session ${s.id === activeId ? "active" : ""} ${s.attention ? "attn-row" : ""}${
+              dragFrom === i ? " dragging" : ""
+            }${
+              dragOver === i && dragFrom !== null && dragFrom !== i
+                ? // The dropped row takes this slot, so it lands *below* a row it
+                  // came from above, and above one it came from below.
+                  dragFrom < i
+                  ? " drop-below"
+                  : " drop-above"
+                : ""
+            }`}
             onClick={() => onSelect(s.id)}
             tabIndex={0}
+            // Not draggable mid-rename, or the input can't be selected with the mouse.
+            draggable={editingId !== s.id}
+            onDragStart={(e) => {
+              setDragFrom(i);
+              e.dataTransfer.effectAllowed = "move";
+              // Firefox only starts a drag once some data is set.
+              e.dataTransfer.setData("text/plain", s.id);
+            }}
+            onDragOver={(e) => {
+              if (dragFrom === null) return;
+              e.preventDefault(); // opts this row in as a drop target
+              e.dataTransfer.dropEffect = "move";
+              setDragOver(i);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragFrom !== null) commitMove(dragFrom, i);
+              endDrag();
+            }}
+            onDragEnd={endDrag}
+            // Keyboard equivalent — plain arrows belong to the roving focus ring,
+            // so reordering rides on alt+arrow.
+            onKeyDown={(e) => {
+              if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+              e.preventDefault();
+              e.stopPropagation();
+              commitMove(i, e.key === "ArrowUp" ? i - 1 : i + 1);
+            }}
+            title="drag to reorder (or alt+up/down)"
           >
             <span
               className="dot"

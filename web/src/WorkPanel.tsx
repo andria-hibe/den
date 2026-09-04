@@ -85,6 +85,13 @@ function PrCard({
       <div className="pr-title">{pr.title}</div>
       <div className="pr-meta">
         {pr.ticketHint && <span className="pr-badge ticket">{pr.ticketHint}</span>}
+        {/* You reviewed it, so it no longer nags — but it stays listed until it's
+            merged or closed, and the badge says why it's still here. */}
+        {pr.reviewedByMe && !pr.reviewRequestedFromMe && (
+          <span className="pr-badge reviewed" title="you have reviewed this PR">
+            ✓ reviewed
+          </span>
+        )}
         {readyToMerge ? (
           <span className="pr-badge ready" title="approved & checks green — ready to merge">
             ✓ ready to merge

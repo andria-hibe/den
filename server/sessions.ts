@@ -307,6 +307,31 @@ export function ptyLooksIdle(
   return now - lastOutputAt >= idleMs;
 }
 
+/**
+ * New `pos` for every session given the rail's workspace order.
+ *
+ * Groups named in `groupIds` take those slots in that order; any group the
+ * client didn't name (e.g. a workspace created between the drag and the request)
+ * keeps its relative order after them, ranked by its current `pos`. Panes of one
+ * workspace all get the same number — `list()` breaks the tie by `createdAt`.
+ */
+export function reorderPositions(
+  sessions: { id: string; groupId: string; pos: number }[],
+  groupIds: string[],
+): Map<string, number> {
+  const rank = new Map<string, number>();
+  groupIds.forEach((g, i) => rank.set(g, i));
+  const unlisted = [...new Set(sessions.map((s) => s.groupId))]
+    .filter((g) => !rank.has(g))
+    .sort(
+      (a, b) =>
+        Math.min(...sessions.filter((s) => s.groupId === a).map((s) => s.pos)) -
+        Math.min(...sessions.filter((s) => s.groupId === b).map((s) => s.pos)),
+    );
+  unlisted.forEach((g, i) => rank.set(g, groupIds.length + i));
+  return new Map(sessions.map((s) => [s.id, rank.get(s.groupId) ?? 0]));
+}
+
 /** Metadata shape sent to the web app. */
 export interface SessionMeta {
   id: string;
@@ -335,6 +360,8 @@ export interface SessionMeta {
   /** The GitHub PR this session is for (number + nameWithOwner repo). */
   pr: number | null;
   prRepo: string | null;
+  /** Rail sort key (see `reorder`). The list arrives already sorted by it. */
+  pos: number;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -351,6 +378,8 @@ interface SessionInit {
   lastActive: number;
   groupId: string;
   role: "main" | "shell";
+  /** Rail sort key; defaults to `createdAt` (i.e. creation order). */
+  pos?: number;
 }
 
 /**
@@ -400,6 +429,8 @@ class DenSession {
   lastActive: number;
   groupId: string;
   role: "main" | "shell";
+  /** Where this session's workspace sits in the rail — see SessionManager.reorder. */
+  pos: number;
 
   constructor(init: SessionInit) {
     this.id = init.id;
@@ -411,6 +442,7 @@ class DenSession {
     this.lastActive = init.lastActive;
     this.groupId = init.groupId;
     this.role = init.role;
+    this.pos = init.pos ?? init.createdAt;
   }
 
   spawn() {
@@ -575,6 +607,7 @@ class DenSession {
       view: this.view,
       pr: this.pr,
       prRepo: this.prRepo,
+      pos: this.pos,
     };
   }
 
@@ -601,6 +634,7 @@ class DenSession {
       // Scrollback is persisted separately (store.setScrollback), not on this
       // metadata path — a fresh row starts empty.
       scrollback: null,
+      pos: this.pos,
     };
   }
 
@@ -658,6 +692,7 @@ class SessionManager {
         lastActive: row.lastActive,
         groupId: row.groupId ?? row.id,
         role: (row.role as "main" | "shell") ?? "main",
+        pos: row.pos ?? row.createdAt,
       });
       s.status = "exited";
       s.claudeSessionId = row.claudeSessionId ?? null;
@@ -906,7 +941,27 @@ class SessionManager {
   }
 
   list(): SessionMeta[] {
-    return [...this.sessions.values()].map((s) => s.meta());
+    // Sorted here (not just in the store) so a session created since the last
+    // hydrate lands in the right place without a round-trip through sqlite.
+    return [...this.sessions.values()]
+      .sort((a, b) => a.pos - b.pos || a.createdAt - b.createdAt)
+      .map((s) => s.meta());
+  }
+
+  /**
+   * Reorder the rail: `groupIds` is the workspace order the user dragged into
+   * place. Every pane of a workspace shares its workspace's position, so shell
+   * tabs travel with their main pane and keep their own creation order within it.
+   */
+  reorder(groupIds: string[]): SessionMeta[] {
+    const positions = reorderPositions([...this.sessions.values()], groupIds);
+    for (const s of this.sessions.values()) {
+      const pos = positions.get(s.id);
+      if (pos === undefined || pos === s.pos) continue;
+      s.pos = pos;
+      store.update(s.toRow());
+    }
+    return this.list();
   }
 
   update(id: string, patch: { name?: string; color?: string }) {

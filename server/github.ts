@@ -46,6 +46,13 @@ export interface PullRequest {
   needsAttention: boolean;
   /** Short human reason for `needsAttention`, for a card tooltip. */
   attentionReason?: string;
+  /** Review bucket only: GitHub still has an open review request from you, so a
+   * review is outstanding. Cleared the moment you submit one, and set again if
+   * the author asks for a re-review. */
+  reviewRequestedFromMe: boolean;
+  /** Review bucket only: you have already submitted a review on this PR. Such a
+   * PR stays in the bucket (until it's merged or closed) but doesn't nag. */
+  reviewedByMe: boolean;
 }
 
 export interface PrBuckets {
@@ -232,6 +239,8 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
     ticketHint: parseTicketHint(branch),
     isMine: false,
     needsAttention: false, // set per-bucket in getMyPullRequests
+    reviewRequestedFromMe: false, // set in buildReviewBucket
+    reviewedByMe: false,
   };
 }
 
@@ -272,37 +281,92 @@ export function authoredAttention(p: Pick<PullRequest, "review" | "checks">): {
 }
 
 /**
- * Does a PR you were *asked to review* need your action? Yes whenever you owe a
- * review — a first review or a re-review (GitHub re-adds you either way). Its own
- * CI is irrelevant to you. But once the PR is already approved you no longer owe
- * anything, and drafts aren't ready for review — neither flags.
+ * Does a PR you were *asked to review* need your action? Only while a review
+ * request from you is still open (`reviewRequestedFromMe`) — that's GitHub's own
+ * record of whether you owe one. Submitting a review clears the request, so the
+ * card goes quiet while the PR stays in the bucket; a re-request re-opens it and
+ * the "!" comes back. Its own CI is irrelevant to you. Drafts and
+ * already-approved PRs never flag: nothing is waiting on you there.
  */
-export function reviewAttention(p: Pick<PullRequest, "isDraft" | "review">): {
-  needsAttention: boolean;
-  attentionReason?: string;
-} {
-  const needs = !p.isDraft && p.review !== "approved";
-  return needs
-    ? { needsAttention: true, attentionReason: "your review is requested" }
-    : { needsAttention: false };
+export function reviewAttention(
+  p: Pick<PullRequest, "isDraft" | "review" | "reviewRequestedFromMe" | "reviewedByMe">,
+): { needsAttention: boolean; attentionReason?: string } {
+  if (p.isDraft || !p.reviewRequestedFromMe || p.review === "approved") {
+    return { needsAttention: false };
+  }
+  return {
+    needsAttention: true,
+    attentionReason: p.reviewedByMe
+      ? "a re-review is requested"
+      : "your review is requested",
+  };
+}
+
+/** "owner/repo#123" — how a PR is deduped across the three searches. */
+export function prKey(p: { repo: string; number: number }): string {
+  return `${p.repo}#${p.number}`;
+}
+
+/**
+ * Build the "review requested" bucket from the PRs of two searches
+ * (`--review-requested=@me` and `--reviewed-by=@me`), flag each with whether a
+ * review is still requested from you / you have already reviewed it, and sort.
+ *
+ * Reviewing a PR clears GitHub's review request, which used to make the card
+ * vanish mid-flight — so the bucket also carries what you've reviewed, and only
+ * drops it when the PR is merged or closed (both searches are `--state=open`).
+ * Ones still waiting on you sort first, then most recently updated.
+ */
+export function buildReviewBucket(
+  prs: PullRequest[],
+  requestedKeys: Set<string>,
+  reviewedKeys: Set<string>,
+): PullRequest[] {
+  const flagged = prs.map((p) => {
+    const key = prKey(p);
+    const withFlags: PullRequest = {
+      ...p,
+      reviewRequestedFromMe: requestedKeys.has(key),
+      reviewedByMe: reviewedKeys.has(key),
+    };
+    return { ...withFlags, ...reviewAttention(withFlags) };
+  });
+  return flagged.sort(
+    (a, b) =>
+      Number(b.needsAttention) - Number(a.needsAttention) ||
+      b.updatedAt.localeCompare(a.updatedAt),
+  );
 }
 
 export async function getMyPullRequests(): Promise<PrBuckets> {
-  const [authoredRows, reviewRows] = await Promise.all([
+  const [authoredRows, requestedRows, reviewedRows] = await Promise.all([
     search("--author=@me"),
     search("--review-requested=@me"),
+    search("--reviewed-by=@me"),
   ]);
-  const [authored, reviewRequested] = await Promise.all([
+  const rowKey = (r: SearchRow) =>
+    prKey({ repo: r.repository.nameWithOwner, number: r.number });
+  const authoredKeys = new Set(authoredRows.map(rowKey));
+  const requestedKeys = new Set(requestedRows.map(rowKey));
+  const reviewedKeys = new Set(reviewedRows.map(rowKey));
+  // Dedupe *before* enriching: a PR you were asked to review and have since
+  // reviewed appears in both searches, and enrich() is two gh calls per PR.
+  // Your own PRs drop out — they belong in the authored bucket (you can end up
+  // in `reviewed-by` on your own PR by commenting on it).
+  const reviewRows = new Map<string, SearchRow>();
+  for (const r of [...requestedRows, ...reviewedRows]) {
+    const key = rowKey(r);
+    if (!authoredKeys.has(key)) reviewRows.set(key, r);
+  }
+  const [authored, reviewPrs] = await Promise.all([
     mapLimit(authoredRows, 6, enrich),
-    mapLimit(reviewRows, 6, enrich),
+    mapLimit([...reviewRows.values()], 6, enrich),
   ]);
   authored.forEach((p) => {
     p.isMine = true;
     Object.assign(p, authoredAttention(p));
   });
-  reviewRequested.forEach((p) => {
-    Object.assign(p, reviewAttention(p));
-  });
+  const reviewRequested = buildReviewBucket(reviewPrs, requestedKeys, reviewedKeys);
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
 }
 

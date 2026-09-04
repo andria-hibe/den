@@ -51,9 +51,18 @@ WebSocket; everything else is REST.
   (the notepad, filed per file).
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
-  survive a restart (marked exited on boot).
+  survive a restart (marked exited on boot). Rows carry a **`pos`** rail sort key
+  (`ORDER BY pos, createdAt`) — `createdAt` by default, small indices once you
+  drag the rail. Its backfill (`pos = createdAt`) runs **only on the boot that
+  adds the column**: a dragged row legitimately holds pos 0, so an unguarded
+  `WHERE pos = 0` backfill threw the saved order away every restart.
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
-  review-requested → `isMine`); CI status from **`gh pr checks --json bucket`**
+  review-requested → `isMine`); the review bucket merges **two** searches —
+  `--review-requested=@me` **and `--reviewed-by=@me`** — deduped before `enrich`
+  (two `gh` calls per PR) and with your own PRs dropped, so a PR you've reviewed
+  stays listed until it's merged or closed instead of vanishing the moment your
+  review clears GitHub's request (`buildReviewBucket`, `reviewRequestedFromMe` /
+  `reviewedByMe`); CI status from **`gh pr checks --json bucket`**
   (deduped to the latest run per check — *not* `statusCheckRollup`; see the CI
   gotcha below) summarized by `summarizeChecks`; `getPrDetail` (body + reviews + issue comments +
   **inline review comments** with `path`/`line`/`diffHunk` + a `resolved` flag,
@@ -108,7 +117,9 @@ WebSocket; everything else is REST.
   OS notifications on attention/PR transitions), `usePersistent.ts` (the
   localStorage-backed number/string/JSON hooks), `foxPose.ts` (pure
   `deriveFoxPose` + the pose cast/titles), `format.ts` (relTime/relTimeAgo,
-  card accentStyle, prKey), `TerminalView`, `TicketComments`, `api.ts` (the
+  card accentStyle, prKey), `reorder.ts` (pure `moveItem` / `sortByGroupOrder`
+  for the rail drag — the server mirrors it in `reorderPositions`),
+  `TerminalView`, `TicketComments`, `api.ts` (the
   fetch wrapper — use it for every REST call so non-2xx surfaces as a throw;
   the one deliberate exception is WorkData's `refreshIssues`, which needs the
   raw 409 = "no Linear key"). Each is small and unit-testable where pure.
@@ -258,6 +269,15 @@ back exited, and one click revives it.
 
 - Multi-session cockpit: create/rename(double-click)/recolour/close; persistent;
   scrollback-on-switch; attach-by-id WebSocket.
+- **Reorderable rail**: drag a session row to move it (or **alt+↑/↓** on a
+  focused row — plain arrows belong to the roving focus ring). The order is the
+  workspace order: `POST /api/sessions/reorder` takes `groupIds` top to bottom,
+  `sessions.reorder` gives every pane of a workspace its workspace's `pos` (so
+  shell tabs travel with their main pane), and it persists, so a restart brings
+  the rail back the way you arranged it. New sessions land at the end.
+  The drop indicator is a `::before`/`::after` line, **not** a `box-shadow` — a
+  shadow follows the row's border radius and reads as a ring, not an insertion
+  point.
 - New Session dialog: **Work / Personal / Other / Resume** with a folder browser
   (create folders, type paths). Sessions default to `~/Documents`.
 - **Work asks which workspace** (= one checkout of the work repo): *existing*
@@ -292,8 +312,15 @@ back exited, and one click revives it.
   changes); **hover the `den` wordmark** for the keyboard-shortcut cheat sheet.
 - **PR cards flag what needs you**: cards with `needsAttention` get a pink accent
   + pulsing `!` (tooltip = `attentionReason`), so the "review requested" and "my
-  open PRs" sections show at a glance which ones are on you. Already-approved
-  review-requested PRs drop the flag (`getMyPullRequests`: `review !== "approved"`).
+  open PRs" sections show at a glance which ones are on you. Drafts and
+  already-approved review-requested PRs drop the flag.
+- **"Review requested" keeps what you've reviewed** until the PR is merged or
+  closed — reviewing one used to clear GitHub's review request and make the card
+  disappear mid-flight. The `!` follows the *open review request*
+  (`reviewRequestedFromMe`, `reviewAttention`): submitting a review silences it
+  (a quiet dashed `✓ reviewed` badge says why the card is still there), and a
+  re-request brings the `!` back with "a re-review is requested". PRs still
+  waiting on you sort to the top of the bucket.
 - **Keyboard shortcuts**: `Cmd/Ctrl+N` new claude · `Cmd/Ctrl+T` new shell ·
   `Cmd/Ctrl+1–9` switch to the Nth rail session · `Cmd/Ctrl+W` close active
   (native Cmd+W freed via a trimmed Electron menu in `main.ts`).

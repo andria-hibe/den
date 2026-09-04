@@ -36,6 +36,9 @@ export interface SessionRow {
   /** Tail of the terminal scrollback, persisted so a restart isn't destructive.
    * Written periodically (not on the metadata `update` path). */
   scrollback: string | null;
+  /** Rail sort key. Defaults to `createdAt` (so untouched rows keep creation
+   * order) and is rewritten to a small index when you drag the rail around. */
+  pos: number;
 }
 
 // Stable per-user location (works identically for the CLI and the packaged
@@ -64,6 +67,7 @@ db.exec(`
 `);
 
 // Migrate older DBs that predate workspace grouping or session-context columns.
+const added = new Set<string>();
 for (const col of [
   "groupId TEXT",
   "role TEXT",
@@ -75,25 +79,35 @@ for (const col of [
   "prRepo TEXT",
   "titleLocked INTEGER NOT NULL DEFAULT 0",
   "scrollback TEXT",
+  "pos INTEGER NOT NULL DEFAULT 0",
 ]) {
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
+    added.add(col.split(" ")[0]);
   } catch {
     // column already exists
   }
 }
+// Rows from before the manual rail order: seed `pos` from `createdAt` so they
+// keep the order they already had (new rows are inserted with pos=createdAt too,
+// which lands them after anything you've dragged into place). Only on the boot
+// that adds the column — a dragged row legitimately holds pos 0, so re-running
+// this would throw the saved order away every restart.
+if (added.has("pos")) db.exec(`UPDATE sessions SET pos = createdAt`);
 
 const stmts = {
   insert: db.prepare(
-    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked, scrollback)
-     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked, @scrollback)`,
+    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked, scrollback, pos)
+     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked, @scrollback, @pos)`,
   ),
-  all: db.prepare(`SELECT * FROM sessions ORDER BY createdAt ASC`),
+  // Rail order: the dragged `pos` first, creation order as the tiebreak (panes
+  // of one workspace share its pos, so a shell tab keeps its place in the group).
+  all: db.prepare(`SELECT * FROM sessions ORDER BY pos ASC, createdAt ASC`),
   update: db.prepare(
     `UPDATE sessions SET name=@name, color=@color, status=@status,
        claudeSessionId=@claudeSessionId, lastActive=@lastActive,
        branch=@branch, ticket=@ticket, look=@look, view=@view,
-       pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked WHERE id=@id`,
+       pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked, pos=@pos WHERE id=@id`,
   ),
   setScrollback: db.prepare(
     `UPDATE sessions SET scrollback=@scrollback WHERE id=@id`,

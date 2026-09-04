@@ -161,6 +161,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Past Claude sessions on disk, for resuming.
   app.get("/api/sessions/past", async () => ({ sessions: listPastSessions() }));
 
+  // Rail order after a drag: the workspace (groupId) order, top to bottom.
+  app.post("/api/sessions/reorder", async (req, reply) => {
+    const body = (req.body ?? {}) as { groupIds?: unknown };
+    if (
+      !Array.isArray(body.groupIds) ||
+      body.groupIds.some((g) => typeof g !== "string")
+    ) {
+      reply.code(400);
+      return { error: "bad_order" };
+    }
+    return { sessions: sessions.reorder(body.groupIds as string[]) };
+  });
+
   app.post("/api/sessions", async (req, reply) => {
     const body = (req.body ?? {}) as {
       name?: string;

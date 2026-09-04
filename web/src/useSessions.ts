@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.ts";
+import { sortByGroupOrder } from "./reorder.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
 export interface AddSessionOpts {
@@ -193,6 +194,22 @@ export function useSessions({
     }
   };
 
+  // Persist a dragged rail order (workspace order, top to bottom). Applied
+  // locally first so the row lands where you dropped it without waiting on the
+  // round-trip; the server's answer is the authority if the two disagree.
+  const reorderRail = async (groupIds: string[]) => {
+    setSessions((prev) => sortByGroupOrder(prev, groupIds));
+    try {
+      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions/reorder", {
+        method: "POST",
+        body: JSON.stringify({ groupIds }),
+      });
+      setSessions(d.sessions);
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   const markExited = (id: string) =>
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: "exited" } : s)),
@@ -226,6 +243,7 @@ export function useSessions({
     addShellTab,
     launchApp,
     closeShellTab,
+    reorderRail,
     markExited,
     selectSession,
     applyTitle,

@@ -5,7 +5,9 @@ import {
   parseTicketHint,
   authoredAttention,
   reviewAttention,
+  buildReviewBucket,
   isValidRepo,
+  type PullRequest,
 } from "./github.ts";
 
 describe("summarizeChecks", () => {
@@ -122,19 +124,74 @@ describe("isValidRepo (owner/name slug)", () => {
 });
 
 describe("reviewAttention (PRs you were asked to review)", () => {
+  const base = {
+    isDraft: false,
+    review: "review_required" as const,
+    reviewRequestedFromMe: true,
+    reviewedByMe: false,
+  };
   it("flags a review you owe", () => {
-    expect(reviewAttention({ isDraft: false, review: "review_required" })).toMatchObject({
-      needsAttention: true,
-    });
+    expect(reviewAttention(base)).toMatchObject({ needsAttention: true });
   });
-  it("does NOT flag once you've already approved it", () => {
-    expect(reviewAttention({ isDraft: false, review: "approved" })).toEqual({
+  it("goes quiet once you've reviewed it (request cleared)", () => {
+    expect(
+      reviewAttention({ ...base, reviewRequestedFromMe: false, reviewedByMe: true }),
+    ).toEqual({ needsAttention: false });
+  });
+  it("flags again when a re-review is requested", () => {
+    const r = reviewAttention({ ...base, reviewedByMe: true });
+    expect(r.needsAttention).toBe(true);
+    expect(r.attentionReason).toBe("a re-review is requested");
+  });
+  it("does NOT flag once it's approved", () => {
+    expect(reviewAttention({ ...base, review: "approved" })).toEqual({
       needsAttention: false,
     });
   });
   it("does NOT flag drafts", () => {
-    expect(reviewAttention({ isDraft: true, review: "review_required" })).toEqual({
+    expect(reviewAttention({ ...base, isDraft: true })).toEqual({
       needsAttention: false,
     });
+  });
+});
+
+describe("buildReviewBucket (review-requested + already-reviewed)", () => {
+  const pr = (number: number, extra: Partial<PullRequest> = {}): PullRequest => ({
+    number,
+    title: `pr ${number}`,
+    url: `https://github.com/o/r/pull/${number}`,
+    repo: "o/r",
+    isDraft: false,
+    updatedAt: `2026-09-0${number}T00:00:00Z`,
+    checks: "passing",
+    checkCounts: { passed: 1, failed: 0, pending: 0, total: 1 },
+    review: "review_required",
+    isMine: false,
+    needsAttention: false,
+    reviewRequestedFromMe: false,
+    reviewedByMe: false,
+    ...extra,
+  });
+
+  it("keeps a PR you've reviewed, without the attention flag", () => {
+    const [p] = buildReviewBucket([pr(1)], new Set(), new Set(["o/r#1"]));
+    expect(p.reviewedByMe).toBe(true);
+    expect(p.reviewRequestedFromMe).toBe(false);
+    expect(p.needsAttention).toBe(false);
+  });
+
+  it("re-flags a PR that is both reviewed and requested again", () => {
+    const [p] = buildReviewBucket([pr(1)], new Set(["o/r#1"]), new Set(["o/r#1"]));
+    expect(p.needsAttention).toBe(true);
+    expect(p.attentionReason).toBe("a re-review is requested");
+  });
+
+  it("sorts the ones waiting on you first, then newest", () => {
+    const bucket = buildReviewBucket(
+      [pr(1), pr(2), pr(3)],
+      new Set(["o/r#2"]),
+      new Set(["o/r#1", "o/r#3"]),
+    );
+    expect(bucket.map((p) => p.number)).toEqual([2, 3, 1]);
   });
 });
