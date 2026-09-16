@@ -56,6 +56,9 @@ WebSocket; everything else is REST.
   drag the rail. Its backfill (`pos = createdAt`) runs **only on the boot that
   adds the column**: a dragged row legitimately holds pos 0, so an unguarded
   `WHERE pos = 0` backfill threw the saved order away every restart.
+  Also holds each session's **scrollback**: the 256KB ring is flushed to a
+  `scrollback` column (every 5s while dirty + on exit) and restored in
+  `hydrate()`, so a restart replays recent output instead of an empty pane.
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
   review-requested → `isMine`); the review bucket merges **two** searches —
   `--review-requested=@me` **and `--reviewed-by=@me`** — deduped before `enrich`
@@ -97,6 +100,23 @@ WebSocket; everything else is REST.
   repo that "Work" sessions and PR/ticket checkouts default into, resolved via
   `$DEN_WORK_DIR` → the `work_dir` setting → the sole git repo under
   `~/Documents/work` → `~/Documents/work` (see `workDir()`).
+- `server/apprun.ts` — the workspace header's **"run this app locally"** button.
+  `detectAppRunner(cwd)` walks up to the git root and picks a recipe: a runn
+  checkout (`.runn/project.env` present) → `runn up`, with the app URL read from
+  that file; else the first dev-ish npm script (`dev`/`start`/`develop`/`serve`/
+  `turbo:dev`) → `<pm> run <script>`, the package manager sniffed from the
+  lockfile. `appRunnerStatus()` adds liveness: `runn status` for runn (parsed by
+  pure `parseRunnStatus`), a port probe for a script app. The port comes only
+  from an **explicitly declared** `--port`/`-p`/`PORT=` in the script
+  (`extractPort`) — guessing a tool default (5173, 3000) could probe an
+  unrelated app and mislabel it "running". Behind `GET /api/app/runner` +
+  `POST /api/app/run`; the POST **adds a shell tab** to the workspace and types
+  `cd <repo> && <command>` into it rather than running the command itself, so
+  the output is in front of you and Ctrl-C works. The command is written **400ms
+  after** the tab opens — a fresh login shell eats keystrokes typed during zsh's
+  prompt init. `web/src/AppRunButton.tsx` renders "▶ run <name>" or, when it can
+  tell the app is already up, "▶ open <name>" linking to the URL. Pure parts
+  unit-tested in `server/apprun.test.ts`.
 - `web/src/App.tsx` — the UI's composition root: 3-column flex layout, topbar
   (fox + shortcuts popover), the center-pane switch (terminal / 3-pane claude
   workspace / look / PR review / my-PR), and the ticket/PR open-session flows +
@@ -331,6 +351,12 @@ back exited, and one click revives it.
   terminal/text field (never hijacks typing); a mouse click clears the ring.
 - **Multiple terminal tabs per workspace**: the shell pane is a tab strip — `+`
   opens another shell in the same workspace, `×` closes one (shown only when >1).
+- **Run the app you're working on**: the workspace header has a ▶ button
+  (`AppRunButton`) when den can tell how to start the repo — `runn up` for a runn
+  checkout, else its dev-ish npm script. It opens a **new shell tab** in the same
+  workspace and types the command there, so you watch it boot and Ctrl-C it like
+  normal. When it can tell the app is already up (runn status / a port probe) the
+  button becomes ▶ open and links to the URL instead. See `server/apprun.ts`.
 - **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
@@ -526,57 +552,26 @@ testable (export it) and add a case. Beyond that, verification is scripted + vis
   repo under `~` (the fs cwd sandbox rejects `/tmp`). Set `commit.gpgsign false`
   in temp repos or commits hang on 1Password.
 
-## Recommendations / roadmap (revisit next time)
+## Backlog
 
-1. **Sign & notarize** the app (currently unsigned `identity: null`) if it'll be
-   shared; add auto-update. A couple of recent commits are unsigned (1Password
-   was locked) — re-sign if desired.
-2. **My-PR (Edit) flow**: comment rendering + inline-comment diffs + "→ Claude"
-   are built & verified, but the end-to-end *edit* path (branch checks out/reuses,
-   Claude makes & pushes changes) still needs a live click-through with a push.
-3. ~~**Feed Linear into the fox**.~~ **Partly done** — unread Linear
-   *notifications* now push the fox to `alert`. Still open: reflect Linear ticket
-   *status/priority* (e.g. an urgent assigned ticket) in the fox too.
-4. **Worktree lifecycle**: offer to remove Den-created worktrees
-   (`runn/.claude-worktrees/pr-*`) when closing a session; list/adopt existing
-   ones.
-5. **Post back to GitHub** (`gh pr review/comment`, resolve threads). The
-   "→ Claude" buttons only *hand a comment to Claude* to action locally — they
-   don't reply to or resolve the thread on GitHub. Natural next step: let Claude
-   post its response / mark the inline comment resolved from Den.
-6. ~~**Persistence**: `view`/`ticket`/`pr` are in-memory only.~~ **Done** —
-   `branch`/`ticket`/`look`/`view`/`pr`/`prRepo`/`titleLocked` now persist to
-   `store.ts` (migrated columns) and restore in `hydrate()`, so the rail renders
-   full PR/ticket/look context after a server restart (sessions come back
-   `exited`, but their center pane is intact).
-7. ~~**Keyboard shortcuts** (new session, switch 1–9, close).~~ **Done** —
-   `Cmd/Ctrl+N` new claude · `Cmd/Ctrl+T` new shell · `Cmd/Ctrl+1–9` switch to
-   the Nth rail session · `Cmd/Ctrl+W` close the active session (a window
-   `keydown` listener in `App.tsx` reading current state via a ref; suppressed
-   while a modal/rename is open). Native Cmd+W was freed from Electron's default
-   macOS menu by installing a trimmed menu in `main.ts` (`installMenu()` keeps
-   Edit/View/appMenu roles, drops the Cmd+W "Close Window" accelerator). Still
-   open: window-state memory; maybe a menu-bar mode. **NB in dev-browser Cmd+W
-   still closes the tab** — only the packaged app frees it.
-8. ~~**Native notifications** for attention (bell) and PR check failures.~~
-   **Done** — `web/src/useNotifications.ts` fires OS notifications on
-   *transitions* (a background session ringing the bell; a PR newly needing you),
-   seeding startup state silently so a launch never spams.
-9. **Token awareness**: progress logging + the in-session review spend tokens —
-   add visible toggles / cost hints. (Both headless spends are gone: the
-   `summarizePrDiff` and `reviewPr` `claude -p` passes were removed once the
-   review session itself did that work.)
-10. **Diff view**: grouped per file, with the review's per-file comments beside
-    each file (review) and per-comment hunks (my-PR). Still missing: syntax
-    highlighting + collapsible files. **Notepad**: auto-scroll to newest.
-11. **Dual-ABI friction**: consider shipping prebuilt binaries for both Node and
-    Electron so `dev` and `app` don't need rebuilds when switching.
-12. ~~**Tests**: add a real suite.~~ **Started** — vitest covers the pure logic
-    (`npm test`, 40 cases). Still ad-hoc for UI/integration; consider a
-    Playwright/headless-Electron smoke path next.
-13. **Scrollback persistence** — the terminal ring is now flushed to a sqlite
-    `scrollback` column (every 5s while dirty + on exit) and restored on
-    `hydrate()`, so a restart replays recent output instead of an empty pane.
-    Live PTYs still don't survive a restart (sessions return `exited`).
+**The backlog lives in GitHub issues**, not here:
+<https://github.com/andria-hibe/den/issues>. This section used to hold a
+13-item roadmap that mixed open work with items marked done, and it drifted —
+the app-runner feature above shipped without ever reaching it. Everything open
+on 2026-09-16 was filed as an issue; anything finished was folded into
+Architecture and Features above. **Add new work as an issue, not as a bullet
+here.**
+
+Two clusters are worth knowing before you touch the session code:
+
+- **Issues 1-8** are all one bug in different places: the prompts den injects
+  into sessions (`reviewInstruction`, `progressInstruction`, `denPrompt`,
+  `ticketPrompt`, and the client-side paste prompts) disagree with each other
+  about ASCII, about where a session should write its answer, and about what a
+  restarted or my-PR pane knows. `reviewInstruction` is the model to copy: one
+  builder, shared by create + restart, asserted ASCII by a test.
+- **Issue 22**: `baseRef` (`server/git.ts`) branches off `master`/`main` only.
+  A repo based on `development` gets a branch off a stale master, or off HEAD
+  with a warning nobody reads.
 
 Full narrative history is in the git log; user-facing run notes in `README.md`.
