@@ -562,6 +562,9 @@ on 2026-09-16 was filed as an issue; anything finished was folded into
 Architecture and Features above. **Add new work as an issue, not as a bullet
 here.**
 
+A session handover with the current state of that backlog lives in
+`docs/handover.md` (delete it once issues 1-8 are closed).
+
 Two clusters are worth knowing before you touch the session code:
 
 - **Issues 1-8** are all one bug in different places: the prompts den injects
