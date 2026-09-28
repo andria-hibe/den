@@ -299,7 +299,9 @@ export function reviewInstruction(
     `decides what, if anything, reaches GitHub.\n` +
     `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
     `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
-    `(or \`git checkout ${scratch}\` if it already exists), then edit there. Keep ` +
+    `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +
+    `it with no base argument while the PR's branch is checked out, so the ` +
+    `scratch branch starts from the PR's code, not from master. Keep ` +
     `it local and uncommitted, and say so in your review rather than leaving it ` +
     `as a surprise. Never leave the PR's own branch modified.\n` +
     `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +

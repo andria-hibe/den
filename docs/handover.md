@@ -101,10 +101,31 @@ inherits the PR's branch. The issue asks to make that explicit in
 `reviewInstruction` so a later edit cannot break it silently. It is not a bug
 to fix.
 
+## What the #22 commit did
+
+- `baseRef` (`server/git.ts`) resolves the repo's base branch: the
+  `base_branch` override (`$DEN_BASE_BRANCH`, then the `base_branch` setting),
+  then `origin/HEAD`, then GitHub's default branch, then `master`/`main`. It
+  fetches that branch and prefers `origin/<name>` over a local copy. runn's
+  base is `development` (both `origin/HEAD` and GitHub say so), so den had
+  been branching every runn ticket off `origin/master`.
+- There is no UI for the override. Set it with
+  `sqlite3 ~/.den/den.db "INSERT OR REPLACE INTO settings VALUES ('base_branch', 'development')"`
+  or `DEN_BASE_BRANCH`.
+- `reviewInstruction` says to create the scratch branch with no base argument
+  while the PR's branch is checked out, so the scratch branch starts from the
+  PR's code.
+- Verified against throwaway repos whose base is `development`: with a stale
+  `master` present, in both worktree and local mode, new branches start at
+  `development`. With `origin/HEAD` unset and no GitHub remote it falls back
+  to `master`, and the override fixes that.
+- Not done: the third case, stacking a ticket on the branch of the ticket
+  before it. The commit leaves #22 open for it. Ask andria whether to split
+  it into its own issue and close #22.
+
 ## Priority order for what is left
 
-1. #22: `baseRef` branches off `master` instead of the repo's base branch.
-2. The rest in issue-number order: #13, #19, #17, #15, #23, #11, #14, #18,
+1. The rest in issue-number order: #25, #13, #19, #17, #15, #23, #11, #14, #18,
    #16, #10, #21, #20, #12.
 
 ## Ground rules from these sessions

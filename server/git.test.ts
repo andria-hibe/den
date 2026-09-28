@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidBranch, parseWorktrees } from "./git.ts";
+import { baseCandidates, isValidBranch, parseWorktrees, pickBaseRef } from "./git.ts";
 
 describe("isValidBranch", () => {
   it("accepts normal branch names", () => {
@@ -75,5 +75,44 @@ describe("parseWorktrees", () => {
 
   it("returns nothing for empty output", () => {
     expect(parseWorktrees("")).toEqual([]);
+  });
+});
+
+describe("baseCandidates", () => {
+  it("tries the override, then the repo default, then master and main", () => {
+    expect(baseCandidates("release", "development")).toEqual(["release", "development", "master", "main"]);
+  });
+
+  it("dedupes, so a repo whose default is master tries it once", () => {
+    expect(baseCandidates(null, "master")).toEqual(["master", "main"]);
+  });
+
+  it("drops a name git would read as a flag", () => {
+    expect(baseCandidates("--orphan", "development")).toEqual(["development", "master", "main"]);
+  });
+});
+
+describe("pickBaseRef", () => {
+  const refs = (...have: string[]) => (r: string) => have.includes(r);
+
+  it("prefers the fetched remote ref over a stale local branch", () => {
+    expect(pickBaseRef(["development"], refs("development", "origin/development"))).toBe("origin/development");
+  });
+
+  it("uses the local branch when there is no remote", () => {
+    expect(pickBaseRef(["development"], refs("development"))).toBe("development");
+  });
+
+  it("takes the repo's base over a stale master that still exists", () => {
+    const names = baseCandidates(null, "development");
+    expect(pickBaseRef(names, refs("master", "origin/master", "origin/development"))).toBe("origin/development");
+  });
+
+  it("falls through to master when the default can't be found", () => {
+    expect(pickBaseRef(["development", "master", "main"], refs("origin/master"))).toBe("origin/master");
+  });
+
+  it("is null when nothing resolves (baseRef then uses HEAD)", () => {
+    expect(pickBaseRef(["development", "master", "main"], refs())).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { readdirSync, statSync, existsSync, mkdirSync, realpathSync } from "node
 import { homedir } from "node:os";
 import { resolve, join, dirname, sep } from "node:path";
 import { store } from "./store.ts";
+import { isValidBranch } from "../shared/branch.ts";
 
 // Where we remember the den source repo, so the "edit den" button always finds
 // it — even in the packaged app, which runs from the .app bundle (not the repo).
@@ -83,6 +84,21 @@ export function workDir(): string {
     if (within(abs) && existsSync(abs)) return abs;
   }
   return soleGitRepo(work) ?? work;
+}
+
+// The branch new work branches start from, when it isn't the repo's default
+// branch (see baseRef in git.ts). Unset for most repos: den asks the repo.
+const BASE_BRANCH_SETTING = "base_branch";
+
+/** The configured base branch for new work branches: $DEN_BASE_BRANCH, then the
+ * stored `base_branch` setting. Null when neither is set or valid, so git.ts
+ * resolves the repo's own default. */
+export function baseBranchOverride(): string | null {
+  for (const c of [process.env.DEN_BASE_BRANCH, store.getSetting(BASE_BRANCH_SETTING)]) {
+    const name = c?.trim();
+    if (name && isValidBranch(name)) return name;
+  }
+  return null;
 }
 
 /** Well-known starting points offered in the New Session dialog. */

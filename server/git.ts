@@ -88,27 +88,103 @@ function branchExists(repo: string, branch: string): boolean {
   }
 }
 
-/** Freshly-fetched origin/master if possible, else local master, else HEAD. */
-function baseRef(repo: string): string {
+/**
+ * Branch names to try as the base for a new branch, most trusted first: the
+ * configured override (`base_branch`, see `baseBranchOverride` in fs.ts), then
+ * the repo's own default branch, then `master` and `main` as a last resort.
+ * Deduped, and names that fail `isValidBranch` are dropped, since each one
+ * reaches git as an argument.
+ *
+ * The override exists because the branch a team works off is not always the
+ * one GitHub calls the default. Pure, for the test.
+ */
+export function baseCandidates(
+  override: string | null | undefined,
+  repoDefault: string | null | undefined,
+): string[] {
+  const names = [override, repoDefault, "master", "main"].filter(
+    (n): n is string => !!n && isValidBranch(n),
+  );
+  return [...new Set(names)];
+}
+
+/** The first candidate that resolves, preferring the freshly fetched
+ * remote-tracking ref (`origin/<name>`) over a local branch that may be stale.
+ * Null when none resolves. Pure (the lookup is passed in), for the test. */
+export function pickBaseRef(
+  names: string[],
+  hasRef: (ref: string) => boolean,
+): string | null {
+  for (const name of names) {
+    for (const ref of [`origin/${name}`, name]) {
+      if (hasRef(ref)) return ref;
+    }
+  }
+  return null;
+}
+
+/** The branch `origin/HEAD` points at, set when the repo was cloned. Local
+ * and cheap, so it's asked first. */
+function remoteHeadBranch(repo: string): string | null {
   try {
-    execFileSync("git", ["-C", repo, "fetch", "origin", "master", "--quiet"], {
+    const ref = git(repo, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+    return ref.replace(/^origin\//, "") || null;
+  } catch {
+    return null; // never set, or no origin
+  }
+}
+
+/** GitHub's default branch for the repo, for a clone whose `origin/HEAD` was
+ * never set. A network call, so it's only made when the local answer is
+ * missing. */
+function githubDefaultBranch(repo: string): string | null {
+  try {
+    const out = execFileSync(
+      "gh",
+      ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+      { cwd: repo, encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "pipe"] },
+    ).trim();
+    return out || null;
+  } catch {
+    return null; // not a GitHub repo, gh not authed, offline
+  }
+}
+
+function hasRef(repo: string, ref: string): boolean {
+  try {
+    git(repo, ["rev-parse", "--verify", "--quiet", ref]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The ref a new branch starts from: the repo's base branch, freshly fetched.
+ * Resolved from the override, then `origin/HEAD`, then GitHub's default
+ * branch, then `master`/`main` (see `baseCandidates`). A repo based on
+ * `development` used to get a branch off a stale `master`, or off HEAD when
+ * there was no master, because only master/main were ever tried.
+ */
+export function baseRef(repo: string, override?: string | null): string {
+  const repoDefault = override ? null : (remoteHeadBranch(repo) ?? githubDefaultBranch(repo));
+  const names = baseCandidates(override, repoDefault);
+  try {
+    execFileSync("git", ["-C", repo, "fetch", "origin", names[0], "--quiet"], {
       timeout: 30000,
       stdio: "ignore",
     });
   } catch {
-    // offline / no origin — fall back to whatever's local
+    // offline / no origin / no such branch there: fall back to whatever's local
   }
-  for (const ref of ["origin/master", "master", "origin/main", "main"]) {
-    try {
-      git(repo, ["rev-parse", "--verify", "--quiet", ref]);
-      return ref;
-    } catch {
-      // try next
-    }
+  const ref = pickBaseRef(names, (r) => hasRef(repo, r));
+  if (override && ref !== `origin/${override}` && ref !== override) {
+    logWarn("git.baseRef", `base branch "${override}" not found in ${repo}; using ${ref ?? "HEAD"}`);
   }
-  // No master/main resolved — branching off HEAD may not be what the user wants
-  // (e.g. a detached/unexpected checkout), so make the fallback visible.
-  logWarn("git.baseRef", `no master/main in ${repo}; falling back to HEAD`);
+  if (ref) return ref;
+  // Nothing resolved: branching off HEAD may not be what the user wants (e.g. a
+  // detached or unexpected checkout), so make the fallback visible.
+  logWarn("git.baseRef", `no base branch found in ${repo}; falling back to HEAD`);
   return "HEAD";
 }
 
@@ -119,12 +195,14 @@ export type WorkEnv = "local" | "worktree";
  * - "local": checkout the branch in the repo itself.
  * - "worktree": add a git worktree under <repo>/.claude-worktrees/<branch> so
  *   several tickets can run in parallel without touching the main checkout.
- * The branch is created (from a fresh base) if it doesn't exist yet.
+ * The branch is created (from a fresh base, see baseRef) if it doesn't exist
+ * yet. `baseOverride` is the configured base branch, if any.
  */
 export function prepareWork(
   repo: string,
   branch: string,
   env: WorkEnv,
+  baseOverride?: string | null,
 ): { cwd: string } {
   assertValidBranch(branch);
   // If the branch already lives in a worktree (e.g. Claude Code's own), reuse it
@@ -141,7 +219,7 @@ export function prepareWork(
     if (exists) {
       git(repo, ["worktree", "add", dir, branch]);
     } else {
-      git(repo, ["worktree", "add", dir, "-b", branch, baseRef(repo)]);
+      git(repo, ["worktree", "add", dir, "-b", branch, baseRef(repo, baseOverride)]);
     }
     return { cwd: dir };
   }
@@ -150,7 +228,7 @@ export function prepareWork(
   if (exists) {
     git(repo, ["checkout", branch]);
   } else {
-    git(repo, ["checkout", "-b", branch, baseRef(repo)]);
+    git(repo, ["checkout", "-b", branch, baseRef(repo, baseOverride)]);
   }
   return { cwd: repo };
 }

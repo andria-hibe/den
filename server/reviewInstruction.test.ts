@@ -35,6 +35,10 @@ describe("reviewInstruction", () => {
     expect(INSTRUCTION).toContain("andria/changes-to-feature/thing");
   });
 
+  it("branches the scratch branch off the PR's code, not master", () => {
+    expect(INSTRUCTION).toContain("with no base argument while the PR's branch is checked out");
+  });
+
   it("demands ASCII output", () => {
     expect(INSTRUCTION).toContain("WRITE THE WHOLE REVIEW IN PLAIN ASCII");
   });

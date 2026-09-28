@@ -97,7 +97,13 @@ WebSocket; everything else is REST.
   Assigned issues + `branchName` + `description`. Key in the settings table or
   `LINEAR_API_KEY`. Scoped to whatever workspace the key belongs to (runn, for
   the maintainer).
-- `server/git.ts` — `prepareWork` (ticket branch: worktree or local, off a fresh
+- `server/git.ts` — `prepareWork` (ticket branch: worktree or local, off the
+  repo's freshly fetched **base branch** — `baseRef` resolves it from the
+  `base_branch` override (`$DEN_BASE_BRANCH` → the `base_branch` setting, via
+  `baseBranchOverride()` in `fs.ts`), then `origin/HEAD`, then GitHub's default
+  branch, then `master`/`main`, preferring `origin/<name>` over a stale local
+  branch; pure `baseCandidates`/`pickBaseRef` are unit-tested. runn is based on
+  **`development`**, so this matters: den used to branch runn tickets off
   `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local),
   `worktreeForBranch` (reuse an existing worktree instead of erroring), and
   `listWorktrees` / pure `parseWorktrees` (every checkout of the work repo, its
@@ -607,8 +613,10 @@ Worth knowing before you touch the session code:
   The fix is the pattern to keep: every server instruction comes from one
   builder shared by create + restart, every client prompt lives in
   `web/src/prompts.ts`, and a test asserts each is ASCII.
-- **Issue 22**: `baseRef` (`server/git.ts`) branches off `master`/`main` only.
-  A repo based on `development` gets a branch off a stale master, or off HEAD
-  with a warning nobody reads.
+- **Issue 22** (base branch): new branches come off the repo's resolved base
+  branch (see `baseRef` under Architecture), and a review pane's scratch branch
+  is told to start from the PR's checked-out code. Still open: stacking a
+  ticket on the branch of the ticket before it, which needs ticket order den
+  doesn't have yet.
 
 Full narrative history is in the git log; user-facing run notes in `README.md`.

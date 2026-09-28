@@ -20,7 +20,7 @@ import {
   hasKey,
   type LinearData,
 } from "./linear.ts";
-import { roots, listDirs, makeDir, isDir } from "./fs.ts";
+import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
 import { prepareWork, checkoutPr, listWorktrees, type WorkEnv } from "./git.ts";
 import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
@@ -222,7 +222,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // "Work on it": set up the branch/worktree first, then open there.
     if (body.branch && body.env) {
       try {
-        const { cwd } = prepareWork(roots().workRepo, body.branch, body.env);
+        const { cwd } = prepareWork(
+          roots().workRepo, body.branch, body.env, baseBranchOverride(),
+        );
         body.cwd = cwd;
       } catch (err) {
         logWarn("prepareWork", err);
