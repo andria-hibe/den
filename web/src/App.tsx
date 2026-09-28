@@ -16,7 +16,7 @@ import { AppRunButton, SetupButton } from "./AppRunButton.tsx";
 import { SessionRail } from "./SessionRail.tsx";
 import { TicketLookView } from "./TicketLookView.tsx";
 import { WorkLinkChips } from "./WorkLinkChips.tsx";
-import { deriveFoxPose, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
+import { deriveFoxPose, foxReasons, isUrgentUnstarted, FOX_POSES, STATUS_TITLE } from "./foxPose.ts";
 import { useRovingFocus } from "./useRovingFocus.ts";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts.ts";
 import { useNotifications } from "./useNotifications.ts";
@@ -86,14 +86,19 @@ export function App() {
   const prs = work.flatPrs;
   const issues = work.issues;
   // Topbar fox pose, derived from every attention source: alert if a PR needs
-  // me OR I have unread Linear notifications; else happy if any PRs are open;
-  // else sit. A PR I'm only *reviewing* failing its CI is the author's problem,
+  // me, an urgent ticket isn't started, or I have unread Linear notifications;
+  // else happy if any PRs are open; else sit. A PR I'm only *reviewing* failing its CI is the author's problem,
   // so it doesn't count — the server clears its needsAttention.
-  const statusPose = deriveFoxPose({
+  const foxInput = {
     prNeedsMe: prs.some((p) => p.needsAttention),
     prCount: prs.length,
     linearNotifs: work.linearNotifs,
-  });
+    urgentTickets: work.issues.filter(isUrgentUnstarted).length,
+  };
+  const statusPose = deriveFoxPose(foxInput);
+  // The tooltip says *which* things need you, not just that something does.
+  const reasons = foxReasons(foxInput);
+  const statusTitle = reasons.length ? `something needs you: ${reasons.join(", ")}` : STATUS_TITLE[statusPose];
   // Click the topbar fox to open a popover showing the whole cast.
   const [foxPopOpen, setFoxPopOpen] = useState(false);
   const foxPopRef = useRef<HTMLSpanElement>(null);
@@ -506,8 +511,8 @@ export function App() {
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
             className="status-fox"
-            title={STATUS_TITLE[statusPose]}
-            aria-label={`Status: ${STATUS_TITLE[statusPose]} — click to see all foxes`}
+            title={statusTitle}
+            aria-label={`Status: ${statusTitle} — click to see all foxes`}
             aria-expanded={foxPopOpen}
             onClick={() => setFoxPopOpen((o) => !o)}
           >

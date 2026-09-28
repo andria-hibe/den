@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isUrgentUnstarted } from "./foxPose.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import { api } from "./api.ts";
 import { Fox } from "./Fox.tsx";
@@ -32,15 +33,23 @@ function IssueCard({
   onOpen: (issue: LinearIssue) => void;
   accent?: string;
 }) {
+  const urgent = isUrgentUnstarted(issue);
   return (
     <div
-      className={`pr-card ticket-card${accent ? " session-linked" : ""}`}
+      className={`pr-card ticket-card${urgent ? " needs-attention" : ""}${accent ? " session-linked" : ""}`}
       style={accentStyle(accent)}
       onClick={() => onOpen(issue)}
       role="button"
       tabIndex={0}
     >
       <div className="pr-top">
+        {urgent && (
+          // What puts the fox on alert, flagged where you'd act on it. Not
+          // dismissable: it clears when the ticket is started or reprioritised.
+          <span className="pr-attn" title="urgent and not started yet">
+            !
+          </span>
+        )}
         <span
           className="state-dot"
           style={{ background: issue.state.color }}

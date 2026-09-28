@@ -437,10 +437,15 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   locks it; the **topbar tints to the active session's colour + shows its title**.
 - **Reactive pixel-art fox**: topbar status fox — `alert` when something needs
   *your* action: a PR needing you (authored PR failing CI / changes requested, or
-  a review you owe) **or unread Linear notifications**. A PR you're *reviewing*
+  a review you owe), **unread Linear notifications**, or an assigned ticket
+  that's **urgent and not started** (issue 14: `isUrgentUnstarted` —
+  priority 1 in triage/backlog/unstarted; urgent work already under way, and
+  lower priorities, don't alert; that ticket's card gets the same pink `!`
+  as a PR card). The fox's tooltip lists *which* of these fired
+  (`foxReasons`). A PR you're *reviewing*
   failing its CI does NOT alert, and a review-requested PR that's **already
   approved** no longer alerts. The pose is derived (in `App.tsx`) from three
-  inputs — `prNeedsMe` + `prCount` + `linearNotifs` — not set inline. Else `happy`
+  inputs — `prNeedsMe` + `prCount` + `linearNotifs` + `urgentTickets` — not set inline. Else `happy`
   (open PRs) / `sit` (none). Sleeping fox in the empty state; walking fox in
   loading rows (`.loading-row`) — PR/Linear fetches, and the PR review while
   Claude is writing it. That last one is gated on a review having actually been
