@@ -10,6 +10,8 @@ import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { PostReviewDialog, ThreadActions } from "./GitHubPost.tsx";
 import { buildReviewPost } from "./reviewPost.ts";
+import { churnFromGuide, isChurnPath } from "./churn.ts";
+import { parseGuide } from "./reviewGuide.ts";
 import { autoReviewPrompt, guidePrompt, notePrompt, reviewPrompt } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
@@ -192,6 +194,9 @@ export function PrReviewView({
   // comments can sit beside that file's diff; the rest is the general review.
   const files = useMemo(() => diffFiles(diff), [diff]);
   const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
+  // Churn starts collapsed: by path, or because the guide filed it as churn.
+  const guideChurn = useMemo(() => churnFromGuide(parseGuide(guide, files).sections), [guide, files]);
+  const startCollapsed = (f: string) => isChurnPath(f) || guideChurn.has(f);
   // Why a file shows no comments: nobody asked yet, the review is being written,
   // or it landed with nothing to say. Both tabs render the notes column, so they
   // read the same state.
@@ -358,6 +363,7 @@ export function PrReviewView({
               noteState={noteState}
               sessionId={sessionId}
               prNumber={number}
+              startCollapsed={startCollapsed}
             />
           </div>
         ) : (

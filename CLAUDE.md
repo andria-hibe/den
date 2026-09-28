@@ -199,6 +199,19 @@ WebSocket; everything else is REST.
     number gutter (`.diff-gutter`, old then new) so a review saying "line 448" can
     be found in the diff; the gutter is `position: sticky; left: 0` and repaints
     the row's tint, so numbers survive scrolling a wide line sideways.
+    **Syntax highlighting** (issue 18): `highlight.ts` is highlight.js *core*
+    plus only the languages den's diffs hold (TS/JS, Ruby, CSS/SCSS, ERB,
+    YAML, JSON, Markdown, shell, SQL, Python; +92 KB to the bundle). A file's
+    hunk lines are highlighted as **one text** and `splitHighlighted` splits the
+    HTML back into lines, closing and reopening spans at each break — so the
+    one-row-per-line structure the gutter, tints, and review column key off
+    survives, and a block comment still colours across lines. Minified or huge
+    files (`MAX_LINES` / `MAX_LINE_CHARS`) stay plain. **Files collapse** (the
+    file label in the notes column, or collapse/expand all); highlighting runs
+    only for expanded files. Churn starts collapsed — `churn.ts`: lockfiles,
+    snapshots, generated code by path, plus anything the guide files under a
+    section titled churn/lockfile/generated/formatting — unless the review
+    commented on it.
   - `reviewNotes.ts` — pure `parseReview(md, files)` → `{ overall, byFile }`:
     splits the review markdown a review session writes to its notepad into the
     general review plus per-file sections, keyed by `## <path>` headings. Matching

@@ -1,7 +1,9 @@
 // Renders a unified diff (from `gh pr diff`) grouped per file, with a left
 // column holding the review's comments for that file, aligned to (and sticky
 // alongside) the file's block — so the review reads next to the code it's about.
+import { useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.ts";
+import { highlightLines, languageFor } from "./highlight.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { fileReviewPrompt } from "./prompts.ts";
 
@@ -70,10 +72,14 @@ function DiffLine({
   line,
   nos,
   className,
+  html,
 }: {
   line: string;
   nos: LineNos;
   className: string;
+  /** Highlighted HTML for the line's code (without its +/-/space marker),
+   * escaped by highlight.js. Absent: render the line as plain text. */
+  html?: string;
 }) {
   return (
     <div className={className}>
@@ -81,7 +87,128 @@ function DiffLine({
         <span className="diff-num">{nos.old ?? ""}</span>
         <span className="diff-num diff-num-new">{nos.new ?? ""}</span>
       </span>
-      <span className="diff-text">{line || " "}</span>
+      {html === undefined ? (
+        <span className="diff-text">{line || " "}</span>
+      ) : (
+        <span className="diff-text">
+          <span className="diff-marker">{line[0]}</span>
+          <span dangerouslySetInnerHTML={{ __html: html || " " }} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Highlighted HTML for the code lines of one file's diff, by line index;
+ * lines outside a hunk (headers) have none. Null: highlight nothing. */
+function useHighlighted(file: string | null, lines: string[], nums: LineNos[], on: boolean) {
+  return useMemo(() => {
+    if (!on || !file) return null;
+    const idx: number[] = [];
+    const code: string[] = [];
+    lines.forEach((l, i) => {
+      if (nums[i].old !== null || nums[i].new !== null) {
+        idx.push(i);
+        code.push(l.slice(1));
+      }
+    });
+    const html = highlightLines(code, languageFor(file));
+    if (!html) return null;
+    const byLine = new Map<number, string>();
+    idx.forEach((lineIdx, k) => byLine.set(lineIdx, html[k]));
+    return byLine;
+  }, [file, lines, nums, on]);
+}
+
+/** Added and removed line counts for a file's collapsed header. */
+function changeCounts(lines: string[]) {
+  let add = 0;
+  let del = 0;
+  for (const l of lines) {
+    if (l.startsWith("+") && !l.startsWith("+++")) add++;
+    else if (l.startsWith("-") && !l.startsWith("---")) del++;
+  }
+  return { add, del };
+}
+
+/** One file of the diff: its review comments on the left, its lines on the
+ * right, collapsible to a one-line header. */
+function DiffFileBlock({
+  block,
+  note,
+  noteState,
+  sessionId,
+  prNumber,
+  collapsed,
+  onToggle,
+}: {
+  block: FileBlock;
+  note?: string;
+  noteState: "idle" | "waiting" | "ready";
+  sessionId?: string;
+  prNumber?: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const b = block;
+  const nums = useMemo(() => lineNumbers(b.lines), [b.lines]);
+  // Highlighting runs only for an expanded file, so a 40-file PR with most
+  // files collapsed pays for what's on screen.
+  const html = useHighlighted(b.file, b.lines, nums, !collapsed);
+  const { add, del } = useMemo(() => changeCounts(b.lines), [b.lines]);
+  return (
+    <div className={`diff-file-block${collapsed ? " collapsed" : ""}`}>
+      <div className="diff-notes-col">
+        {b.file && (
+          <button
+            className="diff-note-file"
+            title={collapsed ? `show ${b.file}` : `collapse ${b.file}`}
+            onClick={onToggle}
+          >
+            <span className="diff-fold">{collapsed ? "▸" : "▾"}</span>
+            {b.file.split("/").slice(-2).join("/")}
+          </button>
+        )}
+        {note ? (
+          <div
+            className="md diff-note-md"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note) }}
+          />
+        ) : noteState === "waiting" ? (
+          // One walking fox per file would be a stampede of canvases; the
+          // fox lives in the review header and each file just says it's next.
+          <div className="diff-note-empty">reviewing…</div>
+        ) : noteState === "ready" ? (
+          <div className="diff-note-empty">no comments</div>
+        ) : null}
+        {sessionId && b.file && (
+          <ToClaude
+            sessionId={sessionId}
+            text={fileReviewPrompt(b.file, prNumber, b.lines)}
+            label="→ review"
+            title="Ask Claude for a targeted review of this file"
+            className="diff-note-review"
+          />
+        )}
+      </div>
+      <div className="diff-lines-col">
+        {collapsed ? (
+          <button className="diff-collapsed" onClick={onToggle} title={`show ${b.file ?? "diff"}`}>
+            <span className="diff-add-count">+{add}</span>{" "}
+            <span className="diff-del-count">−{del}</span> · show
+          </button>
+        ) : (
+          b.lines.map((line, i) => (
+            <DiffLine
+              key={i}
+              line={line}
+              nos={nums[i]}
+              className={`diff-line ${classify(line)}`}
+              html={html?.get(i)}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -152,6 +279,7 @@ export function DiffView({
   noteState = "ready",
   sessionId,
   prNumber,
+  startCollapsed,
 }: {
   diff: string;
   /** The review's comments per file (markdown), shown in the left column. */
@@ -163,56 +291,49 @@ export function DiffView({
   // that file's diff into the session for a targeted review.
   sessionId?: string;
   prNumber?: number;
+  /** Files to start collapsed (churn: lockfiles, generated code). A file with
+   * review comments starts open anyway, so a finding is never folded away. */
+  startCollapsed?: (file: string) => boolean;
 }) {
+  const blocks = useMemo(() => parseFiles(diff), [diff]);
+  // Files the reader folded or unfolded, overriding the default.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
   if (!diff.trim()) return <div className="placeholder">No diff.</div>;
-  const blocks = parseFiles(diff);
+  const isCollapsed = (file: string | null, hasNote: boolean) => {
+    if (!file) return false;
+    if (file in toggled) return toggled[file];
+    return !hasNote && !!startCollapsed?.(file);
+  };
+  const files = blocks.map((b) => b.file).filter((f): f is string => !!f);
+  const setAll = (collapsed: boolean) =>
+    setToggled(Object.fromEntries(files.map((f) => [f, collapsed])));
 
   return (
     <div className="diff-view">
+      {files.length > 1 && (
+        <div className="diff-toolbar">
+          <button className="btn-ghost" onClick={() => setAll(true)}>
+            collapse all
+          </button>
+          <button className="btn-ghost" onClick={() => setAll(false)}>
+            expand all
+          </button>
+        </div>
+      )}
       {blocks.map((b, bi) => {
         const note = b.file ? notes?.[b.file] : undefined;
-        const nums = lineNumbers(b.lines);
+        const collapsed = isCollapsed(b.file, !!note);
         return (
-        <div key={bi} className="diff-file-block">
-          <div className="diff-notes-col">
-            {b.file && (
-              <div className="diff-note-file" title={b.file}>
-                {b.file.split("/").slice(-2).join("/")}
-              </div>
-            )}
-            {note ? (
-              <div
-                className="md diff-note-md"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(note) }}
-              />
-            ) : noteState === "waiting" ? (
-              // One walking fox per file would be a stampede of canvases; the
-              // fox lives in the review header and each file just says it's next.
-              <div className="diff-note-empty">reviewing…</div>
-            ) : noteState === "ready" ? (
-              <div className="diff-note-empty">no comments</div>
-            ) : null}
-            {sessionId && b.file && (
-              <ToClaude
-                sessionId={sessionId}
-                text={fileReviewPrompt(b.file, prNumber, b.lines)}
-                label="→ review"
-                title="Ask Claude for a targeted review of this file"
-                className="diff-note-review"
-              />
-            )}
-          </div>
-          <div className="diff-lines-col">
-            {b.lines.map((line, i) => (
-              <DiffLine
-                key={i}
-                line={line}
-                nos={nums[i]}
-                className={`diff-line ${classify(line)}`}
-              />
-            ))}
-          </div>
-        </div>
+          <DiffFileBlock
+            key={b.file ?? bi}
+            block={b}
+            note={note}
+            noteState={noteState}
+            sessionId={sessionId}
+            prNumber={prNumber}
+            collapsed={collapsed}
+            onToggle={() => b.file && setToggled((t) => ({ ...t, [b.file!]: !collapsed }))}
+          />
         );
       })}
     </div>

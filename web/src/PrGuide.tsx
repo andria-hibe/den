@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { DiffView, diffForFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
 import { Md } from "./Md.tsx";
+import { churnFromGuide, isChurnPath } from "./churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
 import { ToClaude } from "./ToClaude.tsx";
 
@@ -35,6 +36,9 @@ function Section({
   prNumber: number;
 }) {
   const sub = useMemo(() => diffForFiles(diff, files), [diff, files]);
+  // A section the guide calls churn starts folded, and so does any lockfile or
+  // generated file wherever it's filed.
+  const churnSection = churnFromGuide([{ title, files }]).size > 0;
   return (
     <section className="guide-section">
       <div className="guide-section-head">
@@ -52,6 +56,7 @@ function Section({
           noteState={noteState}
           sessionId={sessionId}
           prNumber={prNumber}
+          startCollapsed={(f) => churnSection || isChurnPath(f)}
         />
       )}
     </section>
@@ -152,6 +157,7 @@ export function PrGuideTab({
             noteState={noteState}
             sessionId={sessionId}
             prNumber={prNumber}
+            startCollapsed={isChurnPath}
           />
         </details>
       )}
