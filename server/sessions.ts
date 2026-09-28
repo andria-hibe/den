@@ -227,7 +227,8 @@ export function houseRules(): string {
  * their keep. Every test is time on every run and something to maintain, so a
  * session adds tests for important, core behaviour and nothing else: not
  * low-value checks, not duplicates of coverage the suite already has, and not
- * tests pinning its own fixes or its review follow-ups. KISS. Appended to
+ * tests pinning its own fixes or its review follow-ups (unless that change has
+ * become core to how the feature works, judged conservatively). KISS. Appended to
  * workspace and my-PR panes (the ones that change code); a review pane
  * reviews, and a look pane only reads. */
 export function testingRules(): string {
@@ -236,7 +237,9 @@ export function testingRules(): string {
     `regression would really hurt. Don't write low-value tests, and don't add ` +
     `one that another test in the suite already covers; look at the existing ` +
     `tests first. Don't add tests for fixes to your own mistakes or for ` +
-    `changes made in response to review comments. Every test costs time on ` +
+    `changes made in response to review comments, unless the change has become ` +
+    `a core part of how the feature works; be conservative about that. Every ` +
+    `test costs time on ` +
     `every run and has to be maintained, so keep it simple: a few meaningful ` +
     `tests beat many small ones.`
   );

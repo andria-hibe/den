@@ -733,7 +733,9 @@ and cover the pure, rule-heavy logic — the loopback guard, PR attention rules,
 branch validation, path sandbox, title tidy, fox pose. Keep new pure logic
 testable (export it), but **add a test only for important, core behaviour**
 (andria's rule, 2026-09-29): no low-value tests, nothing another test already
-covers, and no tests pinning a fix to your own mistake or a review follow-up.
+covers, and no tests pinning a fix to your own mistake or a review follow-up
+unless that change has become a core part of the functionality (be
+conservative about calling it core).
 Tests cost time on every run; KISS. Den tells the Claude sessions it spawns
 the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
 panes). Beyond that, verification is scripted + visual:
