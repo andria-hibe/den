@@ -72,13 +72,6 @@ commit, and close #4, #6, and #8 in the message.
 4. The rest in issue-number order: #13, #19, #17, #15, #23, #11, #14, #18,
    #16, #10, #21, #20, #12.
 
-## Open question for andria
-
-They asked for an issue about reordering tabs in the sessions panel. No issue
-exists. The rail already reorders by drag or Alt+Up/Down (`280623f`, though the
-installed app may predate it), but the shell tab strip in a workspace does
-not. Before filing anything, ask which one they meant.
-
 ## Ground rules from these sessions
 
 - Do not run `npm run pack`, reinstall, or reopen the app. Andria controls when
