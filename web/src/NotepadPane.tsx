@@ -1,8 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
 
+/** Is a scroll box at (or within `slack` px of) its bottom? The notepad follows
+ * new entries only while this holds, so it never yanks someone who has
+ * scrolled up to read an older entry. The slack absorbs sub-pixel rounding and
+ * a trailing margin. Pure, for the test. */
+export function isNearBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  slack = 24,
+): boolean {
+  return scrollHeight - (scrollTop + clientHeight) <= slack;
+}
+
 // Progress log for a workspace. Renders markdown in view mode; edit + save.
+// A session appends below the fold, so the rendered view follows the newest
+// entry: it scrolls to the bottom when the content changes, unless you have
+// scrolled up, and picks following back up once you scroll to the bottom again.
 export function NotepadPane({ groupId }: { groupId: string }) {
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(false);
@@ -10,6 +26,9 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   const [saving, setSaving] = useState(false);
   const busyRef = useRef(false);
   busyRef.current = editing || dirty;
+  const renderRef = useRef<HTMLDivElement>(null);
+  // Following the bottom until the reader scrolls away from it.
+  const followRef = useRef(true);
 
   const refresh = useCallback(async () => {
     if (busyRef.current) return; // don't clobber an in-progress edit
@@ -24,10 +43,22 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   useEffect(() => {
     setEditing(false);
     setDirty(false);
+    followRef.current = true; // a different workspace opens at its newest entry
     refresh();
     const t = setInterval(refresh, 3000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  // Before paint, so a new entry never flashes in at the old scroll position.
+  useLayoutEffect(() => {
+    const el = renderRef.current;
+    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+  }, [content, editing]);
+
+  const onScroll = () => {
+    const el = renderRef.current;
+    if (el) followRef.current = isNearBottom(el.scrollTop, el.clientHeight, el.scrollHeight);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -76,6 +107,8 @@ export function NotepadPane({ groupId }: { groupId: string }) {
         />
       ) : content.trim() ? (
         <div
+          ref={renderRef}
+          onScroll={onScroll}
           className="notepad-render md"
           onDoubleClick={() => setEditing(true)}
           title="double-click to edit"
