@@ -216,6 +216,13 @@ function githubDefaultBranch(repo: string): string | null {
   }
 }
 
+/** The repo's base branch name for a label ("off development"), without the
+ * network: the override, else `origin/HEAD`. Null when neither is known, and
+ * the UI says "the repo's base branch" instead. */
+export function repoBaseName(repo: string, override?: string | null): string | null {
+  return override || remoteHeadBranch(repo);
+}
+
 function hasRef(repo: string, ref: string): boolean {
   try {
     git(repo, ["rev-parse", "--verify", "--quiet", ref]);
@@ -262,13 +269,18 @@ export type WorkEnv = "local" | "worktree";
  * - "worktree": add a git worktree under <repo>/.claude-worktrees/<branch> so
  *   several tickets can run in parallel without touching the main checkout.
  * The branch is created (from a fresh base, see baseRef) if it doesn't exist
- * yet. `baseOverride` is the configured base branch, if any.
+ * yet. `baseOverride` is the configured base branch, if any. `stackOn` starts
+ * the new branch from another local branch instead, for a ticket that builds on
+ * the one before it (#26); it is used as the local ref, not origin's, because
+ * the ticket it stacks on usually has commits it hasn't pushed. Neither applies
+ * to a branch that already exists, which is reused as it is.
  */
 export function prepareWork(
   repo: string,
   branch: string,
   env: WorkEnv,
   baseOverride?: string | null,
+  stackOn?: string | null,
 ): { cwd: string } {
   assertValidBranch(branch);
   // If the branch already lives in a worktree (e.g. Claude Code's own), reuse it
@@ -277,6 +289,12 @@ export function prepareWork(
   if (existingWt) return { cwd: existingWt };
 
   const exists = branchExists(repo, branch);
+  const base = () => {
+    if (!stackOn) return baseRef(repo, baseOverride);
+    assertValidBranch(stackOn);
+    if (!branchExists(repo, stackOn)) throw new Error("no_such_base");
+    return stackOn;
+  };
 
   if (env === "worktree") {
     const leaf = branch.replace(/[/\\]/g, "-");
@@ -285,7 +303,7 @@ export function prepareWork(
     if (exists) {
       git(repo, ["worktree", "add", dir, branch]);
     } else {
-      git(repo, ["worktree", "add", dir, "-b", branch, baseRef(repo, baseOverride)]);
+      git(repo, ["worktree", "add", dir, "-b", branch, base()]);
     }
     return { cwd: dir };
   }
@@ -294,7 +312,7 @@ export function prepareWork(
   if (exists) {
     git(repo, ["checkout", branch]);
   } else {
-    git(repo, ["checkout", "-b", branch, baseRef(repo, baseOverride)]);
+    git(repo, ["checkout", "-b", branch, base()]);
   }
   return { cwd: repo };
 }

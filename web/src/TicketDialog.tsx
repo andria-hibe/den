@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { LinearIssue } from "../../server/linear.ts";
+import { BasePicker, useWorkBases } from "./BasePicker.tsx";
 
 // Shown when you click a Linear ticket: look at it, or work on it (in a new
 // worktree or the default local checkout).
@@ -13,10 +14,16 @@ export function TicketDialog({
   issue: LinearIssue;
   startAtWork?: boolean;
   onLook: (issue: LinearIssue) => void;
-  onWork: (issue: LinearIssue, env: "local" | "worktree") => void;
+  /** `base`: start the new branch from this branch instead of the repo base. */
+  onWork: (issue: LinearIssue, env: "local" | "worktree", base: string | null) => void;
   onClose: () => void;
 }) {
   const [work, setWork] = useState(startAtWork);
+  const [base, setBase] = useState<string | null>(null);
+  const bases = useWorkBases();
+  // A branch that already has a worktree is reused as it is, so a base means
+  // nothing there; don't offer one.
+  const hasWorkspace = !!bases?.worktrees.some((w) => w.branch === issue.branchName);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -65,11 +72,21 @@ export function TicketDialog({
           <>
             <div className="ticket-branch">
               branch: <code>{issue.branchName ?? "(no branch name)"}</code>
+              {hasWorkspace && " (already has a workspace, reused as it is)"}
             </div>
+            {bases && !hasWorkspace && (
+              <BasePicker
+                base={bases.base}
+                worktrees={bases.worktrees}
+                creating={issue.branchName}
+                value={base}
+                onChange={setBase}
+              />
+            )}
             <div className="choose-grid">
               <button
                 className="choose-card work"
-                onClick={() => onWork(issue, "worktree")}
+                onClick={() => onWork(issue, "worktree", base)}
                 disabled={!issue.branchName}
               >
                 <div className="choose-emoji">🌿</div>
@@ -82,7 +99,7 @@ export function TicketDialog({
               </button>
               <button
                 className="choose-card other"
-                onClick={() => onWork(issue, "local")}
+                onClick={() => onWork(issue, "local", base)}
                 disabled={!issue.branchName}
               >
                 <div className="choose-emoji">💻</div>

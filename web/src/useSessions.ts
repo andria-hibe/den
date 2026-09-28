@@ -11,6 +11,8 @@ export interface AddSessionOpts {
   look?: boolean;
   branch?: string;
   env?: "local" | "worktree";
+  /** Start a new work branch from this branch instead of the repo base. */
+  base?: string;
   name?: string;
   notepadSeed?: string;
   view?: "review" | "mypr";

@@ -637,10 +637,15 @@ Worth knowing before you touch the session code:
   The fix is the pattern to keep: every server instruction comes from one
   builder shared by create + restart, every client prompt lives in
   `web/src/prompts.ts`, and a test asserts each is ASCII.
-- **Issue 22** (base branch): new branches come off the repo's resolved base
-  branch (see `baseRef` under Architecture), and a review pane's scratch branch
-  is told to start from the PR's checked-out code. Stacking a ticket on the
-  branch of the ticket before it is issue 26: it needs ticket order den
-  doesn't have yet.
+- **Issues 22 and 26** (base branch): new branches come off the repo's
+  resolved base branch (see `baseRef` under Architecture), a review pane's
+  scratch branch is told to start from the PR's checked-out code, and a
+  ticket can be **stacked** on another: the ticket dialog and New Session's
+  "new workspace" step have a "start from" picker (`BasePicker`, candidates
+  from pure `stackCandidates` in `stackBase.ts`) listing your other open
+  worktree branches. The create route's `base` goes to `prepareWork`'s
+  `stackOn`, which uses the **local** branch, not `origin/`, because the
+  ticket you stack on usually has unpushed commits. Linear parent/sub-issue
+  order isn't used yet.
 
 Full narrative history is in the git log; user-facing run notes in `README.md`.

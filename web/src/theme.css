@@ -2169,6 +2169,27 @@ body {
   min-width: 0;
 }
 
+/* "start from" base-branch picker in the ticket / new-workspace dialogs. */
+.base-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.base-picker select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-family: ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 9px;
+  padding: 5px 8px;
+}
+
 /* A workspace row with den's remove button beside it, and the confirm line
    that opens under it. */
 .wt-row {

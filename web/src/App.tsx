@@ -250,7 +250,7 @@ export function App() {
     });
   };
 
-  const workOnTicket = (issue: LinearIssue, env: "local" | "worktree") => {
+  const workOnTicket = (issue: LinearIssue, env: "local" | "worktree", base: string | null) => {
     setTicketModal(null);
     const existing = sessionForTicket(issue, { work: true });
     if (existing) {
@@ -261,6 +261,7 @@ export function App() {
       ticket: issue.identifier,
       branch: issue.branchName,
       env,
+      base: base ?? undefined,
       name: issue.title,
       notepadSeed: ticketNotesSeed(issue),
       initialPrompt: ticketPrompt(issue),
@@ -761,11 +762,11 @@ export function App() {
             setShowNew(false);
             addSession({ cwd });
           }}
-          onCreateWorktree={(branch) => {
+          onCreateWorktree={(branch, base) => {
             setShowNew(false);
             // The server creates (or reuses) the worktree for the branch and
             // opens the session there — same path a ticket's "Work on it" takes.
-            addSession({ branch, env: "worktree" });
+            addSession({ branch, env: "worktree", base: base ?? undefined });
           }}
           onResume={(cwd, resumeId) => {
             setShowNew(false);

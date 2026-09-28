@@ -24,6 +24,7 @@ import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
+  repoBaseName, isValidBranch,
   type WorkEnv,
 } from "./git.ts";
 import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
@@ -165,7 +166,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         }
         return { ...w, den: true, changes, inUse: sessionsIn(w.path).length > 0 };
       });
-      return { repo, worktrees };
+      return { repo, base: repoBaseName(repo, baseBranchOverride()), worktrees };
     } catch (err) {
       // Not a git repo (workDir() falls back to ~/Documents/work) — the dialog
       // drops to plain folder browsing.
@@ -265,6 +266,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       prRepo?: string;
       initialPrompt?: string;
       reviewDiff?: string;
+      /** Start a new work branch from this local branch instead of the repo base. */
+      base?: string;
     };
     // Reuse an existing running session for the same ticket (same look/work
     // mode) so we never create duplicate sessions or branches for one issue.
@@ -296,11 +299,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // "Work on it": set up the branch/worktree first, then open there.
     if (body.branch && body.env) {
       try {
+        if (body.base && !isValidBranch(body.base)) {
+          reply.code(400);
+          return { error: "bad_base" };
+        }
         const { cwd } = prepareWork(
-          roots().workRepo, body.branch, body.env, baseBranchOverride(),
+          roots().workRepo, body.branch, body.env, baseBranchOverride(), body.base,
         );
         body.cwd = cwd;
       } catch (err) {
+        if ((err as Error).message === "no_such_base") {
+          reply.code(400);
+          return { error: "no_such_base", message: "That base branch doesn't exist any more." };
+        }
         logWarn("prepareWork", err);
         reply.code(500);
         return { error: "git_failed", message: "Could not prepare the branch." };

@@ -5,6 +5,7 @@ import { relTimeAgo } from "./format.ts";
 import { isValidBranch } from "../../shared/branch.ts";
 import type { WorktreeInfo } from "../../server/git.ts";
 import { cleanRemovable, describeLoss, losesWork } from "./worktreeCleanup.ts";
+import { BasePicker } from "./BasePicker.tsx";
 
 interface Roots {
   home: string;
@@ -41,8 +42,9 @@ export function NewSessionDialog({
   onClose,
 }: {
   onCreate: (cwd: string) => void;
-  /** New workspace: the server creates the worktree for `branch`, then opens there. */
-  onCreateWorktree: (branch: string) => void;
+  /** New workspace: the server creates the worktree for `branch` (from `base`,
+   * or the repo base when null), then opens there. */
+  onCreateWorktree: (branch: string, base: string | null) => void;
   onResume: (cwd: string, resumeId: string) => void;
   onClose: () => void;
 }) {
@@ -60,6 +62,10 @@ export function NewSessionDialog({
   // for the batch clean-up.
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeErr, setRemoveErr] = useState<string | null>(null);
+  // The repo's base branch name, and the branch a new workspace starts from
+  // (null = that base).
+  const [repoBase, setRepoBase] = useState<string | null>(null);
+  const [stackOn, setStackOn] = useState<string | null>(null);
   const [branch, setBranch] = useState("");
 
   useEffect(() => {
@@ -135,8 +141,12 @@ export function NewSessionDialog({
       setWorkStep("where");
       setWorktrees(null);
       setBranch("");
-      api<{ worktrees: WorktreeInfo[] }>("/api/git/worktrees")
-        .then((d) => setWorktrees(d.worktrees.filter((w) => !w.bare)))
+      setStackOn(null);
+      api<{ base: string | null; worktrees: WorktreeInfo[] }>("/api/git/worktrees")
+        .then((d) => {
+          setRepoBase(d.base);
+          setWorktrees(d.worktrees.filter((w) => !w.bare));
+        })
         .catch(() => {
           setWorkStep(null);
           navigate(roots.workRepo);
@@ -414,14 +424,14 @@ export function NewSessionDialog({
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
                 onKeyDown={(e) =>
-                  e.key === "Enter" && branchOk && onCreateWorktree(branch.trim())
+                  e.key === "Enter" && branchOk && onCreateWorktree(branch.trim(), stackOn)
                 }
                 spellCheck={false}
               />
               <button
                 className="btn btn-primary"
                 disabled={!branchOk}
-                onClick={() => onCreateWorktree(branch.trim())}
+                onClick={() => onCreateWorktree(branch.trim(), stackOn)}
               >
                 🌿 create &amp; open
               </button>
@@ -431,9 +441,17 @@ export function NewSessionDialog({
                 ⚠️ letters, numbers and . _ / - only, and no leading dash
               </div>
             )}
+            <BasePicker
+              base={repoBase}
+              worktrees={worktrees ?? []}
+              creating={branch.trim()}
+              value={stackOn}
+              onChange={setStackOn}
+            />
             <div className="modal-foot">
               <span className="foot-path">
-                off a fresh origin/master; an existing branch is reused
+                off {stackOn ?? (repoBase ? `a fresh ${repoBase}` : "the repo's base branch")}; an
+                existing branch is reused as it is
               </span>
             </div>
           </div>
