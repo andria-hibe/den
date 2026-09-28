@@ -353,6 +353,30 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
+  // What a Claude pane has spent (#11): its conversation, priced from the
+  // transcript, plus den's idle handovers for it.
+  app.get("/api/sessions/:id/usage", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const u = sessions.usage(id);
+    if (!u) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    return u;
+  });
+
+  // Turn a workspace's handover (notepad instruction + idle refresh) on or off.
+  app.post("/api/sessions/:id/handover", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { on } = (req.body ?? {}) as { on?: boolean };
+    const meta = sessions.setHandover(id, on !== false);
+    if (!meta) {
+      reply.code(400);
+      return { error: "not_a_workspace" };
+    }
+    return meta;
+  });
+
   // Add another shell pane (tab) to the workspace the given session belongs to.
   app.post("/api/sessions/:id/shell", async (req, reply) => {
     const { id } = req.params as { id: string };

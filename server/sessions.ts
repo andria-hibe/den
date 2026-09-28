@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
+import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
@@ -470,6 +471,32 @@ export function idleHandoverDue(p: {
   return p.notepadMtime < p.lastOutputAt - NOTEPAD_FRESH_MS;
 }
 
+/** The usage in `claude -p --output-format json` output, as a Usage. Null
+ * when it can't be read. Prefers Claude Code's own `total_cost_usd`. Pure,
+ * for the test. */
+export function forkUsage(stdout: string): Usage | null {
+  try {
+    const o = JSON.parse(stdout) as {
+      total_cost_usd?: number;
+      usage?: {
+        input_tokens?: number; output_tokens?: number;
+        cache_read_input_tokens?: number; cache_creation_input_tokens?: number;
+      };
+    };
+    if (typeof o.total_cost_usd !== "number") return null;
+    return {
+      costUSD: o.total_cost_usd,
+      input: o.usage?.input_tokens ?? 0,
+      output: o.usage?.output_tokens ?? 0,
+      cacheRead: o.usage?.cache_read_input_tokens ?? 0,
+      cacheWrite: o.usage?.cache_creation_input_tokens ?? 0,
+      unpriced: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** What the idle handover asks. It runs in a headless fork of the pane's
  * conversation (see SessionManager.runIdleHandover), never in the live pane:
  * a pane waiting at a permission prompt looks exactly as idle as a finished
@@ -565,6 +592,8 @@ export interface SessionMeta {
   prRepo: string | null;
   /** Rail sort key (see `reorder`). The list arrives already sorted by it. */
   pos: number;
+  /** A workspace keeps a handover notepad, refreshed when idle (#11 toggle). */
+  handover: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -606,6 +635,12 @@ class DenSession {
    * running now. */
   lastHandoverAt = 0;
   handoverRunning = false;
+  /** Keep a handover (the notepad instruction and the idle refresh). */
+  handover = true;
+  /** What den's idle handovers for this pane have spent. They run as headless
+   * forks that save no transcript, so their usage is tracked here instead
+   * (in memory: it resets when den restarts). */
+  handoverUsage: Usage = { ...EMPTY_USAGE };
   /** New output since the last scrollback flush to the store. */
   private scrollbackDirty = false;
   private listeners = new Set<Listener>();
@@ -821,6 +856,7 @@ class DenSession {
       pr: this.pr,
       prRepo: this.prRepo,
       pos: this.pos,
+      handover: this.handover,
     };
   }
 
@@ -848,6 +884,7 @@ class DenSession {
       // metadata path — a fresh row starts empty.
       scrollback: null,
       pos: this.pos,
+      handover: this.handover ? 1 : 0,
     };
   }
 
@@ -904,7 +941,7 @@ class SessionManager {
     const now = Date.now();
     for (const s of this.sessions.values()) {
       if (s.shell || s.role !== "main" || s.look || s.view) continue;
-      if (s.status !== "running" || s.handoverRunning || !s.claudeSessionId) continue;
+      if (s.status !== "running" || !s.handover || s.handoverRunning || !s.claudeSessionId) continue;
       let notepadMtime = 0;
       try {
         notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
@@ -943,12 +980,16 @@ class SessionManager {
         "--add-dir", PROGRESS_DIR,
         "--allowedTools", "Read", `Edit(//${notepad.replace(/^\/+/, "")})`,
         "--append-system-prompt", progressInstruction(notepad),
+        "--output-format", "json",
         "--", idleHandoverPrompt(notepad),
       ],
       { cwd: s.cwd, timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024 },
-      (err) => {
+      (err, stdout) => {
         s.handoverRunning = false;
         if (err) logWarn("idleHandover", err);
+        // The fork saves no transcript, so its spend is only in this result.
+        const spent = forkUsage(stdout);
+        if (spent) s.handoverUsage = addUsage(s.handoverUsage, spent);
       },
     );
   }
@@ -978,6 +1019,7 @@ class SessionManager {
       s.pr = row.pr ?? null;
       s.prRepo = row.prRepo ?? null;
       s.titleLocked = row.titleLocked === 1;
+      s.handover = row.handover !== 0;
       if (row.scrollback) s.restoreScrollback(row.scrollback);
       this.sessions.set(s.id, s);
     }
@@ -1146,7 +1188,7 @@ class SessionManager {
   private restartArgs(s: DenSession): string[] {
     const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
-      return [...resume, ...this.workspaceArgs(s.groupId)];
+      return [...resume, ...this.workspaceArgs(s.groupId, s.handover)];
     }
     return [...resume, ...this.singlePaneArgs(s)];
   }
@@ -1154,12 +1196,12 @@ class SessionManager {
   /** The notepad wiring and system prompt for a workspace main pane, shared by
    * create() and restartArgs(). The notepad itself is created (and seeded) by
    * create(); a restart keeps whatever is in it. */
-  private workspaceArgs(groupId: string): string[] {
+  private workspaceArgs(groupId: string, handover = true): string[] {
     mkdirSync(PROGRESS_DIR, { recursive: true });
-    return [
-      "--add-dir", PROGRESS_DIR,
-      "--append-system-prompt", workspaceInstruction(notepadPath(groupId)),
-    ];
+    // With the handover off, the pane still gets the house rules, just not
+    // the notepad instruction (the notepad stays for the developer's own use).
+    const prompt = handover ? workspaceInstruction(notepadPath(groupId)) : houseRules();
+    return ["--add-dir", PROGRESS_DIR, "--append-system-prompt", prompt];
   }
 
   /** The system prompt (and any files it names) for a single-pane Claude
@@ -1223,6 +1265,26 @@ class SessionManager {
     return pick.resume
       ? ["--resume", pick.id]
       : ["--session-id", pick.id, "-n", s.name];
+  }
+
+  /** What a Claude pane has spent: its conversation (from the transcript)
+   * plus den's idle handovers for it. Null for a shell or an unknown id. */
+  usage(id: string): { conversation: Usage; handovers: Usage; total: Usage } | null {
+    const s = this.sessions.get(id);
+    if (!s || s.shell) return null;
+    const conversation = s.claudeSessionId ? sessionUsage(s.claudeSessionId) : { ...EMPTY_USAGE };
+    return { conversation, handovers: s.handoverUsage, total: addUsage(conversation, s.handoverUsage) };
+  }
+
+  /** Turn a workspace's handover on or off. The idle refresh follows at once;
+   * the notepad instruction is part of the system prompt, so it follows from
+   * the pane's next start. */
+  setHandover(id: string, on: boolean): SessionMeta | null {
+    const s = this.sessions.get(id);
+    if (!s || s.shell || s.role !== "main" || s.look || s.view) return null;
+    s.handover = on;
+    store.update(s.toRow());
+    return s.meta();
   }
 
   get(id: string) {

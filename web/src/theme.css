@@ -779,6 +779,19 @@ body {
   border-color: var(--pink);
 }
 
+/* Spend chip in a Claude pane's header (#11). */
+.spend-chip {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  background: var(--bg-rail);
+  border: 2px solid var(--border);
+  border-radius: 9px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  cursor: help;
+}
+
 /* Progress notepad */
 .notepad {
   flex: 1;
@@ -798,6 +811,22 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--ink-soft);
+}
+.notepad-toggle {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: 8px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+.notepad-toggle.on {
+  background: var(--mint);
+  border-color: var(--mint);
+  color: #1f4d3d;
 }
 .notepad-dirty {
   font-size: 10px;
@@ -1747,14 +1776,23 @@ body {
   background: linear-gradient(rgba(255, 183, 213, 0.14) 0 100%), var(--term-bg);
   box-shadow: inset 3px 0 0 var(--pink-deep);
 }
+.pr-prereview-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 4px 12px;
+}
 .pr-prereview {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   color: var(--ink);
-  margin: 2px 4px 12px;
   cursor: pointer;
+}
+.pr-prereview-sub {
+  color: var(--ink-soft);
+  font-size: 12px;
 }
 
 /* Error toast */

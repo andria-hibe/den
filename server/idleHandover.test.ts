@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, idleHandoverDue, idleHandoverPrompt, isAscii } from "./sessions.ts";
+import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, forkUsage, idleHandoverDue, idleHandoverPrompt, isAscii } from "./sessions.ts";
 
 const NOW = 10_000_000_000;
 const due = (over: Partial<Parameters<typeof idleHandoverDue>[0]> = {}) =>
@@ -52,5 +52,17 @@ describe("idleHandoverPrompt", () => {
   });
   it("only touches the notepad", () => {
     expect(text).toContain("Do not run anything or change any other file.");
+  });
+});
+
+describe("forkUsage", () => {
+  it("reads Claude Code's own total from the -p json result", () => {
+    const u = forkUsage(JSON.stringify({ total_cost_usd: 0.42, usage: { output_tokens: 300, cache_read_input_tokens: 9000 } }));
+    expect(u?.costUSD).toBe(0.42);
+    expect(u?.output).toBe(300);
+  });
+  it("is null for output it can't read", () => {
+    expect(forkUsage("")).toBeNull();
+    expect(forkUsage('{"result":"done"}')).toBeNull();
   });
 });

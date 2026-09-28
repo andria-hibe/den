@@ -1,5 +1,10 @@
-import { useState } from "react";
+import { usePersistentString } from "./usePersistent.ts";
 import type { PullRequest } from "../../server/github.ts";
+
+/** What Claude does first when a review opens (#11): the full pass (reading
+ * guide, then the code-review skill), the cheap reading guide only for a PR
+ * small enough to read yourself, or nothing until you ask. */
+export type PreReview = "full" | "guide" | "none";
 
 // Shown when you click a GitHub PR. Others' PRs → review; your own → edit.
 export function PrDialog({
@@ -9,11 +14,16 @@ export function PrDialog({
   onClose,
 }: {
   pr: PullRequest;
-  onReview: (pr: PullRequest, opts: { preReview: boolean }) => void;
+  onReview: (pr: PullRequest, opts: { preReview: PreReview }) => void;
   onEditMine: (pr: PullRequest, env: "local" | "worktree") => void;
   onClose: () => void;
 }) {
-  const [preReview, setPreReview] = useState(true);
+  // Remembered, so a small-PR habit sticks.
+  const [preReview, setPreReview] = usePersistentString("den.preReview", "full", [
+    "full",
+    "guide",
+    "none",
+  ] as const);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -65,14 +75,28 @@ export function PrDialog({
           </>
         ) : (
           <>
-            <label className="pr-prereview">
-              <input
-                type="checkbox"
-                checked={preReview}
-                onChange={(e) => setPreReview(e.target.checked)}
-              />
-              Have Claude pre-review the diff
-            </label>
+            <div className="pr-prereview-group" role="radiogroup" aria-label="what Claude does first">
+              {(
+                [
+                  ["full", "Full pre-review", "reading guide, then the code-review pass"],
+                  ["guide", "Reading guide only", "cheaper, for a PR small enough to read yourself"],
+                  ["none", "Nothing yet", "ask from the Guide or Review tab when you want"],
+                ] as const
+              ).map(([value, label, sub]) => (
+                <label key={value} className="pr-prereview">
+                  <input
+                    type="radio"
+                    name="prereview"
+                    checked={preReview === value}
+                    onChange={() => setPreReview(value)}
+                  />
+                  <span>
+                    {label}
+                    <span className="pr-prereview-sub"> · {sub}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
             <button
               className="btn btn-primary"
               style={{ width: "100%" }}

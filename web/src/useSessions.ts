@@ -130,6 +130,19 @@ export function useSessions({
     }
   };
 
+  // Turn a workspace's handover on or off; the server returns the new meta.
+  const setHandover = async (id: string, on: boolean) => {
+    try {
+      const meta = await api<SessionMeta>(`/api/sessions/${id}/handover`, {
+        method: "POST",
+        body: JSON.stringify({ on }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === meta.id ? { ...s, handover: meta.handover } : s)));
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   const closeSession = async (id: string) => {
     const groupId = sessions.find((s) => s.id === id)?.groupId;
     await api(`/api/sessions/${id}`, { method: "DELETE" });
@@ -242,6 +255,7 @@ export function useSessions({
     patch,
     restartSession,
     closeSession,
+    setHandover,
     addShellTab,
     launchApp,
     closeShellTab,

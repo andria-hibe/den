@@ -147,7 +147,9 @@ export function PrReviewView({
    * keyed by it. Happens to equal sessionId for single-pane review sessions,
    * but that's the server's implementation detail, not ours to rely on. */
   groupId: string;
-  autoReview: boolean;
+  /** Start on its own when the view opens: the full pre-review, or the
+   * reading guide only. Null: wait to be asked. */
+  autoReview: "full" | "guide" | null;
   /** Fired once the auto pre-review has been sent, so it only ever fires once. */
   onAutoReviewStarted?: () => void;
   header: ReactNode;
@@ -221,13 +223,14 @@ export function PrReviewView({
   // pane is ready (see the paste route), which a fixed timeout can't get right.
   // onAutoReviewStarted lets App clear its flag, so coming back to this session
   // later doesn't kick off the whole review a second time.
-  // The auto path asks for both, guide first (see autoReviewPrompt).
-  const autoAsk = autoReviewPrompt(number, repo);
+  // The full auto path asks for both, guide first (see autoReviewPrompt); the
+  // cheap one asks for the guide alone and leaves the finding pass to you.
+  const autoAsk = autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo);
 
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
-    setRequested(true);
+    if (autoReview === "full") setRequested(true);
     setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",

@@ -39,6 +39,8 @@ export interface SessionRow {
   /** Rail sort key. Defaults to `createdAt` (so untouched rows keep creation
    * order) and is rewritten to a small index when you drag the rail around. */
   pos: number;
+  /** Keep a handover notepad (and refresh it when idle); 0 turns both off. */
+  handover: 0 | 1;
 }
 
 // Stable per-user location (works identically for the CLI and the packaged
@@ -80,6 +82,7 @@ for (const col of [
   "titleLocked INTEGER NOT NULL DEFAULT 0",
   "scrollback TEXT",
   "pos INTEGER NOT NULL DEFAULT 0",
+  "handover INTEGER NOT NULL DEFAULT 1",
 ]) {
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
@@ -97,8 +100,8 @@ if (added.has("pos")) db.exec(`UPDATE sessions SET pos = createdAt`);
 
 const stmts = {
   insert: db.prepare(
-    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked, scrollback, pos)
-     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked, @scrollback, @pos)`,
+    `INSERT INTO sessions (id, name, color, cwd, shell, claudeSessionId, status, createdAt, lastActive, groupId, role, branch, ticket, look, view, pr, prRepo, titleLocked, scrollback, pos, handover)
+     VALUES (@id, @name, @color, @cwd, @shell, @claudeSessionId, @status, @createdAt, @lastActive, @groupId, @role, @branch, @ticket, @look, @view, @pr, @prRepo, @titleLocked, @scrollback, @pos, @handover)`,
   ),
   // Rail order: the dragged `pos` first, creation order as the tiebreak (panes
   // of one workspace share its pos, so a shell tab keeps its place in the group).
@@ -107,7 +110,7 @@ const stmts = {
     `UPDATE sessions SET name=@name, color=@color, status=@status,
        claudeSessionId=@claudeSessionId, lastActive=@lastActive,
        branch=@branch, ticket=@ticket, look=@look, view=@view,
-       pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked, pos=@pos WHERE id=@id`,
+       pr=@pr, prRepo=@prRepo, titleLocked=@titleLocked, pos=@pos, handover=@handover WHERE id=@id`,
   ),
   setScrollback: db.prepare(
     `UPDATE sessions SET scrollback=@scrollback WHERE id=@id`,

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
+import { SpendChip } from "./SpendChip.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
-import { PrDialog } from "./PrDialog.tsx";
+import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
@@ -54,6 +55,7 @@ export function App() {
     patch,
     restartSession,
     closeSession,
+    setHandover,
     addShellTab,
     launchApp,
     closeShellTab,
@@ -102,7 +104,8 @@ export function App() {
     startAtWork: boolean;
   } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
-  const [autoReviewPr, setAutoReviewPr] = useState<number | null>(null);
+  // The PR whose review session should start on its own, and how (#11).
+  const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "guide" } | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   // Collapse the colour picker whenever we switch sessions.
   useEffect(() => setColorPickerOpen(false), [activeId]);
@@ -342,6 +345,7 @@ export function App() {
           gap: 8,
         }}
       >
+        {!s.shell && <SpendChip sessionId={s.id} />}
         {opts?.workspace && (
           <AppRunButton
             sessionId={s.id}
@@ -395,14 +399,14 @@ export function App() {
     setPrModal(pr);
   };
 
-  const reviewPr = (pr: PullRequest, opts: { preReview: boolean }) => {
+  const reviewPr = (pr: PullRequest, opts: { preReview: PreReview }) => {
     setPrModal(null);
     const existing = sessionForPr(pr);
     if (existing) {
       selectSession(existing.id);
       return;
     }
-    if (opts.preReview) setAutoReviewPr(pr.number);
+    if (opts.preReview !== "none") setAutoReviewPr({ pr: pr.number, mode: opts.preReview });
     addSession({
       view: "review",
       pr: pr.number,
@@ -597,7 +601,7 @@ export function App() {
             number={active.pr}
             sessionId={active.id}
             groupId={active.groupId}
-            autoReview={autoReviewPr === active.pr}
+            autoReview={autoReviewPr?.pr === active.pr ? autoReviewPr.mode : null}
             onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}
             terminal={
@@ -734,7 +738,11 @@ export function App() {
                 }}
               />
               <div className="ws-pane ws-note" style={{ flex: `${1 - shellFrac} 1 0` }}>
-                <NotepadPane groupId={active.groupId} />
+                <NotepadPane
+                  groupId={active.groupId}
+                  handover={active.handover}
+                  onHandover={(on) => setHandover(active.id, on)}
+                />
               </div>
             </div>
           </div>

@@ -322,7 +322,24 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   transcript, so the pane's conversation and the resume list are untouched.
   Once per quiet spell, rearmed by input. Window: `$DEN_IDLE_HANDOVER_MIN` →
   the `idle_handover_min` setting → 30; `0`/`off` disables it (there's no UI
-  toggle). It spends tokens with nobody watching — see issue 11. `NotepadPane` leaves a handover's scroll alone and only
+  toggle beyond the per-workspace switch below). It spends tokens with nobody
+  watching.
+- **Token spend** (issue 11). `server/usage.ts` prices a session from its
+  transcript: `sumUsage` dedupes by message id (Claude Code repeats a
+  message's usage on every content-block line) and prices input / output /
+  cache writes (5m 1.25x, 1h 2x input) / cache reads at API rates (`RATES`,
+  longest model-id prefix wins; verified to reproduce Claude Code's own
+  `cost-state` total to the cent). Claude Code's `cost-state` line is only
+  written on exit, so it can't show a live session. `GET
+  /api/sessions/:id/usage` adds the idle handovers' spend (`handoverUsage`,
+  in memory, read from the fork's `--output-format json`). `SpendChip` shows
+  it in every Claude pane's header (30s poll, tooltip breakdown). Also:
+  a per-workspace **handover switch** on the notepad (`handover` column,
+  `POST /api/sessions/:id/handover`) — off stops the idle refresh at once
+  and drops the notepad instruction from the pane's next start (the house
+  rules stay); and the PR dialog's pre-review is now **full / reading guide
+  only / nothing** (remembered in localStorage), the guide being the cheap
+  option for a PR small enough to read yourself. `NotepadPane` leaves a handover's scroll alone and only
   follows the bottom for an older appended log.
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill

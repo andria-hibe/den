@@ -22,7 +22,16 @@ export function isNearBottom(
 // still an appended log follows the newest entry instead: it scrolls to the
 // bottom when the content changes, unless you have scrolled up, and picks
 // following back up once you scroll to the bottom again.
-export function NotepadPane({ groupId }: { groupId: string }) {
+export function NotepadPane({
+  groupId,
+  handover = true,
+  onHandover,
+}: {
+  groupId: string;
+  /** Whether the session keeps this handover (and den refreshes it when idle). */
+  handover?: boolean;
+  onHandover?: (on: boolean) => void;
+}) {
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -81,6 +90,19 @@ export function NotepadPane({ groupId }: { groupId: string }) {
     <div className="notepad">
       <div className="notepad-head">
         <span className="notepad-title">📝 handover</span>
+        {onHandover && (
+          <button
+            className={`notepad-toggle${handover ? " on" : ""}`}
+            onClick={() => onHandover(!handover)}
+            title={
+              handover
+                ? "Claude keeps this handover, and den refreshes it after 30 min idle. Turn off for a quick session that doesn't need one (saves tokens; the instruction goes from the session's next start)."
+                : "Off: den won't refresh this handover when idle, and from the session's next start Claude isn't asked to keep it. Turn on to bring both back."
+            }
+          >
+            {handover ? "on" : "off"}
+          </button>
+        )}
         {dirty && <span className="notepad-dirty">unsaved</span>}
         {editing ? (
           <button className="btn notepad-save" onClick={save} disabled={saving}>

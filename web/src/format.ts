@@ -34,3 +34,18 @@ export function accentStyle(color?: string): CSSProperties | undefined {
 
 /** Stable identity for a PR across polls (repo + number). */
 export const prKey = (p: PullRequest) => `${p.repo}#${p.number}`;
+
+/** A dollar estimate for the spend chip: cents under $100, whole dollars above. */
+export function formatUSD(usd: number): string {
+  if (usd <= 0) return "$0";
+  if (usd < 0.01) return "<$0.01";
+  if (usd < 100) return `$${usd.toFixed(2)}`;
+  return `$${Math.round(usd).toLocaleString("en-US")}`;
+}
+
+/** A token count at a glance: 950, 12.3k, 51.7M. */
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1e6) return `${(n / 1e3).toFixed(n < 1e4 ? 1 : 0)}k`;
+  return `${(n / 1e6).toFixed(1)}M`;
+}
