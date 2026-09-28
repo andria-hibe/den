@@ -16,6 +16,7 @@ npm run typecheck
 npm run lint           # eslint (flat config; non-type-checked)
 npm test               # vitest (server + web pure logic)
 npm run check          # typecheck + lint + test — run before committing
+npm run smoke          # end-to-end: real server + UI in headless Electron (node ABI)
 ```
 
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
@@ -678,7 +679,18 @@ local control plane, not a public API:
   origin, and only `http(s)` URLs reach `shell.openExternal`.
 
 ### Verifying changes (how this project has been tested)
-`npm run check` (typecheck + eslint + vitest) is the automated gate. **Tests**
+`npm run check` (typecheck + eslint + vitest) is the automated gate.
+**`npm run smoke`** (`scripts/smoke.cjs`, issue 21) is the end-to-end one: it
+builds the UI, boots a server on a throwaway db (idle handovers off, the
+surrounding `CLAUDE*` env stripped), loads it in a headless Electron window,
+opens a shell from the rail, and checks the rail lists it, the terminal
+attaches, a typed command's output comes back (`echo den-smoke-$((6*7))` →
+`42`, so the echo can't pass for the result), and closing from the rail
+removes it. Prints each step, exits 1 naming the one that failed. Needs the
+node ABI (`npm run rebuild:node`) and the sandbox disabled. Run it after
+touching sessions, the WebSocket, or the rail. Close from the **rail**, not
+the API: the rail's poll only merges rows it already has, so it never drops
+one closed elsewhere. **Tests**
 live next to their source as `*.test.ts` (`server/*.test.ts`, `web/*.test.ts`)
 and cover the pure, rule-heavy logic — the loopback guard, PR attention rules,
 branch validation, path sandbox, title tidy, fox pose. Keep new pure logic
