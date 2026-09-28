@@ -779,6 +779,51 @@ body {
   border-color: var(--pink);
 }
 
+/* Posting to GitHub (#16): the review preview and thread reply / resolve. */
+.modal.post-review {
+  width: 640px;
+}
+.post-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+.post-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 8px 0 4px;
+}
+.post-body {
+  width: 100%;
+  min-height: 140px;
+}
+.post-comment {
+  border-left: 3px solid var(--lilac);
+  padding: 2px 0 2px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.post-done {
+  padding: 12px 0;
+}
+.thread-actions {
+  margin-top: 6px;
+}
+.thread-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.thread-reply {
+  width: 100%;
+  min-height: 70px;
+  margin-bottom: 6px;
+}
+
 /* Spend chip in a Claude pane's header (#11). */
 .spend-chip {
   font-size: 11px;

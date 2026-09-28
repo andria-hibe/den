@@ -383,6 +383,12 @@ export interface PrReviewNote {
   /** Inline comments only: the review thread was marked resolved / is outdated. */
   resolved?: boolean;
   outdated?: boolean;
+  /** Inline comments only: the thread's GraphQL node id (to resolve it), the
+   * REST id of the thread's first comment (replies attach to that one), and
+   * whether this note is that first comment. */
+  threadId?: string;
+  replyTo?: number;
+  first?: boolean;
 }
 export interface PrDetail {
   number: number;
@@ -450,10 +456,11 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
 const REVIEW_THREADS_QUERY =
   `query($owner:String!,$name:String!,$number:Int!){` +
   `repository(owner:$owner,name:$name){pullRequest(number:$number){` +
-  `reviewThreads(first:100){nodes{isResolved isOutdated ` +
-  `comments(first:50){nodes{author{login} body path line originalLine diffHunk createdAt}}}}}}}`;
+  `reviewThreads(first:100){nodes{id isResolved isOutdated ` +
+  `comments(first:50){nodes{databaseId author{login} body path line originalLine diffHunk createdAt}}}}}}}`;
 
 interface RawThreadComment {
+  databaseId?: number | null;
   author?: { login: string } | null;
   body: string;
   path?: string | null;
@@ -483,6 +490,7 @@ async function getReviewComments(
           pullRequest?: {
             reviewThreads?: {
               nodes?: {
+                id?: string;
                 isResolved?: boolean;
                 isOutdated?: boolean;
                 comments?: { nodes?: RawThreadComment[] };
@@ -495,9 +503,13 @@ async function getReviewComments(
     const threads = j.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
     const notes: PrReviewNote[] = [];
     for (const t of threads) {
-      for (const c of t.comments?.nodes ?? []) {
+      const root = t.comments?.nodes?.[0]?.databaseId ?? undefined;
+      for (const [i, c] of (t.comments?.nodes ?? []).entries()) {
         if (!c.body) continue;
         notes.push({
+          threadId: t.id ?? undefined,
+          replyTo: root,
+          first: i === 0,
           author: c.author?.login ?? "?",
           body: c.body,
           path: c.path ?? undefined,
@@ -514,6 +526,83 @@ async function getReviewComments(
     logWarn(`github.reviewComments pr#${number}`, err);
     return [];
   }
+}
+
+// --- Posting to GitHub (#16) -----------------------------------------------
+// Everything below writes to GitHub as the developer. It is only reached from
+// den's own routes after the developer has seen exactly what goes and clicked
+// to confirm; a review *session* can never call it (its permissions deny every
+// writing gh subcommand, see buildReviewPermissions).
+
+export type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+
+export interface ReviewComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
+/** The REST body for "create a review". Inline comments sit on the new side
+ * of the diff. Pure, for the test. */
+export function reviewRequestBody(event: ReviewEvent, body: string, comments: ReviewComment[]) {
+  return {
+    event,
+    body,
+    comments: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })),
+  };
+}
+
+/** `gh api` with a JSON request body on stdin. */
+function ghWithInput(args: string[], input: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile("gh", args, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) reject(Object.assign(err, { stderr }));
+      else resolve(stdout);
+    });
+    child.stdin?.end(input);
+  });
+}
+
+/** Submit a review on a PR. Returns the review's URL. */
+export async function submitReview(
+  repo: string,
+  number: number,
+  event: ReviewEvent,
+  body: string,
+  comments: ReviewComment[],
+): Promise<string> {
+  const out = await ghWithInput(
+    ["api", "-X", "POST", `repos/${repo}/pulls/${number}/reviews`, "--input", "-"],
+    JSON.stringify(reviewRequestBody(event, body, comments)),
+  );
+  return (JSON.parse(out) as { html_url?: string }).html_url ?? "";
+}
+
+/** Reply to an inline review thread, by the REST id of its first comment. */
+export async function replyToThread(
+  repo: string,
+  number: number,
+  commentId: number,
+  body: string,
+): Promise<void> {
+  await ghWithInput(
+    ["api", "-X", "POST", `repos/${repo}/pulls/${number}/comments/${commentId}/replies`, "--input", "-"],
+    JSON.stringify({ body }),
+  );
+}
+
+/** Mark an inline review thread resolved, by its GraphQL node id. */
+export async function resolveThread(threadId: string): Promise<void> {
+  await gh([
+    "api", "graphql",
+    "-f", "query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",
+    "-f", `id=${threadId}`,
+  ]);
+}
+
+/** A GraphQL node id as GitHub issues them (e.g. PRRT_kwDOABC123). */
+export function isValidNodeId(id: string): boolean {
+  return /^[A-Za-z0-9_=-]{4,128}$/.test(id);
 }
 
 export async function getPrDiff(repo: string, number: number): Promise<string> {

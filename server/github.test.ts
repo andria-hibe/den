@@ -1,14 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  summarizeChecks,
-  reviewFrom,
-  parseTicketHint,
-  authoredAttention,
-  reviewAttention,
-  buildReviewBucket,
-  isValidRepo,
-  type PullRequest,
-} from "./github.ts";
+import { summarizeChecks, reviewFrom, parseTicketHint, authoredAttention, reviewAttention, buildReviewBucket, isValidRepo, type PullRequest, reviewRequestBody, isValidNodeId } from "./github.ts";
 
 describe("summarizeChecks", () => {
   it("reports none when there are no checks", () => {
@@ -193,5 +184,24 @@ describe("buildReviewBucket (review-requested + already-reviewed)", () => {
       new Set(["o/r#1", "o/r#3"]),
     );
     expect(bucket.map((p) => p.number)).toEqual([2, 3, 1]);
+  });
+});
+
+describe("reviewRequestBody", () => {
+  it("puts inline comments on the new side of the diff", () => {
+    expect(reviewRequestBody("COMMENT", "Looks good.", [{ path: "a.ts", line: 3, body: "a.ts:3 - rename" }])).toEqual({
+      event: "COMMENT",
+      body: "Looks good.",
+      comments: [{ path: "a.ts", line: 3, side: "RIGHT", body: "a.ts:3 - rename" }],
+    });
+  });
+});
+
+describe("isValidNodeId", () => {
+  it("accepts GitHub node ids and nothing that could be a flag or a path", () => {
+    expect(isValidNodeId("PRRT_kwDOABCdef123")).toBe(true);
+    expect(isValidNodeId("a b")).toBe(false);
+    expect(isValidNodeId("../x")).toBe(false);
+    expect(isValidNodeId("")).toBe(false);
   });
 });

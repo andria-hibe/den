@@ -9,6 +9,12 @@ import {
   getPrDetail,
   getPrDiff,
   isValidRepo,
+  isValidNodeId,
+  submitReview,
+  replyToThread,
+  resolveThread,
+  type ReviewComment,
+  type ReviewEvent,
   type PrBuckets,
 } from "./github.ts";
 import {
@@ -351,6 +357,81 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const meta = sessions.create(body);
     reply.code(201);
     return meta;
+  });
+
+  // --- Posting to GitHub (#16) ---
+  // Each of these writes to GitHub as the developer, so each is one explicit
+  // click in den on content the developer has just seen. Inputs are checked
+  // here as well as in the UI.
+  const MAX_POST = 65_000; // GitHub's comment body limit is 65,536
+  const postError = (reply: { code: (n: number) => void }, where: string, err: unknown) => {
+    logWarn(where, err);
+    reply.code(502);
+    // gh prints GitHub's message on stderr ("Pull request review thread line
+    // must be part of the diff", "Can not approve your own pull request"),
+    // which is what the developer needs to fix it. Nothing secret in it.
+    const stderr = String((err as { stderr?: string }).stderr ?? "").trim().split("\n").pop() ?? "";
+    return { error: "github_failed", message: stderr || "GitHub refused the request." };
+  };
+
+  app.post("/api/github/pr/review-submit", async (req, reply) => {
+    const b = (req.body ?? {}) as {
+      repo?: string; number?: unknown; event?: string; body?: string; comments?: ReviewComment[];
+    };
+    const n = prNumber(b.number);
+    const events: ReviewEvent[] = ["COMMENT", "APPROVE", "REQUEST_CHANGES"];
+    const comments = Array.isArray(b.comments) ? b.comments : [];
+    const okComment = (c: ReviewComment) =>
+      typeof c?.path === "string" && c.path.length > 0 && c.path.length < 1000 && !c.path.startsWith("-") &&
+      Number.isInteger(c.line) && c.line > 0 &&
+      typeof c.body === "string" && c.body.trim() !== "" && c.body.length <= MAX_POST;
+    if (
+      !b.repo || !isValidRepo(b.repo) || n === null ||
+      !events.includes(b.event as ReviewEvent) ||
+      typeof b.body !== "string" || b.body.length > MAX_POST ||
+      comments.length > 100 || !comments.every(okComment) ||
+      (b.body.trim() === "" && comments.length === 0)
+    ) {
+      reply.code(400);
+      return { error: "bad_review" };
+    }
+    try {
+      const url = await submitReview(b.repo, n, b.event as ReviewEvent, b.body, comments);
+      return { ok: true, url };
+    } catch (err) {
+      return postError(reply, "github.submitReview", err);
+    }
+  });
+
+  app.post("/api/github/pr/reply", async (req, reply) => {
+    const b = (req.body ?? {}) as { repo?: string; number?: unknown; commentId?: unknown; body?: string };
+    const n = prNumber(b.number);
+    const id = prNumber(b.commentId);
+    if (!b.repo || !isValidRepo(b.repo) || n === null || id === null ||
+        typeof b.body !== "string" || !b.body.trim() || b.body.length > MAX_POST) {
+      reply.code(400);
+      return { error: "bad_reply" };
+    }
+    try {
+      await replyToThread(b.repo, n, id, b.body);
+      return { ok: true };
+    } catch (err) {
+      return postError(reply, "github.reply", err);
+    }
+  });
+
+  app.post("/api/github/pr/resolve", async (req, reply) => {
+    const { threadId } = (req.body ?? {}) as { threadId?: string };
+    if (!threadId || !isValidNodeId(threadId)) {
+      reply.code(400);
+      return { error: "bad_thread" };
+    }
+    try {
+      await resolveThread(threadId);
+      return { ok: true };
+    } catch (err) {
+      return postError(reply, "github.resolve", err);
+    }
   });
 
   // What a Claude pane has spent (#11): its conversation, priced from the

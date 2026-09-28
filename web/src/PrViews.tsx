@@ -8,17 +8,21 @@ import { parseReview } from "./reviewNotes.ts";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { ToClaude } from "./ToClaude.tsx";
+import { PostReviewDialog, ThreadActions } from "./GitHubPost.tsx";
+import { buildReviewPost } from "./reviewPost.ts";
 import { autoReviewPrompt, guidePrompt, notePrompt, reviewPrompt } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
 function usePrDetail(repo: string, number: number) {
   const [detail, setDetail] = useState<PrDetail | null>(null);
+  // Bumped after den posts a reply or resolves a thread, to show the result.
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     api<PrDetail>(`/api/github/pr?repo=${encodeURIComponent(repo)}&number=${number}`)
       .then(setDetail)
       .catch(() => {});
-  }, [repo, number]);
-  return detail;
+  }, [repo, number, version]);
+  return { detail, reload: () => setVersion((v) => v + 1) };
 }
 
 /** Top-level reviews and issue comments (no code anchor). */
@@ -57,9 +61,12 @@ function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
 function InlineComments({
   detail,
   sessionId,
+  onChanged,
 }: {
   detail: PrDetail;
   sessionId: string;
+  /** Refetch after a reply or a resolve posted from here. */
+  onChanged: () => void;
 }) {
   // Resolved threads are hidden by default so the tab shows what still needs
   // action; a toggle reveals them (dimmed, badged) so nothing is lost.
@@ -118,6 +125,10 @@ function InlineComments({
                   />
                 </div>
                 {n.body && <Md text={n.body} />}
+                {/* Under a thread's last comment: reply to it, or resolve it. */}
+                {!n.resolved && notes[i + 1]?.threadId !== n.threadId && (
+                  <ThreadActions repo={detail.repo} number={detail.number} note={n} onChanged={onChanged} />
+                )}
               </div>
             ))}
           </div>
@@ -155,7 +166,7 @@ export function PrReviewView({
   header: ReactNode;
   terminal: ReactNode;
 }) {
-  const detail = usePrDetail(repo, number);
+  const { detail } = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
   const [review, setReview] = useState<string>("");
   const [guide, setGuide] = useState<string>("");
@@ -174,6 +185,8 @@ export function PrReviewView({
     "description",
   ] as const);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The post-to-GitHub preview is open (#16).
+  const [posting, setPosting] = useState(false);
 
   // The review is filed per file by `## <path>` headings, so each file's
   // comments can sit beside that file's diff; the rest is the general review.
@@ -305,7 +318,24 @@ export function PrReviewView({
                   submit
                   onSent={() => setRequested(true)}
                 />
+                {review.trim() && (
+                  <button
+                    className="btn btn-ghost-outline"
+                    onClick={() => setPosting(true)}
+                    title="Preview the review as a GitHub review (inline comments on diff lines, the rest in the body) and post it"
+                  >
+                    post to GitHub…
+                  </button>
+                )}
               </div>
+              {posting && (
+                <PostReviewDialog
+                  repo={repo}
+                  number={number}
+                  post={buildReviewPost(overall, byFile, diff)}
+                  onClose={() => setPosting(false)}
+                />
+              )}
               {overall ? (
                 <Md text={overall} />
               ) : requested ? (
@@ -369,7 +399,7 @@ export function PrMyView({
   header: ReactNode;
   terminal: ReactNode;
 }) {
-  const detail = usePrDetail(repo, number);
+  const { detail, reload } = usePrDetail(repo, number);
   const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
   // Remembered across session switches + restarts (my-PR view is keyed-remounted).
   const [tab, setTab] = usePersistentString("den.myPrTab", "overview", [
@@ -415,7 +445,7 @@ export function PrMyView({
               <Notes detail={detail} sessionId={sessionId} />
             </>
           ) : (
-            <InlineComments detail={detail} sessionId={sessionId} />
+            <InlineComments detail={detail} sessionId={sessionId} onChanged={reload} />
           )}
         </div>
       </div>

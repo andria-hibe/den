@@ -524,6 +524,21 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   the session's Claude prompt via `POST /api/sessions/:id/paste` (bracketed
   paste — keeps multi-line as one entry, does **not** auto-submit: you read it,
   then press Enter).
+- **Post to GitHub from den** (issue 16), always one explicit click on
+  content you've just seen, and always from den's **own server code** — a
+  review session still can't post (its deny backstop is untouched). Review
+  tab → **post to GitHub…** opens `PostReviewDialog`: pure `buildReviewPost`
+  (`reviewPost.ts`) turns each review bullet whose `path:line` is **inside
+  the diff** into an inline comment (GitHub 422s the whole review if one
+  isn't) and puts the rest in the editable body under its file's name; pick
+  comment / request changes / approve; non-ASCII characters are counted and
+  flagged. On your PRs' **Inline comments** tab, each unresolved thread has
+  `ThreadActions`: ↩ reply (REST `.../comments/<first comment id>/replies`)
+  and ✓ resolve (GraphQL `resolveReviewThread`, confirm step). The thread
+  query now fetches the thread `id` and comments' `databaseId`. Routes:
+  `POST /api/github/pr/review-submit | reply | resolve`, inputs validated
+  server-side; GitHub's own error line (e.g. "line must be part of the
+  diff") is passed back so you can fix it.
 - **`submit: true` on the paste route** = press Enter too, for the actions that
   mean "do this now": the "Have Claude pre-review the diff" option and the "review
   in session" button, which used to need a second click in the terminal. Three
