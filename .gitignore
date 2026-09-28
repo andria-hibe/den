@@ -1,6 +1,8 @@
 node_modules/
 dist/
 release/
+# Electron build of better-sqlite3 (npm run native:electron)
+native/
 *.log
 .DS_Store
 den.db

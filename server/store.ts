@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { sqliteBinding } from "./nativeBinding.ts";
 
 // Persisted session metadata. Live PTY processes and scrollback live in memory
 // (server/sessions.ts); this table is what survives a browser refresh or a
@@ -48,7 +49,24 @@ export interface SessionRow {
 const DB_PATH = process.env.DEN_DB ?? join(homedir(), ".den", "den.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
-const db = new Database(DB_PATH);
+/** Open the db, turning the native-module mismatch (whose own message names
+ * neither the cause nor the fix) into one that says which command to run. */
+function openDb(path: string): Database.Database {
+  const nativeBinding = sqliteBinding();
+  try {
+    return new Database(path, nativeBinding ? { nativeBinding } : {});
+  } catch (err) {
+    if (/NODE_MODULE_VERSION|was compiled against a different/.test(String((err as Error).message))) {
+      const fix = process.versions.electron
+        ? "npm run native:electron (builds the Electron copy into native/)"
+        : "npm run rebuild:node (node_modules was rebuilt for Electron)";
+      throw new Error(`better-sqlite3 is built for a different runtime. Run: ${fix}`, { cause: err });
+    }
+    throw err;
+  }
+}
+
+const db = openDb(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (

@@ -6,12 +6,20 @@ directories:
 files:
   - dist/electron/**
   - package.json
+  # The Electron build of better-sqlite3 (npm run native:electron). node_modules
+  # stays built for Node, so the packager must not rebuild it (npmRebuild below).
+  - native/electron-*/**
 extraResources:
   - from: dist/web
     to: web
 asarUnpack:
   - "**/node_modules/node-pty/**"
   - "**/node_modules/better-sqlite3/**"
+  - "native/**"
+# Leave node_modules alone: rebuilding it for Electron is what used to break
+# `npm run dev` after every pack (#20). node-pty is N-API and loads as is;
+# better-sqlite3's Electron build comes from native/.
+npmRebuild: false
 mac:
   target:
     - target: dir

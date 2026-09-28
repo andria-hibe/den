@@ -61,7 +61,7 @@ you. Sessions are server-owned, so they outlive any window and survive restarts.
 
 ```bash
 npm install
-npm run app      # rebuilds native modules for Electron, builds, and launches
+npm run app      # builds, and launches (the first run also builds native/ for Electron)
 ```
 
 A native window opens. The Node server runs inside Electron's main process on an
@@ -77,14 +77,15 @@ cp -R release/mac-arm64/Den.app /Applications/
 ### In the browser (fast dev loop)
 
 ```bash
-npm run rebuild:node   # only after running the app (see ABI note)
 npm run dev            # server on :4321, web on :5173 — open the latter
 ```
 
-> **Native-module ABI note:** `node-pty` and `better-sqlite3` are native and
-> must match their runtime. `npm run app` rebuilds them for Electron;
-> `npm run rebuild:node` rebuilds them for plain Node (browser dev). Switch with
-> those two commands when moving between the app and browser dev.
+> **Native modules:** `node_modules` stays built for Node, and the app uses its
+> own Electron build of `better-sqlite3` in `native/` (made by
+> `npm run native:electron`, which `npm run app` and `npm run pack` run for
+> you). So there's nothing to rebuild when you move between the app and
+> browser dev. If a stale checkout still mixes them up, the startup error names
+> the command to run.
 
 Requires the `claude` and `gh` CLIs on your `PATH`; Linear is optional (paste a
 personal API key in the work panel).

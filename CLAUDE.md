@@ -10,7 +10,7 @@ juggling terminal tabs. This file orients the next agent — read it first.
 ```bash
 npm install            # postinstall: scripts/fix-pty.mjs restores node-pty's +x bit
 npm run dev            # browser dev: server :4321 + Vite :5173 (open :5173)  ← fast loop
-npm run app            # launch as an Electron app (rebuilds native for Electron first)
+npm run app            # launch as an Electron app (builds native/ for Electron first, once)
 npm run pack           # build release/mac-arm64/Den.app (unsigned, local)
 npm run typecheck
 npm run lint           # eslint (flat config; non-type-checked)
@@ -21,15 +21,28 @@ npm run smoke          # end-to-end: real server + UI in headless Electron (node
 
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
 > typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
-> `ditto` to `/Applications/Den.app` → reopen → `npm run rebuild:node`) for when
-> they say so. They control when the running app is replaced.
+> `ditto` to `/Applications/Den.app` → reopen) for when they say so. They
+> control when the running app is replaced. (Swap the bundle in with a staged
+> copy + `mv`, not `ditto` over the running app: the running process keeps its
+> old files.)
 
-**Native-module ABI gotcha (important):** `node-pty` and `better-sqlite3` are
-native and must match the runtime. `npm run app` / `npm run pack` /
-`electron-rebuild` build them for **Electron**; `npm run rebuild:node` builds
-them for **Node** (needed by `npm run dev` / `npm run start`). Switch with those
-two commands. The **installed `/Applications/Den.app` is self-contained** (its
-own rebuilt modules), so it keeps working regardless of the project's ABI.
+**Native modules: no more switching** (issue 20). `node_modules` is always
+built for **Node**, so `npm run dev`, `npm test`, and `npm run smoke` work at
+any time, including right after `npm run app` or `npm run pack`. Only
+`better-sqlite3` is runtime-specific (V8 ABI); `node-pty` is on N-API and its
+one binary loads in both. So `npm run native:electron`
+(`scripts/native-electron.mjs`, run by `app`/`pack`/`dist`, skipped when up to
+date) builds an **Electron copy** of `better_sqlite3.node` into
+`native/electron-<version>/` — with `node-gyp` against Electron's headers, on a
+copy of the package in a temp dir, **not** `electron-rebuild` (it walks up the
+tree and rebuilds `node_modules` in place too). `sqliteBinding()`
+(`server/nativeBinding.ts`) hands that file to better-sqlite3 as
+`nativeBinding` under Electron (packaged: `app.asar.unpacked/native/…`; dev:
+`<cwd>/native/…`), and `electron-builder.yml` ships `native/` unpacked with
+`npmRebuild: false`. A mismatch left anyway (an old checkout, a manual
+rebuild) fails with a message naming the command to run (`openDb` in
+`store.ts`). `npm run rebuild:node` remains only as a repair. The installed
+`/Applications/Den.app` is self-contained either way.
 
 ## Architecture
 
@@ -687,7 +700,7 @@ opens a shell from the rail, and checks the rail lists it, the terminal
 attaches, a typed command's output comes back (`echo den-smoke-$((6*7))` →
 `42`, so the echo can't pass for the result), and closing from the rail
 removes it. Prints each step, exits 1 naming the one that failed. Needs the
-node ABI (`npm run rebuild:node`) and the sandbox disabled. Run it after
+sandbox disabled (it runs fine right after `npm run app` now). Run it after
 touching sessions, the WebSocket, or the rail. Close from the **rail**, not
 the API: the rail's poll only merges rows it already has, so it never drops
 one closed elsewhere. **Tests**

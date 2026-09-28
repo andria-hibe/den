@@ -6,8 +6,8 @@
 //
 //   npm run smoke          (builds the web UI first)
 //
-// Needs the native modules built for Node (`npm run rebuild:node`), since the
-// server runs under tsx, not Electron. Typing uses sendInputEvent: synthetic
+// The server runs under tsx on node_modules' Node build, which stays in place
+// even after `npm run app` (see scripts/native-electron.mjs). Typing uses sendInputEvent: synthetic
 // DOM keyboard events are untrusted and xterm ignores them.
 const { app, BrowserWindow } = require("electron");
 const { spawn } = require("node:child_process");
