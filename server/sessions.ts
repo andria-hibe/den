@@ -2,9 +2,9 @@ import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
 import {
-  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync,
+  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../shared/handover.ts";
@@ -427,6 +427,66 @@ export function chooseResume(
   return { resume: false, id: randomUUID() };
 }
 
+/** How long a workspace pane sits with no output before den refreshes its
+ * handover (#23). `$DEN_IDLE_HANDOVER_MIN` or the `idle_handover_min` setting
+ * override it; "0" or "off" turns the feature off. */
+export const IDLE_HANDOVER_MS = 30 * 60_000;
+
+/** The idle window in ms, from $DEN_IDLE_HANDOVER_MIN, then the
+ * `idle_handover_min` setting, then IDLE_HANDOVER_MS. 0 means off. */
+function idleHandoverMs(): number {
+  for (const raw of [process.env.DEN_IDLE_HANDOVER_MIN, store.getSetting("idle_handover_min")]) {
+    if (raw == null || raw === "") continue;
+    if (raw.trim().toLowerCase() === "off") return 0;
+    const min = Number(raw);
+    if (Number.isFinite(min) && min >= 0) return min * 60_000;
+  }
+  return IDLE_HANDOVER_MS;
+}
+
+/** A notepad written this close to the end of a burst of work is taken as
+ * current: sessions update it at the end of a step, then print their reply. */
+export const NOTEPAD_FRESH_MS = 2 * 60_000;
+
+/**
+ * Is an idle handover due for this pane? All of:
+ * - someone typed or pasted since the last handover (else a pane left alone
+ *   would get one every idle period);
+ * - it has produced output, and none for `idleMs`;
+ * - its notepad was not already written near the end of that output.
+ * Pure, for the test.
+ */
+export function idleHandoverDue(p: {
+  now: number;
+  idleMs: number;
+  lastOutputAt: number;
+  lastInputAt: number;
+  lastHandoverAt: number;
+  notepadMtime: number;
+}): boolean {
+  if (p.idleMs <= 0) return false;
+  if (p.lastInputAt <= p.lastHandoverAt) return false;
+  if (!p.lastOutputAt || p.now - p.lastOutputAt < p.idleMs) return false;
+  return p.notepadMtime < p.lastOutputAt - NOTEPAD_FRESH_MS;
+}
+
+/** What the idle handover asks. It runs in a headless fork of the pane's
+ * conversation (see SessionManager.runIdleHandover), never in the live pane:
+ * a pane waiting at a permission prompt looks exactly as idle as a finished
+ * one, and typing into it would answer the prompt, or send a draft the
+ * developer left in the input box. ASCII, like every den prompt. */
+export function idleHandoverPrompt(notepad: string): string {
+  return (
+    `den: this session has gone quiet. Bring your handover at ${notepad} up to ` +
+    `date with where the work stands right now, following the handover rules in ` +
+    `your instructions: rewrite the developer's four sections and the session ` +
+    `notes in place, and leave everything else in the file alone. If you were ` +
+    `waiting on the developer (a question, a permission prompt, a decision), say ` +
+    `so under "Waiting on you". Do not run anything or change any other file. ` +
+    `Reply with one word: done.`
+  );
+}
+
 /**
  * Does a PTY look ready to receive scripted input? True once it has produced
  * some output and then gone quiet — i.e. the TUI has finished drawing and isn't
@@ -535,8 +595,17 @@ class DenSession {
   status: "running" | "exited" = "running";
   private buffer: string[] = [];
   private bufferBytes = 0;
-  /** When the PTY last emitted output; 0 = nothing yet. Drives `waitUntilIdle`. */
-  private lastOutputAt = 0;
+  /** When the PTY last emitted output; 0 = nothing yet. Drives `waitUntilIdle`
+   * and the idle handover. */
+  lastOutputAt = 0;
+  /** When anything was typed or pasted into the PTY; 0 = never. The idle
+   * handover only fires after input since the last one, so a pane nobody has
+   * touched doesn't get a handover every half hour. */
+  lastInputAt = 0;
+  /** When den last ran an idle handover for this pane, and whether one is
+   * running now. */
+  lastHandoverAt = 0;
+  handoverRunning = false;
   /** New output since the last scrollback flush to the store. */
   private scrollbackDirty = false;
   private listeners = new Set<Listener>();
@@ -695,6 +764,7 @@ class DenSession {
   write(data: string) {
     this.term?.write(data);
     this.lastActive = Date.now();
+    this.lastInputAt = this.lastActive;
   }
 
   /**
@@ -819,6 +889,68 @@ class SessionManager {
     }, SCROLLBACK_FLUSH_MS);
     // Don't keep the process alive just for this (CLI/tests exit cleanly).
     timer.unref?.();
+    // Idle handovers (#23): checked every minute, or faster when the idle
+    // window is set very short (for testing).
+    const idleMs = idleHandoverMs();
+    if (idleMs > 0) {
+      const idleTimer = setInterval(() => this.checkIdleHandovers(), Math.min(60_000, idleMs / 2));
+      idleTimer.unref?.();
+    }
+  }
+
+  /** Start an idle handover for every workspace main pane that is due one. */
+  private checkIdleHandovers() {
+    const idleMs = idleHandoverMs();
+    const now = Date.now();
+    for (const s of this.sessions.values()) {
+      if (s.shell || s.role !== "main" || s.look || s.view) continue;
+      if (s.status !== "running" || s.handoverRunning || !s.claudeSessionId) continue;
+      let notepadMtime = 0;
+      try {
+        notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
+      } catch {
+        // no notepad yet: nothing is current, so a handover is worth writing
+      }
+      const due = idleHandoverDue({
+        now, idleMs, notepadMtime,
+        lastOutputAt: s.lastOutputAt, lastInputAt: s.lastInputAt, lastHandoverAt: s.lastHandoverAt,
+      });
+      if (due) this.runIdleHandover(s);
+    }
+  }
+
+  /**
+   * Refresh a pane's handover from a headless fork of its conversation:
+   * `claude -p --resume <id> --fork-session --no-session-persistence` reads the
+   * whole conversation, writes the notepad, and exits without saving the fork,
+   * so the live pane, its transcript, and the resume list are all untouched.
+   * It may only read and edit the notepad. Fire-and-forget; a failure is
+   * logged and the pane is left as it was.
+   */
+  private runIdleHandover(s: DenSession) {
+    const id = s.claudeSessionId;
+    if (!id || !hasSession(id)) return; // nothing said in the pane yet
+    const notepad = notepadPath(s.groupId);
+    s.handoverRunning = true;
+    s.lastHandoverAt = Date.now();
+    execFile(
+      "claude",
+      [
+        "-p",
+        "--resume", id,
+        "--fork-session",
+        "--no-session-persistence",
+        "--add-dir", PROGRESS_DIR,
+        "--allowedTools", "Read", `Edit(//${notepad.replace(/^\/+/, "")})`,
+        "--append-system-prompt", progressInstruction(notepad),
+        "--", idleHandoverPrompt(notepad),
+      ],
+      { cwd: s.cwd, timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024 },
+      (err) => {
+        s.handoverRunning = false;
+        if (err) logWarn("idleHandover", err);
+      },
+    );
   }
 
   /** Restore persisted rows as exited placeholders (live PTYs don't survive). */

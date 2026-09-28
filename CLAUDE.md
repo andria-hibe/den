@@ -310,7 +310,19 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   restarted pane (no initial prompt) picks the thread back up — verified: a
   fresh `claude -p "Carry on."` finished half-done work from the notes alone.
   A ticket's text sits **below** both (`ticketNotesSeed`), so the notepad
-  opens on the status. `NotepadPane` leaves a handover's scroll alone and only
+  opens on the status. **Idle handover** (issue 23): when a workspace main
+  pane has been worked in and then gone quiet for 30 minutes
+  (`idleHandoverDue`: input since the last handover, no output for the
+  window, notepad not written near the end of the work), den refreshes the
+  notepad from a **headless fork** of the conversation — `claude -p --resume
+  <id> --fork-session --no-session-persistence`, allowed only `Read` and
+  `Edit` of the notepad (`runIdleHandover`). **Never** by typing into the
+  live pane: a pane at a permission prompt looks just as idle, and a submit
+  would answer it (or send a draft left in the input box). The fork saves no
+  transcript, so the pane's conversation and the resume list are untouched.
+  Once per quiet spell, rearmed by input. Window: `$DEN_IDLE_HANDOVER_MIN` →
+  the `idle_handover_min` setting → 30; `0`/`off` disables it (there's no UI
+  toggle). It spends tokens with nobody watching — see issue 11. `NotepadPane` leaves a handover's scroll alone and only
   follows the bottom for an older appended log.
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill
