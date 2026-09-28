@@ -38,7 +38,12 @@ WebSocket; everything else is REST.
 
 - `electron/main.ts` — Electron entry; `fixPath()` pulls the login-shell PATH so
   a double-clicked app finds `claude`/`gh`; runs `startServer()` in-process,
-  opens the window. Bundled to `dist/electron/main.cjs` by esbuild.
+  opens the window. Bundled to `dist/electron/main.cjs` by esbuild. The window
+  **reopens where you left it**: `rememberBounds` saves its normal bounds +
+  maximised flag to the `window_state` setting (debounced on move/resize, and on
+  close), and pure `restoreBounds` in `electron/windowState.ts` (unit-tested)
+  puts it back, clamped to a display that still exists — a window saved on an
+  unplugged monitor reopens centred on the primary display.
 - `server/app.ts` — `startServer()` Fastify factory + **all routes** (sessions,
   fs browsing, GitHub, Linear, notepad, terminal WebSocket). Shared by CLI + app.
 - `server/index.ts` — thin CLI wrapper over `startServer()`.

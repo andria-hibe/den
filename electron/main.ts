@@ -1,7 +1,9 @@
-import { app, BrowserWindow, Menu, shell } from "electron";
+import { app, BrowserWindow, Menu, screen, shell } from "electron";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { startServer, type RunningServer } from "../server/app.ts";
+import { store } from "../server/store.ts";
+import { MIN_SIZE, parseWindowState, restoreBounds } from "./windowState.ts";
 
 // Bundled to dist/electron/main.cjs (esbuild), so __dirname is dist/electron.
 let server: RunningServer | null = null;
@@ -42,6 +44,37 @@ function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+const WINDOW_SETTING = "window_state";
+
+/** Save the window's bounds whenever they settle, and on close. Saving on each
+ * move or resize (debounced), not only on close, keeps them if den is killed
+ * rather than quit. The normal bounds are saved, so a maximised window
+ * restores to its maximised state and still un-maximises to the size it had. */
+function rememberBounds(win: BrowserWindow) {
+  let timer: NodeJS.Timeout | null = null;
+  const save = () => {
+    if (win.isDestroyed() || win.isFullScreen() || win.isMinimized()) return;
+    const state = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    try {
+      store.setSetting(WINDOW_SETTING, JSON.stringify(state));
+    } catch {
+      // the db is closing on quit; the last debounced save already landed
+    }
+  };
+  const soon = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(save, 500);
+  };
+  win.on("resized", soon);
+  win.on("moved", soon);
+  win.on("maximize", soon);
+  win.on("unmaximize", soon);
+  win.on("close", () => {
+    if (timer) clearTimeout(timer);
+    save();
+  });
+}
+
 async function boot() {
   fixPath();
   installMenu();
@@ -51,15 +84,21 @@ async function boot() {
 
   server = await startServer({ port: 0, webDir });
 
+  // Open where the window was last left (see windowState.ts), kept on a
+  // display that still exists.
+  const saved = parseWindowState(store.getSetting(WINDOW_SETTING));
+  const areas = [screen.getPrimaryDisplay(), ...screen.getAllDisplays()].map((d) => d.workArea);
   const win = new BrowserWindow({
-    width: 1240,
-    height: 820,
-    minWidth: 860,
-    minHeight: 540,
+    ...restoreBounds(saved, areas),
+    minWidth: MIN_SIZE.width,
+    minHeight: MIN_SIZE.height,
     backgroundColor: "#fdf6fb",
     title: "den",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+
+  if (saved?.maximized) win.maximize();
+  rememberBounds(win);
 
   win.loadURL(server.url);
 
