@@ -79,7 +79,14 @@ WebSocket; everything else is REST.
   opens as a draft** (`gh pr create --draft`, never `gh pr ready`). There is
   no deny backstop for the draft rule — permission patterns are prefix
   matches, so `Bash(gh pr create:*)` can't say "only with `--draft`" — so
-  the instruction carries it alone. All of these are ASCII and unit-tested
+  the instruction carries it alone. **`denIssueRule()`** goes on **every**
+  pane kind, review included (andria, 2026-09-29): a den bug, rough edge, or
+  improvement idea gets filed as an issue in den's repo (`denIssueRepo()`,
+  from den's checkout's origin; check for duplicates first), and because den
+  is **public** while the work repo isn't, the issue describes den's
+  behaviour only — no work-repo code, file names, branch/ticket/PR names, or
+  people. It's the one named exception to the review pane's never-post rule
+  (its deny list doesn't block `gh issue create`). All of these are ASCII and unit-tested
   (`paneInstructions.test.ts`, `progressInstruction.test.ts`,
   `reviewInstruction.test.ts`). A new pane kind gets its own builder here,
   not a bare `-n name`.

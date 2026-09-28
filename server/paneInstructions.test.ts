@@ -4,6 +4,8 @@ import {
   isAscii,
   lookInstruction,
   myPrInstruction,
+  denIssueRule,
+  reviewInstruction,
   testingRules,
   workspaceInstruction,
 } from "./sessions.ts";
@@ -78,5 +80,20 @@ describe("testingRules", () => {
     expect(workspaceInstruction("/n.md")).toContain(testingRules());
     expect(myPrInstruction(1, "o/r", "b")).toContain(testingRules());
     expect(lookInstruction("T-1", "t", "/n.md")).not.toContain(testingRules());
+  });
+});
+
+describe("denIssueRule", () => {
+  it("is ASCII and reaches every pane kind, review included", () => {
+    const rule = denIssueRule();
+    expect(isAscii(rule)).toBe(true);
+    expect(rule).toContain("gh issue create --repo");
+    expect(rule).toContain("is public");
+    for (const text of [
+      workspaceInstruction("/n.md"),
+      myPrInstruction(1, "o/r", "b"),
+      lookInstruction("T-1", "t", "/n.md"),
+      reviewInstruction("/n.md", "/d.diff", "b", "/g.md"),
+    ]) expect(text).toContain(rule);
   });
 });

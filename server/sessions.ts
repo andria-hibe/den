@@ -11,6 +11,7 @@ import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../
 import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
+import { denRepo } from "./fs.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
@@ -223,6 +224,46 @@ export function houseRules(): string {
   );
 }
 
+/** den's own GitHub repo ("owner/name"), from its checkout's origin remote,
+ * for the file-a-den-issue rule. Falls back to the maintainer's repo. */
+let denSlugCache: string | null = null;
+export function denIssueRepo(): string {
+  if (denSlugCache) return denSlugCache;
+  let slug = "andria-hibe/den";
+  try {
+    const dir = denRepo();
+    const url = dir
+      ? execFileSync("git", ["-C", dir, "remote", "get-url", "origin"], { encoding: "utf8", timeout: 3000 }).trim()
+      : "";
+    const m = url.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/);
+    if (m) slug = m[1];
+  } catch {
+    // no checkout or no remote: keep the default
+  }
+  denSlugCache = slug;
+  return slug;
+}
+
+/** Every den-spawned session files den's own bugs and ideas where they'll be
+ * seen: as issues in den's repo, the backlog (andria, 2026-09-29). Den's repo
+ * is public and the work repo usually isn't, so the rule keeps the work out of
+ * the issue. Appended to every pane kind, including review panes, whose
+ * never-post rule makes this the one named exception. ASCII like every prompt. */
+export function denIssueRule(): string {
+  const repo = denIssueRepo();
+  return (
+    `den itself: if you hit a bug or a rough edge in den (the tool this session ` +
+    `runs in), or think of a way to improve it, file it as an issue with ` +
+    `\`gh issue create --repo ${repo}\`. First check ` +
+    `\`gh issue list --repo ${repo} --search "<words>"\` and don't file a ` +
+    `duplicate. ${repo} is public: describe den's behaviour only, and keep out ` +
+    `anything from the work you're doing (code, file names, branch, ticket, or ` +
+    `PR names, people, company details). Write it in plain ASCII, then tell the ` +
+    `developer you filed it, with the link. This is for den only, not for the ` +
+    `project you're working in.`
+  );
+}
+
 /** How a pane that writes code should treat tests: only the ones that earn
  * their keep. Every test is time on every run and something to maintain, so a
  * session adds tests for important, core behaviour and nothing else: not
@@ -249,7 +290,7 @@ export function testingRules(): string {
  * plus the house rules. Shared by create() and restartArgs() via
  * workspaceArgs(). */
 export function workspaceInstruction(notepad: string): string {
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}`;
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${denIssueRule()}`;
 }
 
 /** The system prompt for a my-PR pane (#5): which PR is on screen, how den
@@ -272,7 +313,7 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}\n${testingRules()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}\n${denIssueRule()}`
   );
 }
 
@@ -292,7 +333,7 @@ export function lookInstruction(
     `ticket ${which} in a pane beside you, and will ask you about it. The ` +
     `ticket's description is saved at the absolute path ${ticketFile}; read it ` +
     `before you answer anything about the ticket. That file is for reference, ` +
-    `so don't edit it.\n${houseRules()}`
+    `so don't edit it.\n${houseRules()}\n${denIssueRule()}`
   );
 }
 
@@ -349,7 +390,8 @@ export function reviewInstruction(
     `2. NEVER push, and never post anything to GitHub. No \`git push\`, no ` +
     `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
     `review goes in the notepad file named below and nowhere else; the developer ` +
-    `decides what, if anything, reaches GitHub.\n` +
+    `decides what, if anything, reaches GitHub. The one exception is an issue ` +
+    `about den itself, as described at the end.\n` +
     `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
     `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
     `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +
@@ -417,7 +459,8 @@ export function reviewInstruction(
     `deliverables, write only that file and leave the other alone. Once they ` +
     `are written, answer follow-up questions (about one file, one comment, or ` +
     `anything else) in the terminal and leave both files as they are, unless ` +
-    `the developer asks you to change them.`
+    `the developer asks you to change them.\n` +
+    denIssueRule()
   );
 }
 
@@ -1225,7 +1268,7 @@ class SessionManager {
     // the notepad instruction (the notepad stays for the developer's own use).
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
-      : `${houseRules()}\n${testingRules()}`;
+      : `${houseRules()}\n${testingRules()}\n${denIssueRule()}`;
     // In a worktree with a setup command, say what it is (#10).
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
