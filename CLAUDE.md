@@ -615,8 +615,8 @@ Worth knowing before you touch the session code:
   `web/src/prompts.ts`, and a test asserts each is ASCII.
 - **Issue 22** (base branch): new branches come off the repo's resolved base
   branch (see `baseRef` under Architecture), and a review pane's scratch branch
-  is told to start from the PR's checked-out code. Still open: stacking a
-  ticket on the branch of the ticket before it, which needs ticket order den
+  is told to start from the PR's checked-out code. Stacking a ticket on the
+  branch of the ticket before it is issue 26: it needs ticket order den
   doesn't have yet.
 
 Full narrative history is in the git log; user-facing run notes in `README.md`.

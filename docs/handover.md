@@ -10,14 +10,14 @@ roadmap. CLAUDE.md is the orientation doc, and
 
 ## State
 
-- Issues 1-8 are all fixed, in three commits on master: `6aa81dd` (#1-#3),
-  `a92542c` (#4, #6, #8), and the batch 3 commit (#5, #7, #24). None is
-  pushed, so GitHub still shows them open. Their `Closes` lines close them on
-  push. **Delete this file once they are closed.**
-- `npm run check` is green: 181 tests across 19 files. The one eslint warning
+- Pushed to origin on 2026-09-28. The commits' `Closes` lines closed issues
+  1-8 and 24, and #22 was closed by hand with its third case split into #26.
+  **Issues 1-8 are closed, so this file can go.** Before deleting it, move the
+  issue 10 correction below onto issue 10.
+- `npm run check` is green: 190 tests across 19 files. The one eslint warning
   (`useTerminal.ts:80`, `hostRef`) predates these sessions.
-- The installed app was repackaged at `6aa81dd` on 2026-09-28. Batches 2 and 3
-  are not in it.
+- The installed app was repackaged at `6aa81dd` on 2026-09-28. Everything
+  after that is not in it, including the base-branch fix.
 
 ## What `6aa81dd` did
 
@@ -120,12 +120,11 @@ to fix.
   `development`. With `origin/HEAD` unset and no GitHub remote it falls back
   to `master`, and the override fixes that.
 - Not done: the third case, stacking a ticket on the branch of the ticket
-  before it. The commit leaves #22 open for it. Ask andria whether to split
-  it into its own issue and close #22.
+  before it. Split into #26.
 
 ## Priority order for what is left
 
-1. The rest in issue-number order: #25, #13, #19, #17, #15, #23, #11, #14, #18,
+1. The rest in issue-number order: #25, #26, #13, #19, #17, #15, #23, #11, #14, #18,
    #16, #10, #21, #20, #12.
 
 ## Ground rules from these sessions
