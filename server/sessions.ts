@@ -145,12 +145,20 @@ export function scratchBranch(branch: string | null | undefined): string {
 
 /** The system-prompt instruction telling the main Claude to log progress to its
  * workspace notepad. Shared by create() and restart() so a restarted workspace
- * keeps its progress-logging wiring. */
-function progressInstruction(file: string): string {
+ * keeps its progress-logging wiring.
+ *
+ * It also tells the session to read the notepad before starting. A restart
+ * deliberately does not re-inject the initial prompt, so for a ticket workspace
+ * the notepad seed (`ticketNotesSeed`) is the only copy of the ticket a
+ * restarted session can see, and its log is the only record of the work so far.
+ * ASCII-only, like reviewInstruction, and tested the same way. */
+export function progressInstruction(file: string): string {
   return (
     `You're working in a project inside a tool called "den". Keep a running ` +
-    `progress log for the developer at the absolute path ${file}. After each ` +
-    `meaningful step — a decision, an edit, a completed task, or a blocker — ` +
+    `progress log for the developer at the absolute path ${file}. If that file ` +
+    `already has entries, read it before you start: it holds the record of the ` +
+    `work so far, and for a ticket it holds the ticket itself. After each ` +
+    `meaningful step (a decision, an edit, a completed task, or a blocker), ` +
     `append a short timestamped bullet to that file describing what you did. ` +
     `Keep entries concise and skimmable and never delete earlier ones. This ` +
     `file is shown to the developer in a side notepad; don't mention this ` +

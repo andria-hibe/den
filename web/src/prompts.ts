@@ -8,6 +8,7 @@
 // Each one mirrors the shape reviewInstruction (server/sessions.ts) sets, so den
 // can render what the session writes. Change them together.
 import type { PrReviewNote } from "../../server/github.ts";
+import type { LinearIssue } from "../../server/linear.ts";
 
 /** Ask a review pane for the reading guide: the change grouped into sections by
  * purpose, most important first. A separate, cheaper ask than the review; it
@@ -102,5 +103,62 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
   return (
     `Please action this ${n.kind.replace(/_/g, " ").toLowerCase()} from ` +
     `@${n.author}${where} on PR #${prNumber}:\n\n"${n.body}"${hunk}`
+  );
+}
+
+/** The notepad a ticket workspace starts with: a summary of the ticket, so the
+ * session has its context on disk. Claude appends progress below. After a
+ * restart this seed is the only copy of the ticket the session can see, which
+ * is why progressInstruction tells it to read the notepad first. */
+export function ticketNotesSeed(issue: LinearIssue): string {
+  const parts = [
+    `# ${issue.identifier}: ${issue.title}`,
+    "",
+    `**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`,
+  ];
+  if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
+  parts.push(
+    `[Open in Linear](${issue.url})`,
+    "",
+    "## Ticket",
+    "",
+    issue.description?.trim() || "_(no description)_",
+    "",
+    "---",
+    "",
+    "## Progress",
+    "",
+  );
+  return parts.join("\n");
+}
+
+/** Claude's first message when you start work on a ticket: the ticket, then a
+ * request to explain and propose before doing anything. */
+export function ticketPrompt(issue: LinearIssue): string {
+  return [
+    `I'm starting work on this Linear ticket:`,
+    "",
+    `${issue.identifier}: ${issue.title}`,
+    `State: ${issue.state.name}, priority: ${issue.priorityLabel}`,
+    "",
+    issue.description?.trim() || "(no description provided)",
+    "",
+    "Before writing any code, explain the issue in your own words and propose " +
+      "a solution or approach. Don't make changes yet. I'll decide the next " +
+      "step after your proposal.",
+  ].join("\n");
+}
+
+/** The opener of every self-edit session. This is the session that writes
+ * den's commit messages, CLAUDE.md, and issues, so its punctuation habits
+ * spread the furthest. */
+export function denPrompt(): string {
+  return (
+    `You're now working on den itself: the source of the very app this ` +
+    `session is running inside (this is its repo). First read ./CLAUDE.md to get ` +
+    `oriented on the architecture, conventions, and gotchas, then tell me briefly ` +
+    `that you're ready. Important: do NOT run \`npm run pack\` or reinstall or ` +
+    `reopen the app unless I explicitly ask. I control when the running app is ` +
+    `replaced. Then wait for me to tell you what to change.`
   );
 }

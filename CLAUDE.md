@@ -232,11 +232,15 @@ WebSocket; everything else is REST.
     The instruction string is itself written
     in ASCII — an instruction full of em dashes teaches the model to write
     them back — and `reviewInstruction.test.ts` asserts that with `isAscii`
-    (`shared/ascii.ts`). The client paste prompts (`guidePrompt`,
-    `reviewPrompt`, `autoReviewPrompt`, `fileReviewPrompt`, `notePrompt`) live
-    in the pure `web/src/prompts.ts` for the same reason, and
-    `prompts.test.ts` holds each to the same check. **Put any new paste prompt
-    there, not inline in a component.** `fileReviewPrompt` (the per-file
+    (`shared/ascii.ts`). The client prompts (`guidePrompt`, `reviewPrompt`,
+    `autoReviewPrompt`, `fileReviewPrompt`, `notePrompt`, and the ticket
+    flow's `ticketPrompt` / `ticketNotesSeed` and the self-edit `denPrompt`)
+    live in the pure `web/src/prompts.ts` for the same reason, and
+    `prompts.test.ts` holds each to the same check. `progressInstruction`
+    (every workspace main pane) is ASCII too, tested in
+    `progressInstruction.test.ts`, and tells a session to read its notepad
+    before starting, since a restart doesn't re-inject the initial prompt.
+    **Put any new client prompt in `prompts.ts`, not inline in a component.** `fileReviewPrompt` (the per-file
     "→ review" button) names the file and its hunk ranges instead of
     re-pasting them (the diff is already on disk), and tells the pane to answer
     in the terminal; `reviewInstruction` says the same about follow-up

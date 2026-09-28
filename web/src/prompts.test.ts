@@ -1,13 +1,30 @@
 import { describe, it, expect } from "vitest";
 import { isAscii } from "../../shared/ascii.ts";
+import type { LinearIssue } from "../../server/linear.ts";
 import {
   autoReviewPrompt,
+  denPrompt,
   fileReviewPrompt,
   guidePrompt,
   hunkRanges,
   notePrompt,
   reviewPrompt,
+  ticketNotesSeed,
+  ticketPrompt,
 } from "./prompts.ts";
+
+const ISSUE: LinearIssue = {
+  identifier: "FAST-1234",
+  title: "Fix the thing",
+  url: "https://linear.app/x/issue/FAST-1234",
+  priority: 2,
+  priorityLabel: "High",
+  branchName: "andria/fast-1234-fix-the-thing",
+  description: "It breaks.",
+  state: { name: "Todo", type: "unstarted", color: "#fff" },
+  updatedAt: "2026-09-01T00:00:00Z",
+  ticketHint: "fast-1234",
+};
 
 const FILE_LINES = [
   "diff --git a/server/git.ts b/server/git.ts",
@@ -28,6 +45,9 @@ describe("paste prompts", () => {
     reviewPrompt: reviewPrompt(42, "org/repo"),
     autoReviewPrompt: autoReviewPrompt(42, "org/repo"),
     fileReviewPrompt: fileReviewPrompt("server/git.ts", 42, FILE_LINES),
+    ticketNotesSeed: ticketNotesSeed(ISSUE),
+    ticketPrompt: ticketPrompt(ISSUE),
+    denPrompt: denPrompt(),
     notePrompt: notePrompt(42, {
       kind: "line comment",
       author: "someone",
@@ -78,5 +98,15 @@ describe("hunkRanges", () => {
 
   it("is empty for a file with no hunks (a pure rename or a binary)", () => {
     expect(hunkRanges(["diff --git a/x.png b/x.png", "Binary files differ"])).toEqual([]);
+  });
+});
+
+describe("denPrompt", () => {
+  it("drops the bold span but keeps the ground rules", () => {
+    const text = denPrompt();
+    expect(text).not.toContain("**");
+    expect(text).toContain("./CLAUDE.md");
+    expect(text).toContain("npm run pack");
+    expect(text).toContain("wait for me");
   });
 });

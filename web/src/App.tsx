@@ -23,6 +23,7 @@ import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
+import { denPrompt, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 
@@ -203,46 +204,6 @@ export function App() {
           (!!issue.ticketHint && s.ticketHint === issue.ticketHint)),
     );
 
-  // Seed the workspace notepad with a summary of the ticket, so the session
-  // starts with its context; Claude appends progress below.
-  const ticketNotesSeed = (issue: LinearIssue) => {
-    const parts = [
-      `# ${issue.identifier}: ${issue.title}`,
-      "",
-      `**State:** ${issue.state.name}  ·  **Priority:** ${issue.priorityLabel}`,
-    ];
-    if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
-    parts.push(
-      `[Open in Linear](${issue.url})`,
-      "",
-      "## Ticket",
-      "",
-      issue.description?.trim() || "_(no description)_",
-      "",
-      "---",
-      "",
-      "## Progress",
-      "",
-    );
-    return parts.join("\n");
-  };
-
-  // Claude's first message when you start work: the ticket + a request to
-  // explain and propose before doing anything.
-  const ticketPrompt = (issue: LinearIssue) =>
-    [
-      `I'm starting work on this Linear ticket:`,
-      "",
-      `${issue.identifier}: ${issue.title}`,
-      `State: ${issue.state.name} · Priority: ${issue.priorityLabel}`,
-      "",
-      issue.description?.trim() || "(no description provided)",
-      "",
-      "Before writing any code: explain the issue in your own words and propose " +
-        "a solution or approach. Don't make changes yet — I'll decide the next " +
-        "step after your proposal.",
-    ].join("\n");
-
   const openTicket = (issue: LinearIssue) => {
     const existing = sessionForTicket(issue);
     if (existing) {
@@ -291,14 +252,6 @@ export function App() {
   // editor at a time) + a locked, descriptive title.
   const DEN_TICKET = "den:self-edit";
 
-  const denPrompt =
-    `You're now working on **den itself** — the source of the very app this ` +
-    `session is running inside (this is its repo). First read ./CLAUDE.md to get ` +
-    `oriented on the architecture, conventions, and gotchas, then tell me briefly ` +
-    `that you're ready. Important: do NOT run \`npm run pack\` or reinstall/reopen ` +
-    `the app unless I explicitly ask — I control when the running app is replaced. ` +
-    `Then wait for me to tell you what to change.`;
-
   const openDenEditor = () => {
     if (!denRoot) {
       setErrMsg("couldn't locate the den source repo");
@@ -318,7 +271,7 @@ export function App() {
       // Start with an empty progress note (default "# Progress"), not the
       // handover doc — the handover lives in the initial prompt so we never
       // risk editing it with unrelated progress entries.
-      initialPrompt: denPrompt,
+      initialPrompt: denPrompt(),
     });
   };
 
