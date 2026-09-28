@@ -106,11 +106,10 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
   );
 }
 
-/** The notepad a ticket workspace starts with: a summary of the ticket, so the
- * session has its context on disk. Claude appends progress below. After a
- * restart this seed is the only copy of the ticket the session can see, which
- * is why progressInstruction tells it to read the notepad first. */
-export function ticketNotesSeed(issue: LinearIssue): string {
+/** A ticket as markdown: title, state, branch, link, and description. A look
+ * pane gets this as the file its system prompt points at (lookInstruction), so
+ * the session can read the ticket you are both looking at. */
+export function ticketBrief(issue: LinearIssue): string {
   const parts = [
     `# ${issue.identifier}: ${issue.title}`,
     "",
@@ -124,12 +123,16 @@ export function ticketNotesSeed(issue: LinearIssue): string {
     "",
     issue.description?.trim() || "_(no description)_",
     "",
-    "---",
-    "",
-    "## Progress",
-    "",
   );
   return parts.join("\n");
+}
+
+/** The notepad a ticket workspace starts with: the ticket brief, so the
+ * session has its context on disk, then a progress section Claude appends to.
+ * After a restart this seed is the only copy of the ticket the session can see,
+ * which is why progressInstruction tells it to read the notepad first. */
+export function ticketNotesSeed(issue: LinearIssue): string {
+  return `${ticketBrief(issue)}\n---\n\n## Progress\n`;
 }
 
 /** Claude's first message when you start work on a ticket: the ticket, then a

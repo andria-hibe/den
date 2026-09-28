@@ -10,15 +10,14 @@ roadmap. CLAUDE.md is the orientation doc, and
 
 ## State
 
-- Two commits fix issues 1, 2, 3, 4, 6, and 8: `6aa81dd` (#1-#3) and the
-  batch 2 commit (#4, #6, #8). Both are on master and **not pushed**, so
-  GitHub still shows those issues open. Their `Closes` lines close them on
-  push.
-- `npm run check` is green: 171 tests across 18 files. The one eslint warning
+- Issues 1-8 are all fixed, in three commits on master: `6aa81dd` (#1-#3),
+  `a92542c` (#4, #6, #8), and the batch 3 commit (#5, #7, #24). None is
+  pushed, so GitHub still shows them open. Their `Closes` lines close them on
+  push. **Delete this file once they are closed.**
+- `npm run check` is green: 181 tests across 19 files. The one eslint warning
   (`useTerminal.ts:80`, `hostRef`) predates these sessions.
-- The installed app was repackaged at `6aa81dd` on 2026-09-28. Batch 2 is not
-  in it yet.
-- Issues 5 and 7 are what keeps this file alive.
+- The installed app was repackaged at `6aa81dd` on 2026-09-28. Batches 2 and 3
+  are not in it.
 
 ## What `6aa81dd` did
 
@@ -59,19 +58,60 @@ panes an instruction.
 - #8: `denPrompt` moved into `prompts.ts` as a function, without the bold span
   or the em dashes.
 
+## What batch 3 did
+
+- One builder per pane kind, shared by `create()` and `restartArgs`:
+  `workspaceArgs` and `singlePaneArgs` in `server/sessions.ts`. Before this, a
+  my-PR or look pane got a bare `-n name` and no system prompt at all.
+- #24: `houseRules()` (plain ASCII, every PR opens as a draft) is appended to
+  workspace, my-PR, and look panes. There is no deny backstop for the draft
+  rule; the issue explains why.
+- #5: `myPrInstruction` names the PR, repo, and branch, says comments arrive
+  pasted, and says to draft replies in the terminal rather than post them. No
+  notepad, a decision the issue left open.
+- #7: a look pane saves the ticket (`ticketBrief` in `prompts.ts`) to the
+  group's notepad path, and `lookInstruction` points the session at it. A
+  file instead of inlining the description, so a restart rebuilds the same
+  prompt without the description on the session. A look pane created before
+  this change gets a file that says den did not save the description.
+- Verified live on an isolated server (`DEN_DB=<tmp> PORT=4399`): look,
+  my-PR, and workspace panes spawn with their prompts (including `--draft`),
+  a restart rebuilds the identical prompt, and closing a look pane deletes
+  its ticket file.
+
+## Found while verifying, not fixed
+
+`resumeArgs` falls back to the newest conversation recorded in the pane's cwd
+when the pane's own transcript does not exist yet. A pane restarted before
+anyone typed in it has no transcript, so it resumes an unrelated conversation
+from the same folder: in the work repo, another ticket's session. The fallback
+exists for panes created before den pinned session ids. Worth an issue; ask
+andria before filing.
+
+## Corrections to issue text
+
+**Issue 10 overstates the privacy constraint.** It says runn's local
+environment commands cannot live in this public repo. They already do:
+`server/apprun.ts` contains `runn up`, `runn status`, and the
+`.runn/project.env` parsing. The app runner is most of a starting point for
+that issue, not a thing to work around.
+
+**Issue 22's middle case already works.** A review pane creates its scratch
+branch with no base, inside a worktree that has the PR checked out, so it
+inherits the PR's branch. The issue asks to make that explicit in
+`reviewInstruction` so a later edit cannot break it silently. It is not a bug
+to fix.
+
 ## Priority order for what is left
 
-1. #24, #5, #7: one instruction builder, in the shape of `reviewInstruction`
-   and shared by `create()` and `restartArgs`, for work, my-PR, and look
-   panes. #24's draft-PR rule goes in the work-pane version.
-2. #22: `baseRef` branches off `master` instead of the repo's base branch.
-3. The rest in issue-number order: #13, #19, #17, #15, #23, #11, #14, #18,
+1. #22: `baseRef` branches off `master` instead of the repo's base branch.
+2. The rest in issue-number order: #13, #19, #17, #15, #23, #11, #14, #18,
    #16, #10, #21, #20, #12.
 
 ## Ground rules from these sessions
 
-- Do not run `npm run pack`, reinstall, or reopen the app. Andria controls when
-  the running app is replaced.
+- Do not run `npm run pack`, reinstall, or reopen the app unless andria asks.
+  They control when the running app is replaced.
 - Add new work as a GitHub issue, not as a bullet in CLAUDE.md.
 - `npm run check` is the gate. Prettier is not part of it, and CLAUDE.md is not
   Prettier-formatted.

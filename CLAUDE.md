@@ -48,7 +48,22 @@ WebSocket; everything else is REST.
   and ticket/PR/look/view metadata. Spawns `claude -n <name> [flags] [prompt]`.
   `reviewInstruction` asks a review pane for **two** deliverables: the reading
   guide (`~/.den/review/<groupId>.guide.md`, grouped by purpose) and the review
-  (the notepad, filed per file).
+  (the notepad, filed per file). **Every Claude pane gets a system prompt from
+  one builder per kind**, shared by `create()` and `restartArgs` so a revived
+  pane gets exactly what a fresh one did: `workspaceArgs` →
+  `workspaceInstruction` (notepad + house rules) for a workspace main, and
+  `singlePaneArgs` for the rest — `reviewArgs` for a review pane,
+  `myPrInstruction` (which PR/repo/branch, act on pasted comments, draft
+  replies here rather than posting) for a my-PR pane, `lookInstruction` for a
+  look pane. **`houseRules()`** is appended to every pane that can commit or
+  open a PR: plain ASCII in anything that leaves the machine, and **every PR
+  opens as a draft** (`gh pr create --draft`, never `gh pr ready`). There is
+  no deny backstop for the draft rule — permission patterns are prefix
+  matches, so `Bash(gh pr create:*)` can't say "only with `--draft`" — so
+  the instruction carries it alone. All of these are ASCII and unit-tested
+  (`paneInstructions.test.ts`, `progressInstruction.test.ts`,
+  `reviewInstruction.test.ts`). A new pane kind gets its own builder here,
+  not a bare `-n name`.
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot). Rows carry a **`pos`** rail sort key
@@ -273,7 +288,12 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
   `review` (others' PR), `mypr` (your PR), or a ticket-look. They also carry
-  `ticket` / `pr` / `prRepo` / `branch` for linking.
+  `ticket` / `pr` / `prRepo` / `branch` for linking. A **look** pane saves the
+  ticket (`ticketBrief`, sent as `notepadSeed`) to the group's notepad path so
+  `lookInstruction` can point the session at it — the same file on restart,
+  deleted by `remove()`. It's a reference file, not a progress log, and the
+  look layout doesn't render it. A **my-PR** pane has no notepad (its layout
+  has nowhere to show one; the PR's commits are the record).
 The rail shows only `role === "main"`. The frontend polls `/api/sessions` (~4s)
 to sync names/status/attention — the poll **only merges existing rows, never
 adds new ones**, so any code that creates a session out-of-band must refetch the
@@ -290,8 +310,8 @@ group in a `shellTab` map.
 Restarting exited sessions: `sessions.restart(id)` (route `POST /api/sessions/:id/restart`)
 re-spawns an exited session's PTY in place, keeping its cwd/name/colour/branch/
 ticket/PR context. Claude args are **rebuilt** from the persisted context
-(`restartArgs` — a workspace main keeps its `--add-dir`/progress-notepad wiring;
-look/PR panes get `-n name`), so restart never re-injects the one-time initial
+(`restartArgs`, via the same `workspaceArgs` / `singlePaneArgs` builders
+`create()` uses, so every pane keeps its system prompt), so restart never re-injects the one-time initial
 prompt, and it works even after a server restart wiped the in-memory `spawnArgs`.
 The scrollback is cleared (fresh process). The frontend keys each `TerminalView`
 by `` `${id}:${status}` `` so the flip to "running" remounts it and reconnects to
@@ -577,16 +597,16 @@ Architecture and Features above. **Add new work as an issue, not as a bullet
 here.**
 
 A session handover with the current state of that backlog lives in
-`docs/handover.md` (delete it once issues 1-8 are closed).
+`docs/handover.md` (delete it once issues 1-8 are closed on GitHub).
 
-Two clusters are worth knowing before you touch the session code:
+Worth knowing before you touch the session code:
 
-- **Issues 1-8** are all one bug in different places: the prompts den injects
-  into sessions (`reviewInstruction`, `progressInstruction`, `denPrompt`,
-  `ticketPrompt`, and the client-side paste prompts) disagree with each other
-  about ASCII, about where a session should write its answer, and about what a
-  restarted or my-PR pane knows. `reviewInstruction` is the model to copy: one
-  builder, shared by create + restart, asserted ASCII by a test.
+- **Issues 1-8** (fixed 2026-09-28) were one bug in different places: the
+  prompts den injects disagreed about ASCII, about where a session should
+  write its answer, and about what a restarted, my-PR, or look pane knows.
+  The fix is the pattern to keep: every server instruction comes from one
+  builder shared by create + restart, every client prompt lives in
+  `web/src/prompts.ts`, and a test asserts each is ASCII.
 - **Issue 22**: `baseRef` (`server/git.ts`) branches off `master`/`main` only.
   A repo based on `development` gets a branch off a stale master, or off HEAD
   with a warning nobody reads.

@@ -166,6 +166,83 @@ export function progressInstruction(file: string): string {
   );
 }
 
+/** The rules for anything a session writes that leaves this machine: commit
+ * messages, PR titles and descriptions, and GitHub replies. Appended to every
+ * pane that can commit or open a PR (workspace mains, my-PR panes, look panes),
+ * so one string carries them and they cannot drift between pane kinds.
+ *
+ * - **Plain ASCII**, for the reason reviewInstruction gives: andria pastes and
+ *   posts this text, and a curly quote or an em dash survives as mojibake.
+ * - **Every PR opens as a draft** (#24). A PR that opens ready for review
+ *   notifies reviewers before anyone has looked at it, and that call belongs to
+ *   the developer. There is no deny backstop for this: permission patterns are
+ *   prefix matches, so `Bash(gh pr create:*)` cannot express "only with
+ *   --draft", and deny beats allow. The instruction carries it alone. */
+export function houseRules(): string {
+  return (
+    `House rules for anything you write that leaves this machine (commit ` +
+    `messages, PR titles and descriptions, GitHub comments and replies):\n` +
+    `1. Write it in plain ASCII. Use "-" for a dash, "'" for an apostrophe, '"' ` +
+    `for a quote, "->" for an arrow, and "..." for an ellipsis. Never write an ` +
+    `em dash, an en dash, a curly quote, a real arrow, a non-breaking space, or ` +
+    `an emoji.\n` +
+    `2. Open every pull request as a draft: always pass --draft to ` +
+    `\`gh pr create\`. Never run \`gh pr ready\` or mark a PR ready for review ` +
+    `any other way. The developer decides when reviewers are notified.`
+  );
+}
+
+/** The system prompt for a Claude workspace's main pane: the progress notepad
+ * plus the house rules. Shared by create() and restartArgs() via
+ * workspaceArgs(). */
+export function workspaceInstruction(notepad: string): string {
+  return `${progressInstruction(notepad)}\n${houseRules()}`;
+}
+
+/** The system prompt for a my-PR pane (#5): which PR is on screen, how den
+ * feeds it comments, and the house rules, since its replies reach reviewers on
+ * GitHub. It gets no notepad: the my-PR layout has nowhere to render one, and
+ * the PR's own commits are the record of what changed. Unlike a review pane it
+ * is meant to commit and push, so it gets no deny backstop. */
+export function myPrInstruction(
+  pr: number | null,
+  repo: string | null,
+  branch: string | null,
+): string {
+  const which = `pull request${pr ? ` #${pr}` : ""}${repo ? ` (${repo})` : ""}`;
+  const where = branch ? `, checked out on branch ${branch}` : "";
+  return (
+    `You're working on the developer's own ${which}${where}, inside a tool ` +
+    `called "den". den shows the PR's description, reviews, and comments beside ` +
+    `you, and the developer pastes individual comments into this session for ` +
+    `you to action. For each one, make the change it asks for (or explain why ` +
+    `not), run the checks that cover it, and say briefly what you changed. ` +
+    `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
+    `write it here for the developer to post; don't post to GitHub yourself ` +
+    `unless asked.\n${houseRules()}`
+  );
+}
+
+/** The system prompt for a look pane (#7): the developer is reading a Linear
+ * ticket beside this session, so it should know which one. The ticket's text
+ * is saved to a file (the group's notepad path, seeded by the client with
+ * `ticketBrief`) rather than inlined, so a restart rebuilds the same prompt
+ * without den needing the description again, and remove() cleans it up. */
+export function lookInstruction(
+  ticket: string | null,
+  title: string,
+  ticketFile: string,
+): string {
+  const which = ticket ? `${ticket}: ${title}` : title;
+  return (
+    `You're inside a tool called "den". The developer is reading the Linear ` +
+    `ticket ${which} in a pane beside you, and will ask you about it. The ` +
+    `ticket's description is saved at the absolute path ${ticketFile}; read it ` +
+    `before you answer anything about the ticket. That file is for reference, ` +
+    `so don't edit it.\n${houseRules()}`
+  );
+}
+
 /** System-prompt instruction for a PR-review pane. The session has a full shell
  * (see buildReviewPermissions), so the rules that keep it from touching the PR
  * live here: never commit, never push, and any change it needs to make goes on a
@@ -778,24 +855,18 @@ class SessionManager {
         createdAt: now, lastActive: now, groupId, role: "main",
       });
       s.claudeSessionId = randomUUID();
-      // A "review" pane keeps a workspace notepad: Claude saves its finished
-      // review there and den renders it beside the diff (and it's a record for
-      // the developer). Seeded empty so the review column shows its prompt until
-      // Claude writes. Other single-pane views (look / mypr) don't.
-      if (opts.view === "review") {
-        s.spawnArgs = [
-          "--session-id", s.claudeSessionId, "-n", name,
-          ...this.reviewArgs(groupId, branch, opts.reviewDiff),
-        ];
-      } else {
-        s.spawnArgs = ["--session-id", s.claudeSessionId, "-n", name];
-      }
+      // Each kind gets its own system prompt from one builder, shared with
+      // restartArgs (see singlePaneArgs).
       s.branch = branch;
       s.ticket = opts.ticket ?? null;
       s.look = !!opts.look;
       s.view = opts.view ?? null;
       s.pr = opts.pr ?? null;
       s.prRepo = opts.prRepo ?? null;
+      s.spawnArgs = [
+        "--session-id", s.claudeSessionId, "-n", name,
+        ...this.singlePaneArgs(s, { diff: opts.reviewDiff, seed: opts.notepadSeed }),
+      ];
       // Keep the descriptive ticket/PR title — don't let the terminal retitle it.
       if (opts.ticket || opts.pr) s.titleLocked = true;
       this.spawnSession(s);
@@ -804,8 +875,7 @@ class SessionManager {
 
     // Claude workspace: main pane + shell pane + notepad.
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
-    const file = this.ensureNotepad(groupId, opts.notepadSeed);
-    const instruction = progressInstruction(file);
+    this.ensureNotepad(groupId, opts.notepadSeed);
 
     const main = new DenSession({
       id: randomUUID(), name, color, cwd, shell: false,
@@ -818,8 +888,7 @@ class SessionManager {
       ...(opts.resumeId
         ? ["--resume", opts.resumeId]
         : ["--session-id", main.claudeSessionId, "-n", name]),
-      "--add-dir", PROGRESS_DIR,
-      "--append-system-prompt", instruction,
+      ...this.workspaceArgs(groupId),
       // An initial prompt (e.g. the ticket) becomes Claude's first message. The
       // `--` end-of-options separator means a prompt starting with "-" is read as
       // the positional prompt, never as a flag (arg-injection guard).
@@ -881,26 +950,57 @@ class SessionManager {
     return s.meta();
   }
 
-  /** Claude spawn args for a restart, rebuilt from the session's context. A
-   * workspace main keeps its progress-notepad wiring; look/PR panes just get the
-   * resume args. (No initial prompt — that's a one-time create-only thing.) */
+  /** Claude spawn args for a restart, rebuilt from the session's context by
+   * the same builders create() uses, so a revived pane gets exactly the system
+   * prompt a fresh one would. (No initial prompt: that's a one-time create-only
+   * thing.) */
   private restartArgs(s: DenSession): string[] {
     const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
-      mkdirSync(PROGRESS_DIR, { recursive: true });
-      const file = notepadPath(s.groupId);
+      return [...resume, ...this.workspaceArgs(s.groupId)];
+    }
+    return [...resume, ...this.singlePaneArgs(s)];
+  }
+
+  /** The notepad wiring and system prompt for a workspace main pane, shared by
+   * create() and restartArgs(). The notepad itself is created (and seeded) by
+   * create(); a restart keeps whatever is in it. */
+  private workspaceArgs(groupId: string): string[] {
+    mkdirSync(PROGRESS_DIR, { recursive: true });
+    return [
+      "--add-dir", PROGRESS_DIR,
+      "--append-system-prompt", workspaceInstruction(notepadPath(groupId)),
+    ];
+  }
+
+  /** The system prompt (and any files it names) for a single-pane Claude
+   * session, by kind, shared by create() and restartArgs(). `diff` and `seed`
+   * come only from create; a restart keeps what was saved before.
+   * - review: reviewArgs (guardrails, notepad, diff, guide).
+   * - mypr: the PR it is on and the house rules; no files.
+   * - look: the ticket, saved to the group's notepad path so a restart can
+   *   point at it again. */
+  private singlePaneArgs(
+    s: DenSession,
+    from: { diff?: string; seed?: string } = {},
+  ): string[] {
+    if (s.view === "review") return this.reviewArgs(s.groupId, s.branch, from.diff);
+    if (s.view === "mypr") {
+      return ["--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch)];
+    }
+    if (s.look) {
+      // A look pane from before den saved the ticket has no seed: say so in the
+      // file rather than leave the session hunting for a description.
+      const fallback =
+        `# ${s.ticket ?? s.name}\n\nden did not save this ticket's description. ` +
+        `Ask the developer to paste it.\n`;
+      const file = this.ensureNotepad(s.groupId, from.seed ?? fallback);
       return [
-        ...resume,
         "--add-dir", PROGRESS_DIR,
-        "--append-system-prompt", progressInstruction(file),
+        "--append-system-prompt", lookInstruction(s.ticket, s.name, file),
       ];
     }
-    // A review pane keeps its guardrails + notepad wiring so a revived review
-    // still won't commit/push the PR and still saves (and shows) its review.
-    if (s.view === "review") {
-      return [...resume, ...this.reviewArgs(s.groupId, s.branch)];
-    }
-    return resume;
+    return [];
   }
 
   /** The guardrail + notepad wiring for a PR-review pane's Claude args, shared

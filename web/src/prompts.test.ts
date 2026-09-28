@@ -9,6 +9,7 @@ import {
   hunkRanges,
   notePrompt,
   reviewPrompt,
+  ticketBrief,
   ticketNotesSeed,
   ticketPrompt,
 } from "./prompts.ts";
@@ -45,6 +46,7 @@ describe("paste prompts", () => {
     reviewPrompt: reviewPrompt(42, "org/repo"),
     autoReviewPrompt: autoReviewPrompt(42, "org/repo"),
     fileReviewPrompt: fileReviewPrompt("server/git.ts", 42, FILE_LINES),
+    ticketBrief: ticketBrief(ISSUE),
     ticketNotesSeed: ticketNotesSeed(ISSUE),
     ticketPrompt: ticketPrompt(ISSUE),
     denPrompt: denPrompt(),
@@ -108,5 +110,14 @@ describe("denPrompt", () => {
     expect(text).toContain("./CLAUDE.md");
     expect(text).toContain("npm run pack");
     expect(text).toContain("wait for me");
+  });
+});
+
+describe("ticketNotesSeed", () => {
+  it("is the ticket brief plus a progress section", () => {
+    const seed = ticketNotesSeed(ISSUE);
+    expect(seed.startsWith(ticketBrief(ISSUE))).toBe(true);
+    expect(seed).toContain("## Progress");
+    expect(ticketBrief(ISSUE)).not.toContain("## Progress");
   });
 });

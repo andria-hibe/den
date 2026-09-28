@@ -23,7 +23,7 @@ import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
-import { denPrompt, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
+import { denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 
@@ -226,6 +226,8 @@ export function App() {
       look: true,
       // Ticket id is shown by the chip, so keep the title to just the summary.
       name: issue.title,
+      // Saved beside the session so its system prompt can point at the ticket.
+      notepadSeed: ticketBrief(issue),
     });
   };
 
