@@ -178,3 +178,113 @@ export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
   }
   return base;
 }
+
+// --- Worktree setup (#10) ----------------------------------------------------
+// A fresh worktree of the work repo isn't ready to run: the repo's gitignored
+// local files (.env, generated artifacts, node_modules) live only in the main
+// checkout. Repos say how to bring one up themselves, so den reads that rather
+// than carrying anyone's setup steps: `conductor.json`'s `scripts.setup` (the
+// Conductor app's convention; runn declares `./scripts/setup-worktree.sh`
+// there), else a `scripts/setup-worktree.sh`. Whether it's needed comes from
+// `.worktreeinclude` (Claude Code's list of gitignored files a worktree
+// should have): a listed path the main checkout has and this worktree lacks.
+
+export interface WorktreeSetup {
+  /** Shell command that sets this worktree up (run in `dir`), or null. */
+  command: string | null;
+  /** Where the command came from, for the tooltip. */
+  source: string | null;
+  /** The worktree's root. */
+  dir: string;
+  /** This is the repo's own checkout, not an added worktree: nothing to copy in. */
+  main: boolean;
+  /** Paths the main checkout has and this worktree is missing. */
+  missing: string[];
+}
+
+/** The repo's own setup command, from conductor.json or a setup script. */
+export function setupCommandFor(root: string): { command: string; source: string } | null {
+  try {
+    const conductor = JSON.parse(readFileSync(join(root, "conductor.json"), "utf8")) as {
+      scripts?: { setup?: unknown };
+    };
+    const setup = conductor.scripts?.setup;
+    if (typeof setup === "string" && setup.trim()) {
+      return { command: setup.trim(), source: "conductor.json" };
+    }
+  } catch {
+    // no conductor.json, or not JSON
+  }
+  if (existsSync(join(root, "scripts", "setup-worktree.sh"))) {
+    return { command: "./scripts/setup-worktree.sh", source: "scripts/setup-worktree.sh" };
+  }
+  return null;
+}
+
+/** The plain paths (no globs) a `.worktreeinclude` lists. Pure, for the test. */
+export function literalIncludes(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && !l.startsWith("!") && !/[*?[\]]/.test(l))
+    .map((l) => l.replace(/^\/+/, "").replace(/\/+$/, ""))
+    .filter((l) => l && !l.includes(".."));
+}
+
+/** The main checkout of the repo `root` belongs to. A worktree's `.git` is a
+ * file pointing at `<main>/.git/worktrees/<name>`; the main checkout's is a
+ * directory. */
+export function mainCheckoutOf(root: string): string {
+  try {
+    const dotGit = readFileSync(join(root, ".git"), "utf8");
+    const gitdir = dotGit.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    const m = gitdir?.match(/^(.*)\/\.git\/worktrees\/[^/]+$/);
+    if (m) return m[1];
+  } catch {
+    // .git is a directory (EISDIR): this is the main checkout
+  }
+  return root;
+}
+
+export function detectSetup(cwd: string): WorktreeSetup {
+  const dir = repoRoot(cwd);
+  const main = mainCheckoutOf(dir);
+  const found = setupCommandFor(dir) ?? setupCommandFor(main);
+  const isMain = main === dir;
+  const missing: string[] = [];
+  if (!isMain) {
+    // The repo's own list when it has one (runn's setup copies node_modules
+    // only on request, so checking it there would never clear); otherwise the
+    // one thing every JS checkout needs.
+    let wanted: string[];
+    try {
+      wanted = literalIncludes(readFileSync(join(dir, ".worktreeinclude"), "utf8"));
+    } catch {
+      wanted = existsSync(join(dir, "package.json")) ? ["node_modules"] : [];
+    }
+    for (const p of wanted) {
+      if (existsSync(join(main, p)) && !existsSync(join(dir, p))) missing.push(p);
+    }
+  }
+  return { command: found?.command ?? null, source: found?.source ?? null, dir, main: isMain, missing };
+}
+
+/** A line for a workspace pane's system prompt when its checkout is a worktree
+ * with a setup command, so Claude knows the likely fix when a test or the app
+ * fails on a missing .env or dependency. ASCII, like every den prompt. Empty
+ * when there's nothing to say. */
+export function setupHint(cwd: string): string {
+  const s = detectSetup(cwd);
+  if (s.main || !s.command) return "";
+  const state = s.missing.length
+    ? `It looks not set up yet: ${s.missing.join(", ")} ${s.missing.length === 1 ? "is" : "are"} missing here.`
+    : "It looks set up.";
+  return (
+    `This checkout is a git worktree of the repo. The repo's command for ` +
+    `setting up a fresh worktree is \`${s.command}\` (from ${s.source}), run ` +
+    `from ${s.dir}. ${state} If tests or the app fail for environment reasons ` +
+    `(a missing .env, dependencies, or generated files), that command is the ` +
+    `likely fix: suggest it to the developer, who can run it from den's ` +
+    `"set up" button, rather than recreating files by hand.`
+  );
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRunnStatus, extractPort } from "./apprun.ts";
+import { parseRunnStatus, extractPort, literalIncludes } from "./apprun.ts";
 
 describe("extractPort", () => {
   it("reads an explicit port from common flag styles", () => {
@@ -47,5 +47,22 @@ runn_runn-a48821-postgres-1   pgvector    Up 14 hours (healthy)`;
 runn_x-postgres-1   pgvector   Up 14 hours (healthy)
 runn_x-redis-1      redis      Up 14 hours`;
     expect(parseRunnStatus(noApp).running).toBe(false);
+  });
+});
+
+describe("literalIncludes", () => {
+  it("keeps plain paths and drops globs, comments, and negations", () => {
+    const text = [
+      "# Local environment",
+      ".env",
+      ".env.local",
+      "",
+      "services/*/dist/",
+      "app/javascript/src/**/__generated__/",
+      "services/prisma/prisma-generated/",
+      "!keep.me",
+      "../escape",
+    ].join("\n");
+    expect(literalIncludes(text)).toEqual([".env", ".env.local", "services/prisma/prisma-generated"]);
   });
 });

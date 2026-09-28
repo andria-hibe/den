@@ -33,7 +33,7 @@ import {
   repoBaseName, isValidBranch,
   type WorkEnv,
 } from "./git.ts";
-import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
+import { detectAppRunner, appRunnerStatus, detectSetup } from "./apprun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -579,6 +579,44 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // can be eaten by zsh prompt init).
     const shell = sessions.get(meta.id);
     const cmd = `cd ${shellQuote(runner.dir)} && ${runner.command}\r`;
+    setTimeout(() => shell?.write(cmd), 400);
+    reply.code(201);
+    return meta;
+  });
+
+  // Worktree setup (#10): the repo's own setup command, and whether this
+  // worktree looks like it still needs it.
+  app.get("/api/app/setup", async (req, reply) => {
+    const { sessionId } = req.query as { sessionId?: string };
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    return detectSetup(session.cwd);
+  });
+
+  // Run it the way the run button runs the app: in a fresh shell tab, typed in
+  // so the output is in front of you and Ctrl-C works.
+  app.post("/api/app/setup", async (req, reply) => {
+    const { sessionId } = (req.body ?? {}) as { sessionId?: string };
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const setup = detectSetup(session.cwd);
+    if (!setup.command || setup.main) {
+      reply.code(400);
+      return { error: "no_setup" };
+    }
+    const meta = sessions.addShell(session.groupId);
+    if (!meta) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const shell = sessions.get(meta.id);
+    const cmd = `cd ${shellQuote(setup.dir)} && ${setup.command}\r`;
     setTimeout(() => shell?.write(cmd), 400);
     reply.code(201);
     return meta;

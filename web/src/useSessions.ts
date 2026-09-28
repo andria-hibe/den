@@ -173,10 +173,12 @@ export function useSessions({
 
   // Spin up the workspace's app in a fresh shell tab (server adds the shell and
   // types the run command into it), then switch to that tab.
-  const launchApp = async (sessionId: string) => {
+  // Run the app (or, with "setup", the worktree's setup command) in a new
+  // shell tab of the workspace, and switch to that tab.
+  const launchApp = async (sessionId: string, what: "run" | "setup" = "run") => {
     const group = sessions.find((s) => s.id === sessionId)?.groupId;
     try {
-      const meta = await api<SessionMeta>("/api/app/run", {
+      const meta = await api<SessionMeta>(what === "setup" ? "/api/app/setup" : "/api/app/run", {
         method: "POST",
         body: JSON.stringify({ sessionId }),
       });

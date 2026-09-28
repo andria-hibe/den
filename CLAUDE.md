@@ -480,6 +480,22 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   workspace and types the command there, so you watch it boot and Ctrl-C it like
   normal. When it can tell the app is already up (runn status / a port probe) the
   button becomes ▶ open and links to the URL instead. See `server/apprun.ts`.
+- **Set up a fresh worktree** (issue 10): a new worktree lacks the repo's
+  gitignored local files (`.env`, generated artifacts), which live only in the
+  main checkout. Den reads the repo's **own** setup command — `conductor.json`
+  `scripts.setup` (Conductor's convention; runn's is
+  `./scripts/setup-worktree.sh`), else `scripts/setup-worktree.sh` — so no
+  work-environment steps live in den (`detectSetup` in `apprun.ts`). The
+  header's **⚙ set up** button (`SetupButton`, only in an added worktree,
+  pink when needed) runs it in a new shell tab like ▶ run. "Needed" = a plain
+  path from the repo's `.worktreeinclude` (Claude Code's list of gitignored
+  files a worktree should get) that the main checkout has and this worktree
+  lacks; `node_modules` only for a repo with no `.worktreeinclude`, since
+  runn's setup copies it only on request. The workspace pane's system prompt
+  gets `setupHint`: the command and whether the worktree looks set up, so
+  Claude suggests it when something fails for environment reasons. Setup is
+  per worktree (several of the maintainer's were never set up), so it's a
+  button, not a one-time step.
 - **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +

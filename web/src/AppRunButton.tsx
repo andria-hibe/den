@@ -81,3 +81,67 @@ export function AppRunButton({
     </button>
   );
 }
+
+interface WorktreeSetup {
+  command: string | null;
+  source: string | null;
+  dir: string;
+  main: boolean;
+  missing: string[];
+}
+
+// Workspace-header button that runs the repo's own worktree setup (#10), from
+// its conductor.json or setup script, in a fresh shell tab. Only in an added
+// worktree (the main checkout has nothing to copy in); highlighted when the
+// worktree is missing files the main checkout has.
+export function SetupButton({
+  sessionId,
+  status,
+  onSetup,
+}: {
+  sessionId: string;
+  status: string;
+  onSetup: (sessionId: string) => Promise<void>;
+}) {
+  const [setup, setSetup] = useState<WorktreeSetup | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () =>
+      api<WorktreeSetup>(`/api/app/setup?sessionId=${encodeURIComponent(sessionId)}`)
+        .then((d) => alive && setSetup(d))
+        .catch(() => {});
+    poll();
+    // Setup runs in a shell tab, so check again now and then to clear the flag.
+    const t = setInterval(poll, 15000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [sessionId, status]);
+
+  if (!setup?.command || setup.main) return null;
+  const needed = setup.missing.length > 0;
+  return (
+    <button
+      className={`btn btn-ghost-outline app-run-btn${needed ? " needs-setup" : ""}`}
+      disabled={busy}
+      title={
+        (needed
+          ? `This worktree looks not set up: ${setup.missing.join(", ")} missing. `
+          : "Set this worktree up again. ") + `Runs ${setup.command} (from ${setup.source}).`
+      }
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await onSetup(sessionId);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? "starting…" : needed ? "⚙ set up" : "⚙"}
+    </button>
+  );
+}

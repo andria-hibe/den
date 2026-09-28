@@ -10,6 +10,7 @@ import { COLORS } from "../shared/colors.ts";
 import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
+import { setupHint } from "./apprun.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
@@ -1119,7 +1120,7 @@ class SessionManager {
       ...(opts.resumeId
         ? ["--resume", opts.resumeId]
         : ["--session-id", main.claudeSessionId, "-n", name]),
-      ...this.workspaceArgs(groupId),
+      ...this.workspaceArgs(groupId, cwd),
       // An initial prompt (e.g. the ticket) becomes Claude's first message. The
       // `--` end-of-options separator means a prompt starting with "-" is read as
       // the positional prompt, never as a flag (arg-injection guard).
@@ -1188,7 +1189,7 @@ class SessionManager {
   private restartArgs(s: DenSession): string[] {
     const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
-      return [...resume, ...this.workspaceArgs(s.groupId, s.handover)];
+      return [...resume, ...this.workspaceArgs(s.groupId, s.cwd, s.handover)];
     }
     return [...resume, ...this.singlePaneArgs(s)];
   }
@@ -1196,11 +1197,14 @@ class SessionManager {
   /** The notepad wiring and system prompt for a workspace main pane, shared by
    * create() and restartArgs(). The notepad itself is created (and seeded) by
    * create(); a restart keeps whatever is in it. */
-  private workspaceArgs(groupId: string, handover = true): string[] {
+  private workspaceArgs(groupId: string, cwd: string, handover = true): string[] {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     // With the handover off, the pane still gets the house rules, just not
     // the notepad instruction (the notepad stays for the developer's own use).
-    const prompt = handover ? workspaceInstruction(notepadPath(groupId)) : houseRules();
+    const base = handover ? workspaceInstruction(notepadPath(groupId)) : houseRules();
+    // In a worktree with a setup command, say what it is (#10).
+    const hint = setupHint(cwd);
+    const prompt = hint ? `${base}\n${hint}` : base;
     return ["--add-dir", PROGRESS_DIR, "--append-system-prompt", prompt];
   }
 

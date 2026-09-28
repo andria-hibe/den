@@ -824,6 +824,12 @@ body {
   margin-bottom: 6px;
 }
 
+/* Worktree setup button (#10), pink when the worktree looks not set up. */
+.app-run-btn.needs-setup {
+  border-color: var(--pink-deep);
+  color: var(--pink-deep);
+}
+
 /* Spend chip in a Claude pane's header (#11). */
 .spend-chip {
   font-size: 11px;

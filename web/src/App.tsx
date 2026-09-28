@@ -12,7 +12,7 @@ import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
-import { AppRunButton } from "./AppRunButton.tsx";
+import { AppRunButton, SetupButton } from "./AppRunButton.tsx";
 import { SessionRail } from "./SessionRail.tsx";
 import { TicketLookView } from "./TicketLookView.tsx";
 import { WorkLinkChips } from "./WorkLinkChips.tsx";
@@ -346,6 +346,13 @@ export function App() {
         }}
       >
         {!s.shell && <SpendChip sessionId={s.id} />}
+        {opts?.workspace && (
+          <SetupButton
+            sessionId={s.id}
+            status={s.status}
+            onSetup={(id) => launchApp(id, "setup")}
+          />
+        )}
         {opts?.workspace && (
           <AppRunButton
             sessionId={s.id}
