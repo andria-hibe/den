@@ -85,8 +85,7 @@ panes an instruction.
 when the pane's own transcript does not exist yet. A pane restarted before
 anyone typed in it has no transcript, so it resumes an unrelated conversation
 from the same folder: in the work repo, another ticket's session. The fallback
-exists for panes created before den pinned session ids. Worth an issue; ask
-andria before filing.
+exists for panes created before den pinned session ids. Filed as #25.
 
 ## Corrections to issue text
 
