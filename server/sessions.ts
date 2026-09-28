@@ -373,6 +373,32 @@ export function reviewInstruction(
 export { isAscii } from "../shared/ascii.ts";
 
 /**
+ * Which conversation a restarting Claude pane reopens:
+ * 1. its own pinned session, if that transcript exists -> resume it;
+ * 2. a pinned id with no transcript -> start fresh under the same id. Claude
+ *    Code writes no transcript until the first message (verified 2026-09-28),
+ *    so this is every pane restarted before anyone typed in it, plus any
+ *    transcript Claude Code's cleanup deleted. It must NOT borrow another
+ *    conversation: several panes share a folder (look panes and the work
+ *    repo's main checkout), so "newest in this cwd" is often another ticket's
+ *    session (#25);
+ * 3. no pinned id at all (a row from before den pinned ids) -> the newest
+ *    conversation recorded in this cwd, the best guess for which was its own;
+ * 4. else a fresh session under a new id.
+ * Pure (the lookups are passed in), for the test.
+ */
+export function chooseResume(
+  pinnedId: string | null,
+  hasTranscript: (id: string) => boolean,
+  latestForCwd: () => string | null,
+): { resume: boolean; id: string } {
+  if (pinnedId) return { resume: hasTranscript(pinnedId), id: pinnedId };
+  const latest = latestForCwd();
+  if (latest) return { resume: true, id: latest };
+  return { resume: false, id: randomUUID() };
+}
+
+/**
  * Does a PTY look ready to receive scripted input? True once it has produced
  * some output and then gone quiet — i.e. the TUI has finished drawing and isn't
  * mid-response.
@@ -1027,24 +1053,15 @@ class SessionManager {
     ];
   }
 
-  /** Pick which conversation a restarting Claude pane reopens:
-   *  1. its own pinned session, if that transcript still exists → `--resume`;
-   *  2. else the newest conversation recorded in this cwd (covers panes created
-   *     before den pinned ids, e.g. after a close/reopen) → `--resume`, adopting
-   *     that id so future restarts are unambiguous;
-   *  3. else nothing to resume → start fresh, pinning a new id so the next
-   *     restart of this pane can resume it. */
+  /** The `claude` args that reopen (or restart) a pane's conversation; see
+   * chooseResume for the rules. Adopts whatever id it settles on, so the next
+   * restart of this pane is unambiguous. */
   private resumeArgs(s: DenSession): string[] {
-    if (s.claudeSessionId && hasSession(s.claudeSessionId)) {
-      return ["--resume", s.claudeSessionId];
-    }
-    const latest = latestSessionForCwd(s.cwd);
-    if (latest) {
-      s.claudeSessionId = latest;
-      return ["--resume", latest];
-    }
-    s.claudeSessionId = randomUUID();
-    return ["--session-id", s.claudeSessionId, "-n", s.name];
+    const pick = chooseResume(s.claudeSessionId, hasSession, () => latestSessionForCwd(s.cwd));
+    s.claudeSessionId = pick.id;
+    return pick.resume
+      ? ["--resume", pick.id]
+      : ["--session-id", pick.id, "-n", s.name];
   }
 
   get(id: string) {

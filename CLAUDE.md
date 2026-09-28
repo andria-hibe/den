@@ -325,6 +325,14 @@ the new PTY; restart buttons (`↻`) appear on exited rail rows + in the workspa
 header. This is the answer to "live PTYs don't survive a restart" — the row comes
 back exited, and one click revives it.
 
+Which conversation a restart reopens is `chooseResume` (pure, tested): the
+pane's own pinned `claudeSessionId` if its transcript exists, else **a fresh
+conversation under that same id** — never "the newest conversation in this
+cwd", which is only a fallback for rows with no pinned id at all. Claude Code
+writes no transcript until the first message, so an untouched pane has none,
+and look panes share the work repo's main checkout with other sessions:
+borrowing the newest one there resumed another ticket's conversation (issue 25).
+
 ## Features (all built + committed on `master`)
 
 - Multi-session cockpit: create/rename(double-click)/recolour/close; persistent;
