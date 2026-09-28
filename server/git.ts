@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { logWarn } from "./log.ts";
 import { isValidBranch } from "../shared/branch.ts";
 
@@ -67,6 +67,72 @@ export function parseWorktrees(out: string): Worktree[] {
 /** Every checkout of `repo` — its own working copy first, then added worktrees. */
 export function listWorktrees(repo: string): Worktree[] {
   return parseWorktrees(git(repo, ["worktree", "list", "--porcelain"]));
+}
+
+/** Where den puts the worktrees it creates (`prepareWork`, `checkoutPr`),
+ * under the repo. The folder is the signal that den made one: Claude Code's
+ * own worktrees live in `.claude/worktrees/`, and hand-made ones anywhere
+ * else, and den never offers to remove those. */
+export const DEN_WORKTREE_DIR = ".claude-worktrees";
+
+/** Did den create this worktree? True for a path inside `<repo>/.claude-worktrees/`,
+ * never for the folder itself or the repo's own checkout. Pure, for the test. */
+export function isDenWorktree(repo: string, path: string): boolean {
+  const root = join(repo, DEN_WORKTREE_DIR) + sep;
+  return path.startsWith(root) && path.length > root.length;
+}
+
+/** A worktree as the cleanup UI sees it: whether den made it, and, for one it
+ * did, what removing it would lose and whether a session is working in it.
+ * `changes` is null when the folder is gone (a prunable worktree). */
+export interface WorktreeInfo extends Worktree {
+  den: boolean;
+  changes?: WorktreeChanges | null;
+  inUse?: boolean;
+}
+
+/** What removing a worktree would cost. Removing keeps the branch, so its
+ * commits survive; what is lost is `dirty` (uncommitted changes, counted as
+ * `git status` lines) and, on a detached HEAD, any `unpushed` commits, which no
+ * branch holds. */
+export interface WorktreeChanges {
+  dirty: number;
+  /** Commits on HEAD that no remote branch has. */
+  unpushed: number;
+  detached: boolean;
+}
+
+/** Would removing a worktree with these changes lose work? Pure, for the test. */
+export function losesWork(c: WorktreeChanges): boolean {
+  return c.dirty > 0 || (c.detached && c.unpushed > 0);
+}
+
+export function worktreeChanges(path: string): WorktreeChanges {
+  const status = git(path, ["status", "--porcelain"]);
+  let unpushed = 0;
+  try {
+    unpushed = Number(git(path, ["rev-list", "--count", "HEAD", "--not", "--remotes"])) || 0;
+  } catch {
+    // no commits yet
+  }
+  let detached = false;
+  try {
+    git(path, ["symbolic-ref", "--quiet", "HEAD"]);
+  } catch {
+    detached = true;
+  }
+  return { dirty: status ? status.split("\n").length : 0, unpushed, detached };
+}
+
+/** Remove a den-created worktree, keeping its branch. Refuses anything den did
+ * not create (see isDenWorktree) or that git does not list as a worktree of
+ * `repo`, and refuses to lose work unless `force` is set (the caller has shown
+ * the developer what goes). */
+export function removeWorktree(repo: string, path: string, force: boolean): void {
+  if (!isDenWorktree(repo, path)) throw new Error("not_den_worktree");
+  if (!listWorktrees(repo).some((w) => w.path === path)) throw new Error("not_a_worktree");
+  if (!force && losesWork(worktreeChanges(path))) throw new Error("would_lose_work");
+  git(repo, ["worktree", "remove", ...(force ? ["--force"] : []), path]);
 }
 
 /** If a branch is already checked out in a worktree, return that path. */
@@ -214,7 +280,7 @@ export function prepareWork(
 
   if (env === "worktree") {
     const leaf = branch.replace(/[/\\]/g, "-");
-    const dir = join(repo, ".claude-worktrees", leaf);
+    const dir = join(repo, DEN_WORKTREE_DIR, leaf);
     if (existsSync(dir)) return { cwd: dir };
     if (exists) {
       git(repo, ["worktree", "add", dir, branch]);
@@ -253,7 +319,7 @@ export function checkoutPr(
     if (existingWt) return { cwd: existingWt };
   }
   if (env === "worktree") {
-    const dir = join(repoDir, ".claude-worktrees", `pr-${number}`);
+    const dir = join(repoDir, DEN_WORKTREE_DIR, `pr-${number}`);
     if (!existsSync(dir)) {
       git(repoDir, ["worktree", "add", "--detach", dir]);
     }

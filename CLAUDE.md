@@ -113,7 +113,14 @@ WebSocket; everything else is REST.
   `worktreeForBranch` (reuse an existing worktree instead of erroring), and
   `listWorktrees` / pure `parseWorktrees` (every checkout of the work repo, its
   own working copy first — behind `GET /api/git/worktrees`, which the New
-  Session dialog lists as "workspaces"). The branch-name rule lives in
+  Session dialog lists as "workspaces"), and worktree cleanup: den's own
+  worktrees live under `<repo>/.claude-worktrees/` (`DEN_WORKTREE_DIR`,
+  `isDenWorktree`) — the only ones it ever offers to remove, never Claude
+  Code's `.claude/worktrees/` or hand-made ones. `removeWorktree` keeps the
+  branch, so only uncommitted changes (and commits on a detached HEAD) can be
+  lost (`worktreeChanges`, `losesWork`), and it refuses those without `force`.
+  The routes (`GET /api/git/worktree(s)`, `POST /api/git/worktrees/remove`)
+  also refuse a worktree any session's cwd is in. The branch-name rule lives in
   `shared/branch.ts` (re-exported as `isValidBranch`) so the dialog can reject a
   bad name without a second copy to drift.
 - `server/discover.ts` — lists past Claude sessions from
@@ -360,6 +367,13 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   an existing branch reuses its worktree rather than duplicating it. "Browse
   folders instead" keeps the old free-browsing path, and a work dir that isn't a
   git repo drops straight to it.
+- **Worktree cleanup**: closing a session that was working in a worktree den
+  made (and that nothing else uses) offers to remove it
+  (`WorktreeCleanupDialog`, via App's `closeAndOfferCleanup`), saying what
+  would be lost; the New Session dialog's workspace list has a remove button
+  per den worktree plus a batch "clean up N unused den worktrees" for the ones
+  with nothing to lose. Wording and the batch filter are pure in
+  `worktreeCleanup.ts` (tested).
 - Claude workspace = **main + shell + progress notepad**; notepad renders
   markdown, is editable/savable; the main Claude is told to log progress to it.
 - **Resizable** panels (draggable splitters, sizes persisted to localStorage).

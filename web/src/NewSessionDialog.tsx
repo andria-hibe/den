@@ -3,7 +3,8 @@ import { api } from "./api.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { relTimeAgo } from "./format.ts";
 import { isValidBranch } from "../../shared/branch.ts";
-import type { Worktree } from "../../server/git.ts";
+import type { WorktreeInfo } from "../../server/git.ts";
+import { cleanRemovable, describeLoss, losesWork } from "./worktreeCleanup.ts";
 
 interface Roots {
   home: string;
@@ -54,7 +55,11 @@ export function NewSessionDialog({
   const [error, setError] = useState<string | null>(null);
   const [workStep, setWorkStep] = useState<WorkStep>(null);
   // null while the worktree list is still loading.
-  const [worktrees, setWorktrees] = useState<Worktree[] | null>(null);
+  const [worktrees, setWorktrees] = useState<WorktreeInfo[] | null>(null);
+  // The den-made worktree whose removal is awaiting a second click, or "all"
+  // for the batch clean-up.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [removeErr, setRemoveErr] = useState<string | null>(null);
   const [branch, setBranch] = useState("");
 
   useEffect(() => {
@@ -62,6 +67,33 @@ export function NewSessionDialog({
       .then(setRoots)
       .catch(() => setError("could not load folders"));
   }, []);
+
+  // Den-made worktrees that can go in one click (unused, nothing to lose).
+  const batch = cleanRemovable(worktrees ?? []);
+
+  // Remove worktrees one at a time, then reload the list so what's shown is
+  // what git has. `force` only ever comes from a confirm that named the loss.
+  const removeTrees = async (trees: WorktreeInfo[], force: boolean) => {
+    setRemoveErr(null);
+    for (const w of trees) {
+      try {
+        await api("/api/git/worktrees/remove", {
+          method: "POST",
+          body: JSON.stringify({ path: w.path, force }),
+        });
+      } catch (e) {
+        setRemoveErr(`${w.branch ?? w.path}: ${(e as Error).message}`);
+        break;
+      }
+    }
+    setRemoving(null);
+    try {
+      const d = await api<{ worktrees: WorktreeInfo[] }>("/api/git/worktrees");
+      setWorktrees(d.worktrees.filter((w) => !w.bare));
+    } catch {
+      // keep the old list
+    }
+  };
 
   const short = useCallback(
     (p: string) => (roots && p.startsWith(roots.home) ? "~" + p.slice(roots.home.length) : p),
@@ -103,7 +135,7 @@ export function NewSessionDialog({
       setWorkStep("where");
       setWorktrees(null);
       setBranch("");
-      api<{ worktrees: Worktree[] }>("/api/git/worktrees")
+      api<{ worktrees: WorktreeInfo[] }>("/api/git/worktrees")
         .then((d) => setWorktrees(d.worktrees.filter((w) => !w.bare)))
         .catch(() => {
           setWorkStep(null);
@@ -281,22 +313,73 @@ export function NewSessionDialog({
               </span>
             </div>
             <div className="browser-list">
+              {batch.length > 0 && (
+                <div className="wt-batch">
+                  {removing === "all" ? (
+                    <>
+                      <span>
+                        Remove {batch.length} unused den worktree{batch.length === 1 ? "" : "s"}?
+                        Nothing uncommitted, and their branches stay.
+                      </span>
+                      <button className="btn btn-primary" onClick={() => removeTrees(batch, false)}>
+                        remove
+                      </button>
+                      <button className="btn" onClick={() => setRemoving(null)}>
+                        cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn" onClick={() => setRemoving("all")}>
+                      🧹 clean up {batch.length} unused den worktree{batch.length === 1 ? "" : "s"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {removeErr && <div className="wt-loss risky">{removeErr}</div>}
               {worktrees?.map((w) => (
-                <button
-                  key={w.path}
-                  className="resume-row"
-                  onClick={() => onCreate(w.path)}
-                  title={w.path}
-                >
-                  <div className="wt-row-head">
-                    <div className="resume-title">
-                      🌿 {w.branch ?? `detached @ ${w.head}`}
+                <div key={w.path} className="wt-row">
+                  <button
+                    className="resume-row"
+                    onClick={() => onCreate(w.path)}
+                    title={w.path}
+                  >
+                    <div className="wt-row-head">
+                      <div className="resume-title">
+                        🌿 {w.branch ?? `detached @ ${w.head}`}
+                      </div>
+                      {w.main && <span className="dir-tag">★ main checkout</span>}
+                      {w.locked && <span className="dir-tag">locked</span>}
+                      {w.den && w.inUse && <span className="dir-tag">in use</span>}
+                      {w.den && losesWork(w.changes) && (
+                        <span className="dir-tag">uncommitted</span>
+                      )}
                     </div>
-                    {w.main && <span className="dir-tag">★ main checkout</span>}
-                    {w.locked && <span className="dir-tag">locked</span>}
-                  </div>
-                  <div className="resume-meta">{short(w.path)}</div>
-                </button>
+                    <div className="resume-meta">{short(w.path)}</div>
+                  </button>
+                  {w.den && !w.inUse && (
+                    <button
+                      className="btn-ghost wt-remove"
+                      onClick={() => setRemoving(removing === w.path ? null : w.path)}
+                      title="remove this worktree (the branch stays)"
+                    >
+                      ×
+                    </button>
+                  )}
+                  {removing === w.path && (
+                    <div className={`wt-confirm${losesWork(w.changes) ? " risky" : ""}`}>
+                      <span>{describeLoss(w.changes)}</span>
+                      <button
+                        className={`btn ${losesWork(w.changes) ? "btn-danger" : "btn-primary"}`}
+                        onClick={() => removeTrees([w], losesWork(w.changes))}
+                      >
+                        {losesWork(w.changes) ? "remove anyway" : "remove"}
+                      </button>
+                      <button className="btn" onClick={() => setRemoving(null)}>
+                        cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

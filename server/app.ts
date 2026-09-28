@@ -22,7 +22,10 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
-import { prepareWork, checkoutPr, listWorktrees, type WorkEnv } from "./git.ts";
+import {
+  prepareWork, checkoutPr, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
+  type WorkEnv,
+} from "./git.ts";
 import { detectAppRunner, appRunnerStatus } from "./apprun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
@@ -142,16 +145,87 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // `git worktree`. The New Session dialog offers these as "workspaces" so a
   // Work session can join one instead of always making another. The repo is
   // resolved server-side (workDir()), so nothing here takes a caller path.
+  // Which sessions have their cwd in a worktree. A worktree in use is never
+  // offered for removal: a live shell or Claude pane is working in it.
+  const sessionsIn = (path: string) =>
+    sessions.list().filter((m) => m.cwd === path || m.cwd.startsWith(path + "/"));
+
   app.get("/api/git/worktrees", async (req, reply) => {
     const repo = roots().workRepo;
     try {
-      return { repo, worktrees: listWorktrees(repo) };
+      // Den-created worktrees also carry what removing them would lose and
+      // whether a session is using them, for the New Session dialog's cleanup.
+      const worktrees = listWorktrees(repo).map((w) => {
+        if (!isDenWorktree(repo, w.path)) return { ...w, den: false };
+        let changes = null;
+        try {
+          changes = worktreeChanges(w.path);
+        } catch {
+          // missing on disk (prunable): nothing to lose
+        }
+        return { ...w, den: true, changes, inUse: sessionsIn(w.path).length > 0 };
+      });
+      return { repo, worktrees };
     } catch (err) {
       // Not a git repo (workDir() falls back to ~/Documents/work) — the dialog
       // drops to plain folder browsing.
       logWarn("git.worktrees", err);
       reply.code(400);
       return { error: "not_a_repo" };
+    }
+  });
+
+  // One worktree's cleanup info, for the offer den makes when a session in it
+  // closes. `den: false` (or a 404) means there is nothing to offer.
+  app.get("/api/git/worktree", async (req, reply) => {
+    const { path } = req.query as { path?: string };
+    const repo = roots().workRepo;
+    if (!path || !isDenWorktree(repo, path)) return { den: false };
+    const w = (() => {
+      try {
+        return listWorktrees(repo).find((t) => t.path === path);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!w) {
+      reply.code(404);
+      return { error: "not_a_worktree" };
+    }
+    try {
+      return { ...w, den: true, changes: worktreeChanges(path), inUse: sessionsIn(path).length > 0 };
+    } catch (err) {
+      logWarn("git.worktree", err);
+      reply.code(500);
+      return { error: "git_failed" };
+    }
+  });
+
+  // Remove a den-created worktree (its branch stays). `force` is required when
+  // it would lose uncommitted work, and only sent after the developer saw that.
+  app.post("/api/git/worktrees/remove", async (req, reply) => {
+    const { path, force } = (req.body ?? {}) as { path?: string; force?: boolean };
+    const repo = roots().workRepo;
+    if (!path || !isDenWorktree(repo, path)) {
+      reply.code(400);
+      return { error: "not_den_worktree" };
+    }
+    if (sessionsIn(path).length > 0) {
+      reply.code(409);
+      return { error: "in_use", message: "A session is still open in that worktree." };
+    }
+    try {
+      removeWorktree(repo, path, !!force);
+      return { ok: true };
+    } catch (err) {
+      const code = (err as Error).message;
+      if (code === "would_lose_work") {
+        reply.code(409);
+        return { error: code, message: "That worktree has uncommitted work." };
+      }
+      logWarn("git.removeWorktree", err);
+      reply.code(500);
+      return { error: "git_failed", message: "Could not remove the worktree." };
     }
   });
 

@@ -14,6 +14,10 @@
   --lemon: #fff0a8;
   --border: #ecd9f0;
   --shadow: 0 2px 0 #e7cdec, 0 6px 16px rgba(160, 120, 180, 0.18);
+  /* Warnings that mean "this loses work" (worktree removal). */
+  --danger-ink: #b3264f;
+  --danger-bg: #ffd0dc;
+  --danger-edge: #d9466f;
 
   --term-bg: #2b2233;
   --term-fg: #f3e9f7;
@@ -31,6 +35,9 @@
     --ink-soft: #b39ec2;
     --border: #40354c;
     --shadow: 0 2px 0 #1c1622, 0 6px 16px rgba(0, 0, 0, 0.35);
+    --danger-ink: #ff9bb8;
+    --danger-bg: #5a2436;
+    --danger-edge: #d9466f;
   }
 }
 
@@ -2160,6 +2167,57 @@ body {
 .wt-row-head .resume-title {
   flex: 1;
   min-width: 0;
+}
+
+/* A workspace row with den's remove button beside it, and the confirm line
+   that opens under it. */
+.wt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.wt-row .resume-row {
+  flex: 1;
+  min-width: 0;
+}
+.wt-remove {
+  flex: none;
+  font-size: 16px;
+  opacity: 0.55;
+}
+.wt-remove:hover {
+  opacity: 1;
+}
+.wt-confirm,
+.wt-batch {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 8px;
+  font-size: 12px;
+}
+.wt-confirm span,
+.wt-batch span {
+  flex: 1;
+  min-width: 0;
+}
+.wt-loss {
+  font-size: 12px;
+  margin: 4px 0 12px;
+  color: var(--ink-soft);
+}
+.wt-loss.risky,
+.wt-confirm.risky span {
+  color: var(--danger-ink);
+  font-weight: 700;
+}
+.btn-danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-edge);
+  box-shadow: 0 2px 0 var(--danger-edge);
+  color: var(--danger-ink);
+  white-space: nowrap;
 }
 
 .dir-tag {

@@ -24,6 +24,8 @@ import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import { denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
+import { WorktreeCleanupDialog } from "./WorktreeCleanupDialog.tsx";
+import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 
@@ -38,6 +40,8 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  // A den-made worktree left behind by the session just closed, offered for removal.
+  const [cleanup, setCleanup] = useState<WorktreeInfo | null>(null);
 
   // The session list + everything that mutates it (create/rename/restart/close,
   // shell tabs, selection, the 4s server poll).
@@ -58,6 +62,21 @@ export function App() {
     selectSession,
     applyTitle,
   } = useSessions({ editingId, onError: setErrMsg });
+
+  // Close a session, then offer to remove the worktree it was working in when
+  // den made that worktree and no other session is using it (the server says
+  // both). Anything else, including a failed lookup, just closes.
+  const closeAndOfferCleanup = async (id: string) => {
+    const cwd = sessions.find((s) => s.id === id)?.cwd;
+    await closeSession(id);
+    if (!cwd) return;
+    try {
+      const info = await api<WorktreeInfo>(`/api/git/worktree?path=${encodeURIComponent(cwd)}`);
+      if (info.den && !info.inUse) setCleanup(info);
+    } catch {
+      // not a worktree den knows about: nothing to offer
+    }
+  };
 
   // GitHub PRs + Linear issues come from one shared poll (WorkData), so the
   // topbar fox and the work panels never drift out of phase.
@@ -185,10 +204,10 @@ export function App() {
   useKeyboardShortcuts({
     rail,
     activeId,
-    blocked: showNew || !!ticketModal || !!prModal || editingId !== null,
+    blocked: showNew || !!ticketModal || !!prModal || !!cleanup || editingId !== null,
     onNewClaude: () => setShowNew(true),
     onNewShell: () => addSession({ shell: true }),
-    onClose: closeSession,
+    onClose: closeAndOfferCleanup,
     onSelect: selectSession,
   });
 
@@ -545,7 +564,7 @@ export function App() {
         onCancelRename={() => setEditingId(null)}
         onSelect={selectSession}
         onRestart={restartSession}
-        onClose={closeSession}
+        onClose={closeAndOfferCleanup}
         onNewClaude={() => setShowNew(true)}
         onNewShell={() => addSession({ shell: true })}
         onReorder={reorderRail}
@@ -774,6 +793,16 @@ export function App() {
         />
       )}
 
+      {cleanup && (
+        <WorktreeCleanupDialog
+          worktree={cleanup}
+          onDone={() => setCleanup(null)}
+          onError={(msg) => {
+            setCleanup(null);
+            setErrMsg(msg);
+          }}
+        />
+      )}
       {errMsg && (
         <div className="toast" onClick={() => setErrMsg(null)}>
           <span>⚠️ {errMsg}</span>

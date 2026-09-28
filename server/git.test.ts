@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { baseCandidates, isValidBranch, parseWorktrees, pickBaseRef } from "./git.ts";
+import { baseCandidates, isDenWorktree, isValidBranch, losesWork, parseWorktrees, pickBaseRef } from "./git.ts";
 
 describe("isValidBranch", () => {
   it("accepts normal branch names", () => {
@@ -114,5 +114,33 @@ describe("pickBaseRef", () => {
 
   it("is null when nothing resolves (baseRef then uses HEAD)", () => {
     expect(pickBaseRef(["development", "master", "main"], refs())).toBeNull();
+  });
+});
+
+describe("isDenWorktree", () => {
+  const repo = "/Users/x/Documents/work/runn";
+
+  it("is true for a worktree den created", () => {
+    expect(isDenWorktree(repo, `${repo}/.claude-worktrees/andria-fast-1-thing`)).toBe(true);
+    expect(isDenWorktree(repo, `${repo}/.claude-worktrees/pr-21057`)).toBe(true);
+  });
+
+  it("is false for the repo, the folder itself, Claude Code's worktrees, and look-alikes", () => {
+    expect(isDenWorktree(repo, repo)).toBe(false);
+    expect(isDenWorktree(repo, `${repo}/.claude-worktrees`)).toBe(false);
+    expect(isDenWorktree(repo, `${repo}/.claude-worktrees/`)).toBe(false);
+    expect(isDenWorktree(repo, `${repo}/.claude/worktrees/comment-audit-fixes`)).toBe(false);
+    expect(isDenWorktree(repo, `${repo}/.claude-worktrees-old/x`)).toBe(false);
+  });
+});
+
+describe("losesWork", () => {
+  it("keeps unpushed commits on a branch (the branch survives removal)", () => {
+    expect(losesWork({ dirty: 0, unpushed: 3, detached: false })).toBe(false);
+  });
+
+  it("loses uncommitted changes, and commits on a detached HEAD", () => {
+    expect(losesWork({ dirty: 1, unpushed: 0, detached: false })).toBe(true);
+    expect(losesWork({ dirty: 0, unpushed: 1, detached: true })).toBe(true);
   });
 });
