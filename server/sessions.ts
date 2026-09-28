@@ -223,11 +223,30 @@ export function houseRules(): string {
   );
 }
 
+/** How a pane that writes code should treat tests: only the ones that earn
+ * their keep. Every test is time on every run and something to maintain, so a
+ * session adds tests for important, core behaviour and nothing else: not
+ * low-value checks, not duplicates of coverage the suite already has, and not
+ * tests pinning its own fixes or its review follow-ups. KISS. Appended to
+ * workspace and my-PR panes (the ones that change code); a review pane
+ * reviews, and a look pane only reads. */
+export function testingRules(): string {
+  return (
+    `Tests: add them only for important, core behaviour, the logic a ` +
+    `regression would really hurt. Don't write low-value tests, and don't add ` +
+    `one that another test in the suite already covers; look at the existing ` +
+    `tests first. Don't add tests for fixes to your own mistakes or for ` +
+    `changes made in response to review comments. Every test costs time on ` +
+    `every run and has to be maintained, so keep it simple: a few meaningful ` +
+    `tests beat many small ones.`
+  );
+}
+
 /** The system prompt for a Claude workspace's main pane: the progress notepad
  * plus the house rules. Shared by create() and restartArgs() via
  * workspaceArgs(). */
 export function workspaceInstruction(notepad: string): string {
-  return `${progressInstruction(notepad)}\n${houseRules()}`;
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}`;
 }
 
 /** The system prompt for a my-PR pane (#5): which PR is on screen, how den
@@ -250,7 +269,7 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}`
   );
 }
 
@@ -1201,7 +1220,9 @@ class SessionManager {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     // With the handover off, the pane still gets the house rules, just not
     // the notepad instruction (the notepad stays for the developer's own use).
-    const base = handover ? workspaceInstruction(notepadPath(groupId)) : houseRules();
+    const base = handover
+      ? workspaceInstruction(notepadPath(groupId))
+      : `${houseRules()}\n${testingRules()}`;
     // In a worktree with a setup command, say what it is (#10).
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;

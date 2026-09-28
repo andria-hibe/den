@@ -4,6 +4,7 @@ import {
   isAscii,
   lookInstruction,
   myPrInstruction,
+  testingRules,
   workspaceInstruction,
 } from "./sessions.ts";
 
@@ -68,5 +69,14 @@ describe("lookInstruction", () => {
 
   it("carries the house rules", () => {
     expect(text).toContain(houseRules());
+  });
+});
+
+describe("testingRules", () => {
+  it("is ASCII and reaches the panes that write code, not the one that only reads", () => {
+    expect(isAscii(testingRules())).toBe(true);
+    expect(workspaceInstruction("/n.md")).toContain(testingRules());
+    expect(myPrInstruction(1, "o/r", "b")).toContain(testingRules());
+    expect(lookInstruction("T-1", "t", "/n.md")).not.toContain(testingRules());
   });
 });

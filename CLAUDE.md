@@ -731,7 +731,12 @@ one closed elsewhere. **Tests**
 live next to their source as `*.test.ts` (`server/*.test.ts`, `web/*.test.ts`)
 and cover the pure, rule-heavy logic — the loopback guard, PR attention rules,
 branch validation, path sandbox, title tidy, fox pose. Keep new pure logic
-testable (export it) and add a case. Beyond that, verification is scripted + visual:
+testable (export it), but **add a test only for important, core behaviour**
+(andria's rule, 2026-09-29): no low-value tests, nothing another test already
+covers, and no tests pinning a fix to your own mistake or a review follow-up.
+Tests cost time on every run; KISS. Den tells the Claude sessions it spawns
+the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
+panes). Beyond that, verification is scripted + visual:
 - Run an **isolated** server: `DEN_DB=<tmp> PORT=4399 npm run start` (node ABI).
 - Screenshot the UI by loading the URL in a headless Electron window and calling
   `webContents.capturePage()` (see `scripts/shot.cjs`): `SHOT_URL=... SHOT_OUT=x.png
