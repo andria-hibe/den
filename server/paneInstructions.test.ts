@@ -30,7 +30,7 @@ describe("workspaceInstruction", () => {
   it("keeps the notepad wiring and adds the house rules", () => {
     expect(isAscii(text)).toBe(true);
     expect(text).toContain(NOTEPAD);
-    expect(text).toContain("read it before you start");
+    expect(text).toContain("Read it before you start");
     expect(text).toContain(houseRules());
   });
 });

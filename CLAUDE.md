@@ -298,11 +298,24 @@ WebSocket; everything else is REST.
 
 A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
 - **Claude workspace** = a `main` claude pane + **one or more `shell` panes**
-  (same group, shown as tabs) + a progress notepad at `~/.den/progress/<groupId>.md`.
+  (same group, shown as tabs) + a notepad at `~/.den/progress/<groupId>.md`.
+  The notepad is a **handover, not a log** (issue 27), with **two readers**
+  (`shared/handover.ts`): four sections at the top for the developer —
+  *Where it stands*, *Done*, *Next*, *Waiting on you* — in plain language with
+  no hashes, paths, test runs, or push bookkeeping; then **`## Session notes`**,
+  the handover the session writes *for itself* (branch + base, what's
+  committed/pushed, half-done work and where, decisions and why, what was
+  ruled out, test state, the exact next step). `progressInstruction` tells
+  the session to read it first and rewrite both parts in place; that's how a
+  restarted pane (no initial prompt) picks the thread back up — verified: a
+  fresh `claude -p "Carry on."` finished half-done work from the notes alone.
+  A ticket's text sits **below** both (`ticketNotesSeed`), so the notepad
+  opens on the status. `NotepadPane` leaves a handover's scroll alone and only
+  follows the bottom for an older appended log.
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill
-  with orphans. (The "edit den" workspace seeds it empty — its handover lives in
-  the initial Claude prompt, not the notepad.)
+  with orphans. (The "edit den" workspace passes no seed, so it gets the empty
+  handover like any workspace; its opener lives in the initial prompt.)
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
   `review` (others' PR), `mypr` (your PR), or a ticket-look. They also carry
@@ -374,8 +387,9 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   per den worktree plus a batch "clean up N unused den worktrees" for the ones
   with nothing to lose. Wording and the batch filter are pure in
   `worktreeCleanup.ts` (tested).
-- Claude workspace = **main + shell + progress notepad**; notepad renders
-  markdown, is editable/savable; the main Claude is told to log progress to it.
+- Claude workspace = **main + shell + handover notepad**; notepad renders
+  markdown, is editable/savable; the main Claude keeps it current as a
+  one-glance handover (see Data model).
 - **Resizable** panels (draggable splitters, sizes persisted to localStorage).
 - Session **titles**: Claude auto-titles via OSC (shells don't); manual rename
   locks it; the **topbar tints to the active session's colour + shows its title**.

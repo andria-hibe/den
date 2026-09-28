@@ -7,6 +7,7 @@ import {
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
+import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
@@ -143,26 +144,54 @@ export function scratchBranch(branch: string | null | undefined): string {
   return `andria/changes-to-${branch || "this-pr"}`;
 }
 
-/** The system-prompt instruction telling the main Claude to log progress to its
- * workspace notepad. Shared by create() and restart() so a restarted workspace
- * keeps its progress-logging wiring.
+/** The system-prompt instruction for a workspace main pane's notepad (#27).
+ * One file with two readers (shared/handover.ts):
+ * - four sections at the top for the developer (HANDOVER_HEADINGS), in plain
+ *   language with no technical detail, so they see where things stand in one
+ *   glance;
+ * - "Session notes" below, the handover for the next session, written by the
+ *   session for itself with the full technical context.
+ * Both are rewritten in place. The notepad used to be an append-only log of
+ * timestamped bullets, which mixed the two readers and had to be read bottom-up.
  *
- * It also tells the session to read the notepad before starting. A restart
- * deliberately does not re-inject the initial prompt, so for a ticket workspace
- * the notepad seed (`ticketNotesSeed`) is the only copy of the ticket a
- * restarted session can see, and its log is the only record of the work so far.
- * ASCII-only, like reviewInstruction, and tested the same way. */
+ * It tells the session to read the notepad first: a restart does not re-inject
+ * the initial prompt, so the session notes are how a restarted pane picks up
+ * the thread, and for a ticket workspace the notepad (seeded by
+ * `ticketNotesSeed`) is the only copy of the ticket it sees. Shared by create()
+ * and restart(); ASCII-only, like reviewInstruction, and tested the same way. */
 export function progressInstruction(file: string): string {
+  const [stands, done, next, waiting] = HANDOVER_HEADINGS;
   return (
-    `You're working in a project inside a tool called "den". Keep a running ` +
-    `progress log for the developer at the absolute path ${file}. If that file ` +
-    `already has entries, read it before you start: it holds the record of the ` +
-    `work so far, and for a ticket it holds the ticket itself. After each ` +
-    `meaningful step (a decision, an edit, a completed task, or a blocker), ` +
-    `append a short timestamped bullet to that file describing what you did. ` +
-    `Keep entries concise and skimmable and never delete earlier ones. This ` +
-    `file is shown to the developer in a side notepad; don't mention this ` +
-    `logging in your replies.`
+    `You're working in a project inside a tool called "den". Keep a handover ` +
+    `at the absolute path ${file}. It has two readers: the developer, who ` +
+    `wants to see where the work stands in one glance, and the next session ` +
+    `that picks this work up (which may be you, after a restart, with no ` +
+    `memory of this conversation). Read it before you start: its session notes ` +
+    `are where you left off, and for a ticket it holds the ticket itself.\n` +
+    `Rewrite it in place after each meaningful step (a decision, a finished ` +
+    `task, a blocker, a change of plan). Do not append a log.\n` +
+    `FOR THE DEVELOPER, keep these four sections at the top, under the title:\n` +
+    `- "## ${stands}": one or two sentences on the goal and how far along it is.\n` +
+    `- "## ${done}": what has changed for the user or the product, not how. ` +
+    `Keep it to the few items that matter and fold older ones together.\n` +
+    `- "## ${next}": the next step or two.\n` +
+    `- "## ${waiting}": decisions or approvals the developer owes, or "Nothing."\n` +
+    `Write those in plain language and short bullets. Leave out technical ` +
+    `detail and bookkeeping there: no commit hashes, file paths, or command ` +
+    `output, and no record of what you committed or pushed or which tests and ` +
+    `checks you ran. Say what the work does, not how you got it there.\n` +
+    `FOR THE NEXT SESSION, keep "## ${SESSION_NOTES_HEADING}" below them. Write ` +
+    `it for yourself, not for the developer: everything you would need to carry ` +
+    `on without re-deriving it. Put the technical detail here: the branch and ` +
+    `its base, what is committed and pushed, what is half-done and where (files, ` +
+    `functions), decisions and why they were made, what was tried and ruled ` +
+    `out, gotchas, the state of tests and checks, and the exact next step. Keep ` +
+    `it current rather than historical, but keep decisions and their reasons ` +
+    `until they stop mattering.\n` +
+    `Leave everything below the session notes (such as the ticket) as it is. If ` +
+    `the file holds an older running log instead, fold it into this shape. The ` +
+    `file is shown to the developer in a side notepad; don't mention it in your ` +
+    `replies.`
   );
 }
 
@@ -1207,7 +1236,7 @@ class SessionManager {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     const file = notepadPath(groupId);
     if (!existsSync(file)) {
-      writeFileSync(file, seed ?? "# Progress\n\n");
+      writeFileSync(file, seed ?? `# Handover\n\n${HANDOVER_TEMPLATE}`);
     }
     return file;
   }

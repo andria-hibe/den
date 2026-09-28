@@ -9,6 +9,7 @@
 // can render what the session writes. Change them together.
 import type { PrReviewNote } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
+import { HANDOVER_TEMPLATE } from "../../shared/handover.ts";
 
 /** Ask a review pane for the reading guide: the change grouped into sections by
  * purpose, most important first. A separate, cheaper ask than the review; it
@@ -106,15 +107,10 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
   );
 }
 
-/** A ticket as markdown: title, state, branch, link, and description. A look
- * pane gets this as the file its system prompt points at (lookInstruction), so
- * the session can read the ticket you are both looking at. */
-export function ticketBrief(issue: LinearIssue): string {
-  const parts = [
-    `# ${issue.identifier}: ${issue.title}`,
-    "",
-    `**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`,
-  ];
+/** A ticket's details as markdown, without its title: state, branch, link,
+ * and description. */
+function ticketDetails(issue: LinearIssue): string {
+  const parts = [`**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`];
   if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
   parts.push(
     `[Open in Linear](${issue.url})`,
@@ -127,12 +123,23 @@ export function ticketBrief(issue: LinearIssue): string {
   return parts.join("\n");
 }
 
-/** The notepad a ticket workspace starts with: the ticket brief, so the
- * session has its context on disk, then a progress section Claude appends to.
- * After a restart this seed is the only copy of the ticket the session can see,
- * which is why progressInstruction tells it to read the notepad first. */
+/** A ticket as markdown: title, state, branch, link, and description. A look
+ * pane gets this as the file its system prompt points at (lookInstruction), so
+ * the session can read the ticket you are both looking at. */
+export function ticketBrief(issue: LinearIssue): string {
+  return `# ${issue.identifier}: ${issue.title}\n\n${ticketDetails(issue)}`;
+}
+
+/** The notepad a ticket workspace starts with: the empty handover first, so
+ * the notepad opens on where the work stands, then the ticket below it, so the
+ * session has the ticket on disk. After a restart this is the only copy of the
+ * ticket the session can see, which is why progressInstruction tells it to
+ * read the notepad first. */
 export function ticketNotesSeed(issue: LinearIssue): string {
-  return `${ticketBrief(issue)}\n---\n\n## Progress\n`;
+  return (
+    `# ${issue.identifier}: ${issue.title}\n\n${HANDOVER_TEMPLATE}\n---\n\n` +
+    ticketDetails(issue)
+  );
 }
 
 /** Claude's first message when you start work on a ticket: the ticket, then a

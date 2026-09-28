@@ -114,10 +114,16 @@ describe("denPrompt", () => {
 });
 
 describe("ticketNotesSeed", () => {
-  it("is the ticket brief plus a progress section", () => {
+  it("opens on the empty handover, with the ticket below it", () => {
     const seed = ticketNotesSeed(ISSUE);
-    expect(seed.startsWith(ticketBrief(ISSUE))).toBe(true);
-    expect(seed).toContain("## Progress");
-    expect(ticketBrief(ISSUE)).not.toContain("## Progress");
+    expect(seed.startsWith("# FAST-1234: Fix the thing\n\n## Where it stands")).toBe(true);
+    expect(seed.indexOf("## Waiting on you")).toBeLessThan(seed.indexOf("## Session notes"));
+    expect(seed.indexOf("## Session notes")).toBeLessThan(seed.indexOf("## Ticket"));
+    expect(seed).toContain("It breaks.");
+  });
+
+  it("keeps the look pane's brief free of the handover", () => {
+    expect(ticketBrief(ISSUE)).not.toContain("## Where it stands");
+    expect(ticketBrief(ISSUE)).toContain("It breaks.");
   });
 });

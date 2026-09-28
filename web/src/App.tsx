@@ -290,9 +290,8 @@ export function App() {
       cwd: denRoot,
       ticket: DEN_TICKET,
       name: "🦊 edit den",
-      // Start with an empty progress note (default "# Progress"), not the
-      // handover doc — the handover lives in the initial prompt so we never
-      // risk editing it with unrelated progress entries.
+      // No seed: the notepad starts as the empty handover (shared/handover.ts)
+      // that every workspace gets, and the opener lives in the initial prompt.
       initialPrompt: denPrompt(),
     });
   };

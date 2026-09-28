@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { isHandover } from "../../shared/handover.ts";
 
 /** Is a scroll box at (or within `slack` px of) its bottom? The notepad follows
  * new entries only while this holds, so it never yanks someone who has
@@ -15,10 +16,12 @@ export function isNearBottom(
   return scrollHeight - (scrollTop + clientHeight) <= slack;
 }
 
-// Progress log for a workspace. Renders markdown in view mode; edit + save.
-// A session appends below the fold, so the rendered view follows the newest
-// entry: it scrolls to the bottom when the content changes, unless you have
-// scrolled up, and picks following back up once you scroll to the bottom again.
+// A workspace's handover notepad. Renders markdown in view mode; edit + save.
+// A handover (shared/handover.ts) is rewritten in place at the top, so it
+// opens at the top and den leaves the scroll alone. An older notepad that is
+// still an appended log follows the newest entry instead: it scrolls to the
+// bottom when the content changes, unless you have scrolled up, and picks
+// following back up once you scroll to the bottom again.
 export function NotepadPane({ groupId }: { groupId: string }) {
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(false);
@@ -52,7 +55,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   // Before paint, so a new entry never flashes in at the old scroll position.
   useLayoutEffect(() => {
     const el = renderRef.current;
-    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+    if (el && followRef.current && !isHandover(content)) el.scrollTop = el.scrollHeight;
   }, [content, editing]);
 
   const onScroll = () => {
@@ -77,7 +80,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
   return (
     <div className="notepad">
       <div className="notepad-head">
-        <span className="notepad-title">📝 progress</span>
+        <span className="notepad-title">📝 handover</span>
         {dirty && <span className="notepad-dirty">unsaved</span>}
         {editing ? (
           <button className="btn notepad-save" onClick={save} disabled={saving}>
@@ -87,7 +90,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
           <button
             className="btn notepad-save"
             onClick={() => setEditing(true)}
-            title="edit the log"
+            title="edit the handover"
           >
             edit
           </button>
@@ -103,7 +106,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
             setContent(e.target.value);
             setDirty(true);
           }}
-          placeholder="The main Claude keeps its progress log here as it works…"
+          placeholder="The main Claude keeps a handover here: where it stands, done, next, waiting on you…"
         />
       ) : content.trim() ? (
         <div
@@ -119,7 +122,7 @@ export function NotepadPane({ groupId }: { groupId: string }) {
           className="notepad-render notepad-empty"
           onDoubleClick={() => setEditing(true)}
         >
-          No progress logged yet.
+          No handover yet.
         </div>
       )}
     </div>
