@@ -824,6 +824,27 @@ body {
   margin-bottom: 6px;
 }
 
+/* Close-time clean-up options (#15, #28). */
+.cleanup-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  margin: 4px 0 12px;
+  cursor: pointer;
+}
+.cleanup-option input {
+  margin-top: 3px;
+}
+.cleanup-sub {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.cleanup-option .wt-loss {
+  display: block;
+  margin: 4px 0 0;
+}
+
 /* Worktree setup button (#10), pink when the worktree looks not set up. */
 .app-run-btn.needs-setup {
   border-color: var(--pink-deep);

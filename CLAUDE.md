@@ -499,6 +499,17 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   workspace and types the command there, so you watch it boot and Ctrl-C it like
   normal. When it can tell the app is already up (runn status / a port probe) the
   button becomes ▶ open and links to the URL instead. See `server/apprun.ts`.
+  **■ stop** (issue 28) sits beside it while anything is up (`canStop`): a
+  runn stack with **any** container up (`parseRunnStatus` `containersUp` — the
+  app container can be down while postgres still holds memory) gets the repo's
+  own teardown, `conductor.json` `scripts.archive` (runn: `runn down`), typed
+  into a new shell tab like ▶ run; a script app gets Ctrl-C in the tab den
+  started it in (`appTabs` in `app.ts`). Closing a session whose checkout's
+  stack is still up offers to stop it in the same dialog as the worktree
+  removal (`WorktreeCleanupDialog`), **stop first** — `POST /api/app/stop-dir`,
+  only for a checkout of the work repo — since a stack whose worktree is gone
+  can't be found by its own teardown. `shortCommand` shows conductor.json's
+  guarded script as the command it runs.
 - **Set up a fresh worktree** (issue 10): a new worktree lacks the repo's
   gitignored local files (`.env`, generated artifacts), which live only in the
   main checkout. Den reads the repo's **own** setup command — `conductor.json`

@@ -1,13 +1,37 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.ts";
 
-interface AppRunner {
+export interface AppRunner {
   name: string;
   kind: "runn" | "script" | null;
   running: boolean | null;
   url?: string;
   command?: string;
+  /** Teardown command (runn's `runn down`); absent for a script app. */
+  stopCommand?: string;
+  /** runn: containers up; the stop button shows while any are. */
+  containersUp?: number;
+  /** den has a live tab running this app (a script app stops through it). */
+  appTab?: boolean;
   dir: string;
+}
+
+/** A repo script as a person would say it: drops the usual "is the tool
+ * installed" guard and "|| echo" fallback, so conductor.json's
+ * `command -v runn >/dev/null 2>&1 && runn down || echo ...` reads as
+ * `runn down`. Show the full command in a tooltip. Pure, for the test. */
+export function shortCommand(cmd: string): string {
+  return cmd
+    .replace(/^command -v \S+ >\/dev\/null 2>&1 && /, "")
+    .replace(/\s*\|\|\s*echo\b.*$/, "")
+    .trim();
+}
+
+/** Is there something for the stop button to stop? Pure, for the test. */
+export function canStop(r: AppRunner | null): boolean {
+  if (!r?.kind) return false;
+  if (r.kind === "runn") return !!r.stopCommand && (r.containersUp ?? 0) > 0;
+  return !!r.appTab;
 }
 
 // Workspace-header button that runs the app this workspace is working on.
@@ -18,14 +42,18 @@ export function AppRunButton({
   sessionId,
   status,
   onLaunch,
+  onStop,
 }: {
   sessionId: string;
   /** Session status — re-poll when it flips (restart etc.). */
   status: string;
   onLaunch: (sessionId: string) => Promise<void>;
+  /** Stop it (#28): the teardown in a new tab, or Ctrl-C in the app's tab. */
+  onStop: (sessionId: string) => Promise<void>;
 }) {
   const [runner, setRunner] = useState<AppRunner | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -49,8 +77,31 @@ export function AppRunButton({
 
   if (!runner?.kind || !runner.command) return null;
 
+  const stop = canStop(runner) ? (
+    <button
+      className="btn btn-ghost-outline app-run-btn app-stop-btn"
+      disabled={stopping}
+      title={
+        runner.stopCommand
+          ? `stop ${runner.name}: runs ${shortCommand(runner.stopCommand)} in a new tab${runner.containersUp ? ` (${runner.containersUp} containers up)` : ""}`
+          : `stop ${runner.name}: Ctrl-C in the tab den started it in`
+      }
+      onClick={async () => {
+        setStopping(true);
+        try {
+          await onStop(sessionId);
+        } finally {
+          setStopping(false);
+        }
+      }}
+    >
+      {stopping ? "stopping…" : "■ stop"}
+    </button>
+  ) : null;
+
   if (runner.running && runner.url) {
     return (
+      <>
       <a
         className="btn btn-ghost-outline app-run-btn running"
         href={runner.url}
@@ -60,10 +111,13 @@ export function AppRunButton({
       >
         ▶ open {runner.name}
       </a>
+      {stop}
+      </>
     );
   }
 
   return (
+    <>
     <button
       className="btn btn-ghost-outline app-run-btn"
       disabled={busy}
@@ -79,6 +133,8 @@ export function AppRunButton({
     >
       {busy ? "starting…" : `▶ run ${runner.name}`}
     </button>
+    {stop}
+    </>
   );
 }
 

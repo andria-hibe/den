@@ -12,7 +12,7 @@ import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
-import { AppRunButton, SetupButton } from "./AppRunButton.tsx";
+import { AppRunButton, SetupButton, type AppRunner } from "./AppRunButton.tsx";
 import { SessionRail } from "./SessionRail.tsx";
 import { TicketLookView } from "./TicketLookView.tsx";
 import { WorkLinkChips } from "./WorkLinkChips.tsx";
@@ -25,7 +25,7 @@ import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import { denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
-import { WorktreeCleanupDialog } from "./WorktreeCleanupDialog.tsx";
+import { WorktreeCleanupDialog, type StackToStop } from "./WorktreeCleanupDialog.tsx";
 import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
@@ -42,7 +42,7 @@ export function App() {
   const [showNew, setShowNew] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   // A den-made worktree left behind by the session just closed, offered for removal.
-  const [cleanup, setCleanup] = useState<WorktreeInfo | null>(null);
+  const [cleanup, setCleanup] = useState<{ worktree: WorktreeInfo | null; stack: StackToStop | null } | null>(null);
 
   // The session list + everything that mutates it (create/rename/restart/close,
   // shell tabs, selection, the 4s server poll).
@@ -58,6 +58,7 @@ export function App() {
     setHandover,
     addShellTab,
     launchApp,
+    stopApp,
     closeShellTab,
     reorderRail,
     markExited,
@@ -65,19 +66,36 @@ export function App() {
     applyTitle,
   } = useSessions({ editingId, onError: setErrMsg });
 
-  // Close a session, then offer to remove the worktree it was working in when
-  // den made that worktree and no other session is using it (the server says
-  // both). Anything else, including a failed lookup, just closes.
+  // Close a session, then offer to clean up what it leaves behind (#15, #28):
+  // its checkout's stack if one is still up, and the worktree when den made it
+  // and no other session uses it (the server says which). Anything else,
+  // including a failed lookup, just closes.
   const closeAndOfferCleanup = async (id: string) => {
-    const cwd = sessions.find((s) => s.id === id)?.cwd;
+    const s = sessions.find((x) => x.id === id);
+    const cwd = s?.cwd;
+    // Ask about the stack while the session still exists; runn status takes a
+    // moment, so it runs alongside the close.
+    const stackQuery =
+      s && s.role === "main"
+        ? api<AppRunner>(`/api/app/runner?sessionId=${encodeURIComponent(id)}`).catch(() => null)
+        : Promise.resolve(null);
     await closeSession(id);
     if (!cwd) return;
+    const runner = await stackQuery;
+    const stack: StackToStop | null =
+      runner?.kind === "runn" && runner.stopCommand && (runner.containersUp ?? 0) > 0
+        ? { dir: runner.dir, name: runner.name, command: runner.stopCommand, containersUp: runner.containersUp ?? 0 }
+        : null;
+    let worktree: WorktreeInfo | null = null;
     try {
       const info = await api<WorktreeInfo>(`/api/git/worktree?path=${encodeURIComponent(cwd)}`);
-      if (info.den && !info.inUse) setCleanup(info);
+      if (info.den && !info.inUse) worktree = info;
     } catch {
-      // not a worktree den knows about: nothing to offer
+      // not a worktree den knows about
     }
+    // A stack is only offered for a checkout nothing else is open in.
+    const othersHere = sessions.some((x) => x.groupId !== s?.groupId && x.cwd === cwd);
+    if (worktree || (stack && !othersHere)) setCleanup({ worktree, stack: othersHere ? null : stack });
   };
 
   // GitHub PRs + Linear issues come from one shared poll (WorkData), so the
@@ -363,6 +381,7 @@ export function App() {
             sessionId={s.id}
             status={s.status}
             onLaunch={launchApp}
+            onStop={stopApp}
           />
         )}
         {opts?.workspace && s.ticket === DEN_TICKET && (
@@ -815,7 +834,8 @@ export function App() {
 
       {cleanup && (
         <WorktreeCleanupDialog
-          worktree={cleanup}
+          worktree={cleanup.worktree}
+          stack={cleanup.stack}
           onDone={() => setCleanup(null)}
           onError={(msg) => {
             setCleanup(null);

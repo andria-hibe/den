@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
@@ -39,6 +41,8 @@ import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
 /** A positive-integer PR number, coerced from untrusted query/body input. */
+const execFileP = promisify(execFile);
+
 export function prNumber(v: unknown): number | null {
   const n = Number(v);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -539,6 +543,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // Can the app this workspace is working on be run locally? Returns how to run
   // it, whether it's already up, and a URL to open (see server/apprun.ts).
+  // Which shell tab den launched each workspace's app in (#28), by group.
+  const appTabs = new Map<string, string>();
+  const liveAppTab = (groupId: string) => {
+    const id = appTabs.get(groupId);
+    const tab = id ? sessions.get(id) : undefined;
+    return tab && tab.status === "running" && tab.groupId === groupId ? tab : null;
+  };
+
   app.get("/api/app/runner", async (req, reply) => {
     const { sessionId } = req.query as { sessionId?: string };
     const session = sessionId ? sessions.get(sessionId) : null;
@@ -547,7 +559,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "not_found" };
     }
     try {
-      return await appRunnerStatus(session.cwd);
+      const status = await appRunnerStatus(session.cwd);
+      // Whether den has a live tab running this app (a script app can be
+      // stopped only through it).
+      return { ...status, appTab: !!liveAppTab(session.groupId) };
     } catch (e) {
       logWarn("app runner status failed", e);
       reply.code(500);
@@ -580,8 +595,76 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const shell = sessions.get(meta.id);
     const cmd = `cd ${shellQuote(runner.dir)} && ${runner.command}\r`;
     setTimeout(() => shell?.write(cmd), 400);
+    // Remember the tab, so stop can Ctrl-C a script app there (#28).
+    appTabs.set(session.groupId, meta.id);
     reply.code(201);
     return meta;
+  });
+
+  // Stop the workspace's app (#28). A stack with a teardown command (runn's
+  // `runn down`, from conductor.json) gets it typed into a new shell tab, like
+  // run, so you see it go down. A script app gets Ctrl-C in the tab den ran it
+  // in. Returns the new tab's meta, or { interrupted: true }.
+  app.post("/api/app/stop", async (req, reply) => {
+    const { sessionId } = (req.body ?? {}) as { sessionId?: string };
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const runner = detectAppRunner(session.cwd);
+    if (runner.stopCommand) {
+      const meta = sessions.addShell(session.groupId);
+      if (!meta) {
+        reply.code(404);
+        return { error: "not_found" };
+      }
+      const shell = sessions.get(meta.id);
+      const cmd = `cd ${shellQuote(runner.dir)} && ${runner.stopCommand}\r`;
+      setTimeout(() => shell?.write(cmd), 400);
+      reply.code(201);
+      return meta;
+    }
+    const tab = liveAppTab(session.groupId);
+    if (tab) {
+      tab.write("\x03");
+      return { interrupted: true };
+    }
+    reply.code(400);
+    return { error: "not_running", message: "den didn't start this app, so it can't stop it." };
+  });
+
+  // Tear down the stack of a checkout whose workspace just closed (#28), so a
+  // removed worktree can't leave its containers running. Only a checkout of
+  // the work repo, only with a teardown command, and run to completion here
+  // (the workspace's tabs are gone).
+  app.post("/api/app/stop-dir", async (req, reply) => {
+    const { path } = (req.body ?? {}) as { path?: string };
+    const repo = roots().workRepo;
+    let known: boolean;
+    try {
+      known = !!path && listWorktrees(repo).some((w) => w.path === path);
+    } catch {
+      known = false; // the work dir isn't a git repo
+    }
+    const runner = known && path ? detectAppRunner(path) : null;
+    if (!runner?.stopCommand) {
+      reply.code(400);
+      return { error: "no_stop" };
+    }
+    try {
+      const { stdout, stderr } = await execFileP("/bin/sh", ["-c", runner.stopCommand], {
+        cwd: runner.dir,
+        timeout: 5 * 60_000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      const tail = `${stdout}${stderr}`.trim().split("\n").slice(-3).join("\n");
+      return { ok: true, output: tail };
+    } catch (err) {
+      logWarn("app.stopDir", err);
+      reply.code(502);
+      return { error: "stop_failed", message: "The teardown command failed; run it in a terminal to see why." };
+    }
   });
 
   // Worktree setup (#10): the repo's own setup command, and whether this

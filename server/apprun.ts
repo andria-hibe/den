@@ -29,6 +29,11 @@ export interface AppRunner {
   url?: string;
   /** Shell command that spins it up (run in `dir`). */
   command?: string;
+  /** Shell command that tears it down (run in `dir`), for the stop button.
+   * Absent for a script app, which stops with Ctrl-C in its tab. */
+  stopCommand?: string;
+  /** runn: how many of the stack's containers are up (0 = nothing to stop). */
+  containersUp?: number;
   /** Working dir the command runs in (repo root). */
   dir: string;
 }
@@ -59,13 +64,27 @@ function runnUrlFromEnv(dir: string): string | undefined {
 }
 
 /** Parse `runn status` output for liveness + the app URL. */
-export function parseRunnStatus(out: string): { running: boolean; url?: string } {
+export function parseRunnStatus(out: string): { running: boolean; url?: string; containersUp: number } {
   const url = out.match(/^App:\s*(\S+)/m)?.[1];
+  const lines = out.split("\n");
   // The app container line looks like: "runn_<proj>-app-1  ...  Up ... (healthy)"
-  const running = out
-    .split("\n")
-    .some((l) => /-app-\d+\b/.test(l) && /\bUp\b/.test(l));
-  return { running, url };
+  const running = lines.some((l) => /-app-\d+\b/.test(l) && /\bUp\b/.test(l));
+  // Any container up means the stack holds memory, even when the app itself
+  // has exited: that's what the stop button is for (#28).
+  const containersUp = lines.filter((l) => /^runn_\S+-\d+\s/.test(l) && /\bUp\b/.test(l)).length;
+  return { running, url, containersUp };
+}
+
+/** The repo's own teardown command: `conductor.json`'s `scripts.archive`
+ * (the Conductor app's convention; runn declares `runn down` there). */
+export function archiveCommandFor(root: string): string | null {
+  try {
+    const c = JSON.parse(readFileSync(join(root, "conductor.json"), "utf8")) as { scripts?: { archive?: unknown } };
+    const a = c.scripts?.archive;
+    return typeof a === "string" && a.trim() ? a.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 const DEV_SCRIPTS = ["dev", "start", "develop", "serve", "turbo:dev"];
@@ -133,6 +152,7 @@ export function detectAppRunner(cwd: string): AppRunner {
       running: null,
       dir,
       command: "runn up",
+      stopCommand: archiveCommandFor(dir) ?? "runn down",
       url: runnUrlFromEnv(dir),
     };
   }
@@ -164,8 +184,8 @@ export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
         cwd: base.dir,
         timeout: 8000,
       });
-      const { running, url } = parseRunnStatus(stdout);
-      return { ...base, running, url: url ?? base.url };
+      const { running, url, containersUp } = parseRunnStatus(stdout);
+      return { ...base, running, url: url ?? base.url, containersUp };
     } catch (e) {
       // `runn` missing or errored — still offer to spin it up; treat as down.
       logWarn("runn status failed", e);

@@ -190,6 +190,25 @@ export function useSessions({
     }
   };
 
+  // Stop the workspace's app (#28). A teardown runs in a new shell tab, which
+  // we switch to; a script app is interrupted in its own tab.
+  const stopApp = async (sessionId: string) => {
+    const group = sessions.find((s) => s.id === sessionId)?.groupId;
+    try {
+      const r = await api<Partial<SessionMeta> & { interrupted?: boolean }>("/api/app/stop", {
+        method: "POST",
+        body: JSON.stringify({ sessionId }),
+      });
+      if (r.id) {
+        const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+        setSessions(d.sessions);
+        if (group) setShellTab((m) => ({ ...m, [group]: r.id! }));
+      }
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   // Close a single shell tab (leaves the rest of the workspace intact).
   const closeShellTab = async (shellId: string, groupId: string) => {
     try {
@@ -260,6 +279,7 @@ export function useSessions({
     setHandover,
     addShellTab,
     launchApp,
+    stopApp,
     closeShellTab,
     reorderRail,
     markExited,

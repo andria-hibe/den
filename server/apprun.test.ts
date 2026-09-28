@@ -66,3 +66,24 @@ describe("literalIncludes", () => {
     expect(literalIncludes(text)).toEqual([".env", ".env.local", "services/prisma/prisma-generated"]);
   });
 });
+
+describe("parseRunnStatus containersUp", () => {
+  const out = [
+    "App: https://x.runn.localhost:5103",
+    "NAME                         IMAGE   COMMAND   SERVICE   CREATED   STATUS",
+    "runn_x-api-1                 img     \"x\"       api       3 days    Up 3 days (healthy)",
+    "runn_x-app-1                 img     \"x\"       app       3 days    Exited (1) 2 hours ago",
+    "runn_x-db-init-1             img     \"x\"       db-init   3 days    Exited (0) 3 days ago",
+    "runn_x-postgres-1            img     \"x\"       postgres  3 days    Up 3 days (healthy)",
+  ].join("\n");
+
+  it("counts containers still up even when the app has exited", () => {
+    const s = parseRunnStatus(out);
+    expect(s.running).toBe(false);
+    expect(s.containersUp).toBe(2);
+  });
+
+  it("is 0 for a stack that isn't up", () => {
+    expect(parseRunnStatus("App: https://x\nNAME IMAGE\n").containersUp).toBe(0);
+  });
+});
