@@ -222,15 +222,25 @@ WebSocket; everything else is REST.
     working tree) explicitly forbidden, and the notepad review still the
     deliverable (the skill's report renders only in the terminal). The skill
     is a first pass, not the review: the instruction says to also cover what
-    its correctness/simplification scope misses. The paste prompt in
-    `PrViews.tsx` names the skill too so the two don't drift. Verified live
+    its correctness/simplification scope misses. The review paste prompt
+    (`reviewPrompt` in `web/src/prompts.ts`) names the skill too so the two
+    don't drift. Verified live
     2026-08-22: a den-spawned review session lists the skill and invokes it
     (it runs as a background agent); note its shell commands surface as the
     review pane's normal permission prompts, so a review still needs the
     developer around to approve reads.
     The instruction string is itself written
     in ASCII — an instruction full of em dashes teaches the model to write
-    them back — and `reviewInstruction.test.ts` asserts that with `isAscii`.
+    them back — and `reviewInstruction.test.ts` asserts that with `isAscii`
+    (`shared/ascii.ts`). The client paste prompts (`guidePrompt`,
+    `reviewPrompt`, `autoReviewPrompt`, `fileReviewPrompt`, `notePrompt`) live
+    in the pure `web/src/prompts.ts` for the same reason, and
+    `prompts.test.ts` holds each to the same check. **Put any new paste prompt
+    there, not inline in a component.** `fileReviewPrompt` (the per-file
+    "→ review" button) names the file and its hunk ranges instead of
+    re-pasting them (the diff is already on disk), and tells the pane to answer
+    in the terminal; `reviewInstruction` says the same about follow-up
+    questions in general, so a one-file ask can't overwrite the finished review.
     (`reviewInstruction` is the only copy of these rules — the headless
     `reviewPr` duplicate was removed 2026-08-25.)
     Review panes carry a notepad **and a guide file** — `create()`/`restartArgs`
@@ -498,7 +508,7 @@ local control plane, not a public API:
   2. **A deny backstop** in the generated per-session settings file
      (`--settings`, `--permission-mode default`; `buildReviewPermissions`,
      unit-tested): `Bash(git push:*)`, `Bash(git commit:*)`, the writing `gh pr`
-     subcommands (`merge`/`review`/`comment`/`edit`/`close`/`reopen`/`ready`),
+     subcommands (`merge`/`review`/`comment`/`edit`/`close`/`reopen`/`ready`/`create`),
      `gh issue comment`, and `gh api`. A `deny` can't be prompted past, and
      `gh pr view|diff|checks` stay open for reading. It is a backstop, **not** a
      sandbox: a shell can still reach those places another way (`git -C`, a

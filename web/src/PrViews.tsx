@@ -8,6 +8,7 @@ import { parseReview } from "./reviewNotes.ts";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { ToClaude } from "./ToClaude.tsx";
+import { autoReviewPrompt, guidePrompt, notePrompt, reviewPrompt } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
 function usePrDetail(repo: string, number: number) {
@@ -18,18 +19,6 @@ function usePrDetail(repo: string, number: number) {
       .catch(() => {});
   }, [repo, number]);
   return detail;
-}
-
-/** Build the prompt Claude receives when actioning a comment. */
-function notePrompt(prNumber: number, n: PrReviewNote & { kind: string }): string {
-  const where = n.path
-    ? ` on \`${n.path}\`${n.line ? ` (line ${n.line})` : ""}`
-    : "";
-  const hunk = n.diffHunk ? `\n\nRelevant diff:\n\`\`\`diff\n${n.diffHunk}\n\`\`\`` : "";
-  return (
-    `Please action this ${n.kind.replace(/_/g, " ").toLowerCase()} from ` +
-    `@${n.author}${where} on PR #${prNumber}:\n\n"${n.body}"${hunk}`
-  );
 }
 
 /** Top-level reviews and issue comments (no code anchor). */
@@ -222,37 +211,9 @@ export function PrReviewView({
     };
   }, [groupId]);
 
-  // The guide is a separate, cheaper ask than the review: group the diff and
-  // explain each group. It lands first and gives you something to read while the
-  // finding pass runs. The shape mirrors reviewInstruction (server/sessions.ts)
-  // so den can render each section above its own diffs.
-  const guidePrompt =
-    `Please write the reading guide for pull request #${number} (${repo}) to the ` +
-    `guide file named in your instructions. Read the saved diff first, and the ` +
-    `changed files for context. Group the changed files into sections by what ` +
-    `they do, most important first (the core of the change, then supporting ` +
-    `changes, then low-signal churn), and give each section a \`## \` heading, ` +
-    `two to four lines on its purpose and impact, and a \`Files:\` line naming ` +
-    `its files exactly as they appear in the diff. Every changed file goes in ` +
-    `exactly one section. Don't review in the guide - findings go in the review.`;
-
-  // Have the interactive Claude session (below) do the review, rather than a
-  // one-shot headless pass rendered into this pane. The PR is checked out in the
-  // session's worktree, so Claude can read the diff + surrounding code, and you
-  // can follow up with questions right there. The structure mirrors
-  // reviewInstruction (server/sessions.ts) so den can file it per file.
-  const reviewPrompt =
-    `Please review pull request #${number} (${repo}). The PR's full diff has been ` +
-    `saved to a file for you (see your instructions) and the PR is checked out in ` +
-    `your working directory — run whatever you need, but don't commit or push, and ` +
-    `keep any experiment on the scratch branch named in your instructions. ` +
-    `Read the diff, then read the changed files for context. Do the finding pass ` +
-    `with the code-review skill as your instructions describe, then write your review ` +
-    `to the notepad as markdown in this shape: first the general review (a short ` +
-    `**Summary**, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
-    `heading per file you have comments on — exact path as it appears in the diff ` +
-    `— with your comments on that file as bullets citing line numbers. Skip files ` +
-    `you have nothing to say about. If it all looks solid, say so briefly.`;
+  // The prompts live in prompts.ts, where a test holds them to ASCII.
+  const guideAsk = guidePrompt(number, repo);
+  const reviewAsk = reviewPrompt(number, repo);
 
   // "Have Claude pre-review the diff": send the prompt AND submit it — picking
   // that option means "start the review", so it shouldn't also need an Enter in
@@ -260,11 +221,8 @@ export function PrReviewView({
   // pane is ready (see the paste route), which a fixed timeout can't get right.
   // onAutoReviewStarted lets App clear its flag, so coming back to this session
   // later doesn't kick off the whole review a second time.
-  // The auto path asks for both, guide first: it is the reading order for the
-  // review that follows, and it lands while the finding pass is still running.
-  const autoPrompt =
-    `${guidePrompt}\n\nThen, once the guide file is saved, review the PR too. ` +
-    reviewPrompt;
+  // The auto path asks for both, guide first (see autoReviewPrompt).
+  const autoAsk = autoReviewPrompt(number, repo);
 
   useEffect(() => {
     if (!autoReview || started.current) return;
@@ -273,7 +231,7 @@ export function PrReviewView({
     setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
-      body: JSON.stringify({ text: autoPrompt, submit: true }),
+      body: JSON.stringify({ text: autoAsk, submit: true }),
     })
       .then(() => onAutoReviewStarted?.())
       .catch(() => {
@@ -325,7 +283,7 @@ export function PrReviewView({
             noteState={noteState}
             sessionId={sessionId}
             prNumber={number}
-            prompt={guidePrompt}
+            prompt={guideAsk}
             requested={guideRequested}
             onRequested={() => setGuideRequested(true)}
           />
@@ -338,7 +296,7 @@ export function PrReviewView({
                 <h4>den&apos;s review</h4>
                 <ToClaude
                   sessionId={sessionId}
-                  text={reviewPrompt}
+                  text={reviewAsk}
                   label="review in session"
                   title="Ask the Claude session below to review this diff"
                   submit

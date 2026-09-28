@@ -18,7 +18,7 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
   });
 
   it("denies the gh subcommands that write to GitHub", () => {
-    for (const sub of ["merge", "review", "comment", "edit", "close", "reopen", "ready"]) {
+    for (const sub of ["merge", "review", "comment", "edit", "close", "reopen", "ready", "create"]) {
       expect(permissions.deny).toContain(`Bash(gh pr ${sub}:*)`);
     }
     expect(permissions.deny).toContain("Bash(gh api:*)");

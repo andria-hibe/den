@@ -3,20 +3,11 @@
 // alongside) the file's block — so the review reads next to the code it's about.
 import { renderMarkdown } from "./markdown.ts";
 import { ToClaude } from "./ToClaude.tsx";
+import { fileReviewPrompt } from "./prompts.ts";
 
 interface FileBlock {
   file: string | null;
   lines: string[];
-}
-
-/** Prompt Claude receives when asked for a targeted review of one file's diff. */
-function fileReviewPrompt(file: string, prNumber: number | undefined, lines: string[]): string {
-  const where = prNumber ? ` from PR #${prNumber}` : "";
-  return (
-    `Please give me a targeted review of the changes to \`${file}\`${where}. ` +
-    `Call out bugs, edge cases, and anything risky.\n\n` +
-    `\`\`\`diff\n${lines.join("\n")}\n\`\`\``
-  );
 }
 
 export function classify(line: string): string {
@@ -206,7 +197,7 @@ export function DiffView({
                 sessionId={sessionId}
                 text={fileReviewPrompt(b.file, prNumber, b.lines)}
                 label="→ review"
-                title="Paste this file's diff into Claude for a targeted review"
+                title="Ask Claude for a targeted review of this file"
                 className="diff-note-review"
               />
             )}

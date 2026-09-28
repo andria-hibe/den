@@ -67,6 +67,11 @@ describe("reviewInstruction", () => {
     expect(INSTRUCTION).toContain("exactly one section");
   });
 
+  it("keeps follow-up answers out of the finished review", () => {
+    expect(INSTRUCTION).toContain("answer follow-up questions");
+    expect(INSTRUCTION).toContain("leave both files as they are");
+  });
+
   it("still targets the checkout when the branch is unknown", () => {
     const noBranch = reviewInstruction(NOTEPAD, DIFF, null, GUIDE);
     expect(noBranch).toContain("checked-out branch");

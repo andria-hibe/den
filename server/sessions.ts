@@ -113,6 +113,7 @@ export function buildReviewPermissions(notepadAbs: string, guideAbs: string) {
         "Bash(gh pr close:*)",
         "Bash(gh pr reopen:*)",
         "Bash(gh pr ready:*)",
+        "Bash(gh pr create:*)",
         "Bash(gh issue comment:*)",
         "Bash(gh api:*)",
       ],
@@ -273,16 +274,16 @@ export function reviewInstruction(
     `hedging adverbs. A file you are happy with gets no heading at all.\n` +
     `Write the clean, finished review there, not a running log; don't mention ` +
     `these files in your replies. If you are asked for only one of the two ` +
-    `deliverables, write only that file and leave the other alone.`
+    `deliverables, write only that file and leave the other alone. Once they ` +
+    `are written, answer follow-up questions (about one file, one comment, or ` +
+    `anything else) in the terminal and leave both files as they are, unless ` +
+    `the developer asks you to change them.`
   );
 }
 
-/** True if `s` is pure 7-bit ASCII (tab and newline allowed). The review
- * instruction and the review it asks for must both pass this: see
- * reviewInstruction. Exported for the test. */
-export function isAscii(s: string): boolean {
-  return !/[^\t\n\x20-\x7e]/.test(s);
-}
+/** The review instruction and the review it asks for must both pass this: see
+ * reviewInstruction. Re-exported for the test. */
+export { isAscii } from "../shared/ascii.ts";
 
 /**
  * Does a PTY look ready to receive scripted input? True once it has produced
