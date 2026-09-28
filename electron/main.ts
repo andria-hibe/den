@@ -75,14 +75,32 @@ function rememberBounds(win: BrowserWindow) {
   });
 }
 
+/** Start den's server once per process. On macOS closing the window leaves
+ * the app running, and reopening it from the dock used to call the whole boot
+ * again: a second server on the same database, whose startup marked every
+ * session exited, while the first kept serving the old code. The window is
+ * what gets recreated; the server isn't. */
+let serverStart: Promise<RunningServer> | null = null;
+function ensureServer(): Promise<RunningServer> {
+  // The promise, not the result, is shared: a dock click while the first start
+  // is still in flight must wait for it, not begin another.
+  serverStart ??= startServer({
+    port: 0,
+    webDir: app.isPackaged
+      ? join(process.resourcesPath, "web")
+      : join(__dirname, "..", "web"), // dist/electron -> dist/web
+  }).then((s) => (server = s));
+  return serverStart;
+}
+
 async function boot() {
   fixPath();
   installMenu();
-  const webDir = app.isPackaged
-    ? join(process.resourcesPath, "web")
-    : join(__dirname, "..", "web"); // dist/electron -> dist/web
+  await openWindow();
+}
 
-  server = await startServer({ port: 0, webDir });
+async function openWindow() {
+  const server = await ensureServer();
 
   // Open where the window was last left (see windowState.ts), kept on a
   // display that still exists.
@@ -146,8 +164,10 @@ async function boot() {
 
 app.whenReady().then(boot);
 
+// Reopening from the dock with no window left: a new window on the running
+// server (see ensureServer), never a second server.
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) boot();
+  if (app.isReady() && BrowserWindow.getAllWindows().length === 0) openWindow();
 });
 
 app.on("window-all-closed", () => {
