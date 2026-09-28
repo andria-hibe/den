@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId } from "./sessions.ts";
+import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
   getPrDetail,
@@ -437,6 +438,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return postError(reply, "github.resolve", err);
     }
   });
+
+  // The rail's clean-up button (#29): the skill it names, and where it opens.
+  app.get("/api/cleanup", async () => ({ skill: cleanupSkill(), cwd: roots().workRepo }));
 
   // What a Claude pane has spent (#11): its conversation, priced from the
   // transcript, plus den's idle handovers for it.

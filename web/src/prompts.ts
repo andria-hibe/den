@@ -172,3 +172,29 @@ export function denPrompt(): string {
     `replaced. Then wait for me to tell you what to change.`
   );
 }
+
+/** The clean-up session's first message (#29). With a skill, it names the
+ * skill and lets it drive; without one, it carries the rules any clean-up of
+ * a work repo needs. Either way the session plans first and changes nothing
+ * until the developer approves: that part is den's, whatever the skill says. */
+export function cleanupPrompt(skill: string | null): string {
+  const gate =
+    "Show me the plan first, grouped into safe to remove, needs my call, and keep, " +
+    "and change nothing until I approve it.";
+  if (skill) {
+    return (
+      `Use the ${skill} skill to clean up this work repo: merged worktrees, their ` +
+      `local branches, and idle or orphaned container stacks. Run its audit, then ${gate[0].toLowerCase()}${gate.slice(1)}`
+    );
+  }
+  return (
+    "Clean up this work repo: merged worktrees, their local branches, and idle or " +
+    "orphaned container stacks. Audit first without changing anything: for each " +
+    "worktree and local branch other than the base branch, find its PR and whether " +
+    "it merged (PRs may be squash-merged, so compare the local tip with the PR's " +
+    "head commit instead of trusting git branch --merged), whether it is on the " +
+    "remote, and any unpushed commits or uncommitted changes; and list container " +
+    `stacks whose checkout is gone. ${gate} Never use --force or --hard, never ` +
+    "touch the main checkout, and never discard uncommitted work."
+  );
+}

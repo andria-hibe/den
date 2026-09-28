@@ -20,6 +20,7 @@ export function SessionRail({
   onClose,
   onNewClaude,
   onNewShell,
+  onCleanup,
   onReorder,
   renderLinks,
 }: {
@@ -37,6 +38,8 @@ export function SessionRail({
   onClose: (id: string) => void;
   onNewClaude: () => void;
   onNewShell: () => void;
+  /** Open (or return to) a Claude session that cleans up the work repo. */
+  onCleanup: () => void;
   /** New rail order after a drag (or alt+arrow), as workspace ids top to bottom. */
   onReorder: (groupIds: string[]) => void;
   /** The ticket/PR chips for a row (App owns the issue/PR data they match). */
@@ -177,6 +180,14 @@ export function SessionRail({
         </button>
         <button className="btn btn-ghost-outline" onClick={onNewShell}>
           + shell
+        </button>
+        <button
+          className="btn btn-ghost-outline rail-cleanup"
+          onClick={onCleanup}
+          title="Clean up the work repo with Claude: merged worktrees, branches, and idle stacks. It shows a plan first and changes nothing until you approve."
+          aria-label="clean up the work repo"
+        >
+          🧹
         </button>
       </div>
     </aside>

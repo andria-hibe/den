@@ -3,6 +3,7 @@ import { isAscii } from "../../shared/ascii.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import {
   autoReviewPrompt,
+  cleanupPrompt,
   denPrompt,
   fileReviewPrompt,
   guidePrompt,
@@ -50,6 +51,8 @@ describe("paste prompts", () => {
     ticketNotesSeed: ticketNotesSeed(ISSUE),
     ticketPrompt: ticketPrompt(ISSUE),
     denPrompt: denPrompt(),
+    cleanupWithSkill: cleanupPrompt("runn-cleanup"),
+    cleanupGeneric: cleanupPrompt(null),
     notePrompt: notePrompt(42, {
       kind: "line comment",
       author: "someone",
@@ -125,5 +128,20 @@ describe("ticketNotesSeed", () => {
   it("keeps the look pane's brief free of the handover", () => {
     expect(ticketBrief(ISSUE)).not.toContain("## Where it stands");
     expect(ticketBrief(ISSUE)).toContain("It breaks.");
+  });
+});
+
+describe("cleanupPrompt", () => {
+  it("names the skill and keeps den's approval gate", () => {
+    const text = cleanupPrompt("runn-cleanup");
+    expect(text).toContain("Use the runn-cleanup skill");
+    expect(text).toContain("change nothing until I approve it");
+  });
+
+  it("carries the safety rules when there's no skill", () => {
+    const text = cleanupPrompt(null);
+    expect(text).toContain("squash-merged");
+    expect(text).toContain("change nothing until I approve it");
+    expect(text).toContain("Never use --force or --hard");
   });
 });

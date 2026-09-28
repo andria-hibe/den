@@ -526,6 +526,19 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   Claude suggests it when something fails for environment reasons. Setup is
   per worktree (several of the maintainer's were never set up), so it's a
   button, not a one-time step.
+- **Clean up the work repo with Claude** (issue 29): the rail's 🧹 button
+  (`openCleanup` in App) opens one Claude workspace in the work repo's main
+  checkout (sentinel ticket `den:cleanup`, reused like the den editor) whose
+  first message is `cleanupPrompt(skill)` (`prompts.ts`). **The procedure is
+  not in den** (den is public, and it depends on one person's tooling): the
+  prompt names a personal Claude Code skill — `$DEN_CLEANUP_SKILL` → the
+  `cleanup_skill` setting → the one installed `~/.claude/skills/*-cleanup`
+  (`pickCleanupSkill`, `server/cleanup.ts`); the maintainer's is
+  `runn-cleanup`. With none, the prompt carries the generic rules itself
+  (squash merges, no `--force`/`--hard`, never the main checkout). Either way
+  **plan first and change nothing until approved** is in den's prompt, not
+  left to the skill. Verified live: the session invoked the skill, ran its
+  audit, returned a three-group plan, and stopped.
 - **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +

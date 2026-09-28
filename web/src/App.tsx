@@ -24,7 +24,7 @@ import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
-import { denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
+import { cleanupPrompt, denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
 import { WorktreeCleanupDialog, type StackToStop } from "./WorktreeCleanupDialog.tsx";
 import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
@@ -322,6 +322,27 @@ export function App() {
     });
   };
 
+  // --- Clean up the work repo (#29) ---
+  // One Claude workspace in the work repo's main checkout, primed to clean up
+  // merged worktrees, branches, and idle stacks with the developer's own skill.
+  // The sentinel ticket reuses it, like the den editor.
+  const CLEANUP_TICKET = "den:cleanup";
+  const openCleanup = async () => {
+    const existing = sessions.find(
+      (s) => s.role === "main" && s.status === "running" && s.ticket === CLEANUP_TICKET,
+    );
+    if (existing) {
+      selectSession(existing.id);
+      return;
+    }
+    try {
+      const { skill, cwd } = await api<{ skill: string | null; cwd: string }>("/api/cleanup");
+      addSession({ cwd, ticket: CLEANUP_TICKET, name: "🧹 clean up", initialPrompt: cleanupPrompt(skill) });
+    } catch (e) {
+      setErrMsg((e as Error).message);
+    }
+  };
+
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       <span className="color-picker">
@@ -602,6 +623,7 @@ export function App() {
         onClose={closeAndOfferCleanup}
         onNewClaude={() => setShowNew(true)}
         onNewShell={() => addSession({ shell: true })}
+        onCleanup={openCleanup}
         onReorder={reorderRail}
         renderLinks={(s) => (
           <WorkLinkChips s={s} issues={issues} prs={prs} wrapClass="session-links" />

@@ -293,6 +293,7 @@ body {
 }
 .rail-actions .btn {
   flex: 1;
+  white-space: nowrap;
 }
 .term-wrap {
   flex: 1;
@@ -822,6 +823,15 @@ body {
   width: 100%;
   min-height: 70px;
   margin-bottom: 6px;
+}
+
+/* The rail's clean-up button (#29): a square beside + shell. Scoped to the
+   rail so it outranks `.rail-actions .btn { flex: 1 }`. */
+.rail-actions .rail-cleanup {
+  flex: none;
+  width: 42px;
+  padding: 0;
+  font-size: 16px;
 }
 
 /* Close-time clean-up options (#15, #28). */
