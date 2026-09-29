@@ -143,19 +143,6 @@ async function openWindow() {
       openExternalIfSafe(url);
     }
   });
-
-  // A boot-only check; nothing in the repo sets DEN_SMOKE (scripts/smoke.cjs is
-  // the full end-to-end test).
-  if (process.env.DEN_SMOKE) {
-    win.webContents.once("did-finish-load", () => {
-      console.log(`SMOKE_OK ${server?.url}`);
-      setTimeout(() => app.quit(), 200);
-    });
-    win.webContents.once("did-fail-load", (_e, code, desc) => {
-      console.error(`SMOKE_FAIL ${code} ${desc}`);
-      app.quit();
-    });
-  }
 }
 
 app.whenReady().then(boot);

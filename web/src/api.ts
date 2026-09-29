@@ -2,7 +2,8 @@
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   // Only set a JSON content-type when there's actually a body — Fastify rejects
   // an empty body when content-type is application/json (breaks DELETE).
-  const headers = init?.body ? { "content-type": "application/json" } : undefined;
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;

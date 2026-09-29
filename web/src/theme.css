@@ -58,11 +58,6 @@ body {
   background-size: 22px 22px;
 }
 
-/* Crisp scaling for pixel art. */
-.pixel {
-  image-rendering: pixelated;
-}
-
 /* ---- Layout ---- */
 .app {
   display: flex;
