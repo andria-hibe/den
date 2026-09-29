@@ -25,11 +25,9 @@ function fixPath() {
   }
 }
 
-// Den is a single-window cockpit and binds Cmd+W itself (close the active
-// *session*, not the window). The default macOS menu binds Cmd+W to "Close
-// Window" at the native level, which would swallow that keystroke before the
-// renderer sees it — so install a menu that keeps the standard Edit/View roles
-// (copy/paste/undo/quit) but drops the Cmd+W accelerator. Quit is still Cmd+Q.
+// Den binds Cmd+W to close the active session. The default macOS menu binds it
+// natively to "Close Window", which swallows the keystroke before the renderer
+// sees it, so this menu keeps the standard roles but drops that accelerator.
 function installMenu() {
   if (process.platform !== "darwin") return; // default menu is fine elsewhere
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -76,10 +74,9 @@ function rememberBounds(win: BrowserWindow) {
 }
 
 /** Start den's server once per process. On macOS closing the window leaves
- * the app running, and reopening it from the dock used to call the whole boot
- * again: a second server on the same database, whose startup marked every
- * session exited, while the first kept serving the old code. The window is
- * what gets recreated; the server isn't. */
+ * the app running, and a second boot on reopen would start a second server on
+ * the same database, whose startup marks every session exited. Only the
+ * window is recreated. */
 let serverStart: Promise<RunningServer> | null = null;
 function ensureServer(): Promise<RunningServer> {
   // The promise, not the result, is shared: a dock click while the first start
@@ -102,8 +99,6 @@ async function boot() {
 async function openWindow() {
   const server = await ensureServer();
 
-  // Open where the window was last left (see windowState.ts), kept on a
-  // display that still exists.
   const saved = parseWindowState(store.getSetting(WINDOW_SETTING));
   const areas = [screen.getPrimaryDisplay(), ...screen.getAllDisplays()].map((d) => d.workArea);
   const win = new BrowserWindow({
@@ -149,7 +144,8 @@ async function openWindow() {
     }
   });
 
-  // Smoke test: verify boot end-to-end then quit (used in CI/verification).
+  // A boot-only check; nothing in the repo sets DEN_SMOKE (scripts/smoke.cjs is
+  // the full end-to-end test).
   if (process.env.DEN_SMOKE) {
     win.webContents.once("did-finish-load", () => {
       console.log(`SMOKE_OK ${server?.url}`);

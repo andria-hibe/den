@@ -4,8 +4,8 @@
 // a code span in others, and a prompt full of them teaches the model to write
 // them back.
 //
-// Shared (like shared/branch.ts) so the server's instructions and the client's
-// paste prompts are held to one rule by one check.
+// Shared so the server's instructions and the client's paste prompts are held
+// to one check.
 
 /** True if `s` is pure 7-bit ASCII (tab and newline allowed). */
 export function isAscii(s: string): boolean {

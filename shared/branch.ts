@@ -4,8 +4,8 @@
 // misread as a git flag. Restrict to git's safe ref charset and reject a leading
 // dash before using one.
 //
-// Shared (like shared/colors.ts) so the dialog can reject a bad branch name
-// before the round-trip, without a second copy of the rule to drift.
+// Shared so the dialog can reject a bad branch name without a second copy of
+// the rule to drift.
 const BRANCH_RE = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
 
 export function isValidBranch(branch: string): boolean {

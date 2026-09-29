@@ -5,9 +5,8 @@
 // stable across runtimes, so the one binary in node_modules loads in Node and
 // Electron alike. better-sqlite3 uses V8's ABI, which differs between them, so
 // den keeps one copy per runtime and picks at load time (server/store.ts
-// passes this file as `nativeBinding` when running under Electron). Before
-// this, the one copy in node_modules had to be rebuilt every time you switched
-// between `npm run dev` and `npm run app`.
+// passes this file as `nativeBinding` when running under Electron, via
+// server/nativeBinding.ts).
 //
 //   node scripts/native-electron.mjs [--force]
 //

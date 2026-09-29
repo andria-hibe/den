@@ -1,8 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-// Unit tests cover the pure, rule-heavy logic (security guards, PR attention
-// rules, path sandboxing, title tidying) — the parts most likely to regress
-// silently. They import server modules directly and run in Node.
+// No DOM: the tests cover pure logic only, the web code's included.
 export default defineConfig({
   test: {
     environment: "node",

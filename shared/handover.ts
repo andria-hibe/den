@@ -1,15 +1,7 @@
-// The shape of a workspace notepad (#27): one file, two readers.
-// - The top four sections are for the developer, read in one glance: plain
-//   language, no technical detail.
-// - "Session notes" below them is the handover for the next session that
-//   picks the work up, including the same pane after a restart, so it carries
-//   the full technical context the developer's sections leave out.
-// The session rewrites both in place as the work moves (neither is a log), and
-// leaves anything below them (a ticket's text) alone.
-//
-// Shared so the server's default seed and instruction (sessions.ts), the
-// client's ticket seed (prompts.ts), and the notepad view (NotepadPane) all
-// name the same headings.
+// The shape of a workspace notepad (#27): four sections for the developer,
+// then session notes for the next session. Shared so the server's seed and
+// instruction (sessions.ts), the client's ticket seed (prompts.ts), and
+// NotepadPane all name the same headings.
 
 export const HANDOVER_HEADINGS = [
   "Where it stands",

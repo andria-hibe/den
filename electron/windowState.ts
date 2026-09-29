@@ -1,9 +1,6 @@
-// Where the den window opens. Its bounds are saved to the settings table when
-// they change and restored on launch, so a resized or moved window stays that
-// way across restarts instead of snapping back to the default every time.
-//
-// Pure (no Electron import), so the rules are unit-tested in
-// windowState.test.ts; main.ts does the Electron and storage calls.
+// Where the den window opens: its saved bounds, kept on a display that still
+// exists. No Electron import, so it can be unit-tested; main.ts does the
+// Electron and storage calls.
 
 export interface Rect {
   x: number;
