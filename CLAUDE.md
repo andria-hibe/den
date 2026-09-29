@@ -528,7 +528,17 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
   path from the repo's `.worktreeinclude` (Claude Code's list of gitignored
   files a worktree should get) that the main checkout has and this worktree
   lacks; `node_modules` only for a repo with no `.worktreeinclude`, since
-  runn's setup copies it only on request. The workspace pane's system prompt
+  runn's setup copies it only on request. A listed path whose parent the
+  worktree lacks is skipped: runn's `.worktreeinclude` still names its old
+  `services/` layout, which a leftover dir in the main checkout matched, so
+  the button never cleared. The button chains the **dependency step** after
+  setup (`then`, `setupScript`): `runn up` for runn, whose dependencies live
+  in its Docker stack (host `node_modules` is an empty mount point), else
+  `<pm> install` while `node_modules` is missing. runn is detected from the
+  main checkout's `.runn/project.env` too (`isRunnRepo`), since a fresh
+  worktree has none until its first `runn up`; without that, ▶ run offered a
+  host `turbo:dev`. Two full runn stacks can't run at once (a fixed jaeger
+  port, 16686), so `runn up` fails while another worktree's stack is up. The workspace pane's system prompt
   gets `setupHint`: the command and whether the worktree looks set up, so
   Claude suggests it when something fails for environment reasons. Setup is
   per worktree (several of the maintainer's were never set up), so it's a

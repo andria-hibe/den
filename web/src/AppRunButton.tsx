@@ -142,6 +142,7 @@ interface WorktreeSetup {
   dir: string;
   main: boolean;
   missing: string[];
+  then: string | null;
 }
 
 // Runs the repo's own worktree setup (#10) in a new shell tab. Only in an
@@ -182,7 +183,9 @@ export function SetupButton({
       title={
         (needed
           ? `This worktree looks not set up: ${setup.missing.join(", ")} missing. `
-          : "Set this worktree up again. ") + `Runs ${setup.command} (from ${setup.source}).`
+          : "Set this worktree up again. ") +
+        `Runs ${setup.command} (from ${setup.source})` +
+        (setup.then ? `, then ${setup.then} for its dependencies.` : ".")
       }
       onClick={async () => {
         setBusy(true);

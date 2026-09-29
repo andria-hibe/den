@@ -36,7 +36,7 @@ import {
   repoBaseName, isValidBranch,
   type WorkEnv,
 } from "./git.ts";
-import { detectAppRunner, appRunnerStatus, detectSetup } from "./apprun.ts";
+import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./apprun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -667,7 +667,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "not_found" };
     }
     const setup = detectSetup(session.cwd);
-    if (!setup.command || setup.main) {
+    const script = setupScript(setup);
+    if (!script || setup.main) {
       reply.code(400);
       return { error: "no_setup" };
     }
@@ -677,7 +678,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "not_found" };
     }
     const shell = sessions.get(meta.id);
-    const cmd = `cd ${shellQuote(setup.dir)} && ${setup.command}\r`;
+    const cmd = `cd ${shellQuote(setup.dir)} && ${script}\r`;
     setTimeout(() => shell?.write(cmd), 400);
     reply.code(201);
     return meta;

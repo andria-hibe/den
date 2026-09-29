@@ -125,12 +125,18 @@ function detectPm(dir: string): string {
   return "npm";
 }
 
+function isRunnRepo(dir: string): boolean {
+  return [dir, mainCheckoutOf(dir)].some((d) => existsSync(join(d, ".runn", "project.env")));
+}
+
 /** How to run the app, without spawning anything; no liveness. */
 export function detectAppRunner(cwd: string): AppRunner {
   const dir = repoRoot(cwd);
   const name = basename(dir);
-  // runn first: it can report liveness and the URL, a raw script can't.
-  if (existsSync(join(dir, ".runn", "project.env"))) {
+  // runn first: it can report liveness and the URL, a raw script can't. A
+  // fresh worktree has no ports file until its first `runn up`, so the main
+  // checkout's counts too.
+  if (isRunnRepo(dir)) {
     return {
       name,
       kind: "runn",
@@ -196,6 +202,8 @@ export interface WorktreeSetup {
   main: boolean;
   /** Paths the main checkout has and this worktree lacks. */
   missing: string[];
+  /** Run after `command` to install dependencies. */
+  then: string | null;
 }
 
 /** `conductor.json`'s `scripts.setup` (the Conductor app's convention), else
@@ -260,10 +268,39 @@ export function detectSetup(cwd: string): WorktreeSetup {
       wanted = existsSync(join(dir, "package.json")) ? ["node_modules"] : [];
     }
     for (const p of wanted) {
+      // A parent the worktree lacks is a layout the repo has moved off (a
+      // stale `.worktreeinclude`, an old main checkout still holding it); no
+      // setup recreates it.
+      if (!existsSync(join(dir, dirname(p)))) continue;
       if (existsSync(join(main, p)) && !existsSync(join(dir, p))) missing.push(p);
     }
   }
-  return { command: found?.command ?? null, source: found?.source ?? null, dir, main: isMain, missing };
+  return {
+    command: found?.command ?? null,
+    source: found?.source ?? null,
+    dir,
+    main: isMain,
+    missing,
+    then: isMain ? null : dependencyStep(dir),
+  };
+}
+
+/** runn installs dependencies into its Docker stack (the host node_modules
+ * is an empty mount point), so its step is `runn up`; a plain node repo's is
+ * an install, only while it has none. */
+function dependencyStep(dir: string): string | null {
+  const runner = detectAppRunner(dir);
+  if (runner.kind === "runn") return runner.command ?? null;
+  if (existsSync(join(dir, "package.json")) && !existsSync(join(dir, "node_modules"))) {
+    return `${detectPm(dir)} install`;
+  }
+  return null;
+}
+
+/** What the set-up button types. */
+export function setupScript(s: WorktreeSetup): string | null {
+  if (!s.command) return null;
+  return s.then ? `${s.command} && ${s.then}` : s.command;
 }
 
 /** A line for a workspace pane's system prompt naming the worktree's setup
@@ -277,8 +314,9 @@ export function setupHint(cwd: string): string {
     : "It looks set up.";
   return (
     `This checkout is a git worktree of the repo. The repo's command for ` +
-    `setting up a fresh worktree is \`${s.command}\` (from ${s.source}), run ` +
-    `from ${s.dir}. ${state} If tests or the app fail for environment reasons ` +
+    `setting up a fresh worktree is \`${s.command}\` (from ${s.source})` +
+    (s.then ? `, followed by \`${s.then}\` for its dependencies` : "") +
+    `, run from ${s.dir}. ${state} If tests or the app fail for environment reasons ` +
     `(a missing .env, dependencies, or generated files), that command is the ` +
     `likely fix: suggest it to the developer, who can run it from den's ` +
     `"set up" button, rather than recreating files by hand.`
