@@ -9,9 +9,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// Claude Code stores each session as a JSONL transcript under
-// ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl. We read a bit of each to
-// recover its working dir and a title so the user can resume it.
+// Transcripts live at <PROJECTS>/<encoded-cwd>/<session-id>.jsonl.
 const PROJECTS = join(homedir(), ".claude", "projects");
 
 export interface PastSession {
@@ -45,10 +43,8 @@ function userText(msg: unknown): string | null {
   return null;
 }
 
-// den used to spawn one-shot `claude -p` helpers (PR diff summaries, PR
-// reviews; both removed — the interactive review session does that work now).
-// Their transcripts are still on disk and you'd never resume one, so keep
-// detecting them by their prompt and dropping them from the resume list.
+// Opening prompts of den's retired one-shot `claude -p` helpers. Their
+// transcripts are still on disk and never worth resuming.
 const HEADLESS_PROMPTS = [
   "Summarize this PR's unified diff",
   "You are reviewing a GitHub pull request",
@@ -70,7 +66,6 @@ export function tidyTitle(base: string): string {
 function parse(fp: string): {
   cwd: string | null;
   title: string;
-  /** True when this session shouldn't appear in the resume list. */
   skip: boolean;
 } {
   let cwd: string | null = null;
@@ -100,15 +95,12 @@ function parse(fp: string): {
     if (cwd && (summary || firstUser)) break;
   }
 
-  // Drop from the list: den's one-shot `claude -p` helpers (identified by their
-  // prompt), and empty/aborted sessions with no summary and no user prose (e.g.
-  // a workspace that was opened but never actually used — pure clutter).
+  // An empty session is a workspace opened but never used.
   const headless =
     !!firstUser &&
     HEADLESS_PROMPTS.some((p) => firstUser!.trimStart().startsWith(p));
   const empty = !summary && !firstUser;
 
-  // Title: Claude's own summary, else the first real user message, tidied up.
   let base = summary || firstUser || "(untitled session)";
   if (!summary && firstUser?.includes(DEN_SELF_EDIT)) base = "Editing den itself";
   return { cwd, title: tidyTitle(base), skip: headless || empty };
@@ -139,8 +131,7 @@ function allTranscripts(): { fp: string; id: string; mtime: number }[] {
   return files;
 }
 
-/** True if a Claude transcript with this session id exists on disk — i.e.
- *  `claude --resume <id>` has a conversation to resume. */
+/** Does `claude --resume <id>` have a conversation to resume? */
 export function hasSession(id: string): boolean {
   if (!id || !existsSync(PROJECTS)) return false;
   for (const dir of readdirSync(PROJECTS)) {
@@ -153,9 +144,8 @@ export function hasSession(id: string): boolean {
   return false;
 }
 
-/** The most recent resumable Claude session id whose transcript records this
- *  cwd. Best-effort match for restarting a pane that was created before den
- *  pinned its own session ids. Returns null if none. */
+/** The newest resumable session recorded in this cwd: a best guess for a pane
+ * from before den pinned session ids. */
 export function latestSessionForCwd(cwd: string): string | null {
   if (!cwd) return null;
   for (const { fp, id } of allTranscripts().slice(0, 400)) {
@@ -172,9 +162,8 @@ export function latestSessionForCwd(cwd: string): string | null {
 export function listPastSessions(limit = 40): PastSession[] {
   const files = allTranscripts();
 
-  // Scan newest-first and collect real sessions until we have `limit`. We may
-  // skip many (headless helpers, gone cwds), so scan beyond `limit` — but cap
-  // the scan so a huge history doesn't read thousands of files.
+  // Skipped sessions mean scanning past `limit`, capped so a huge history
+  // doesn't read thousands of files.
   const out: PastSession[] = [];
   for (const { fp, id, mtime } of files.slice(0, Math.max(limit * 6, 200))) {
     if (out.length >= limit) break;

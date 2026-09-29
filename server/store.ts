@@ -4,9 +4,8 @@ import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { sqliteBinding } from "./nativeBinding.ts";
 
-// Persisted session metadata. Live PTY processes and scrollback live in memory
-// (server/sessions.ts); this table is what survives a browser refresh or a
-// server restart so the rail stays stable.
+// Session metadata and scrollback, so the rail and recent output survive a
+// server restart. Live PTYs don't.
 export interface SessionRow {
   id: string;
   name: string;
@@ -17,7 +16,7 @@ export interface SessionRow {
   status: string; // "running" | "exited"
   createdAt: number;
   lastActive: number;
-  /** Workspace grouping: a Claude session groups a main pane + a shell pane. */
+  /** A Claude workspace is one main pane plus its shell tabs. */
   groupId: string;
   role: string; // "main" | "shell"
   // --- Session context (restores the rail after a restart) ---
@@ -34,18 +33,15 @@ export interface SessionRow {
   prRepo: string | null;
   /** Title was locked (manual rename or descriptive ticket/PR title). */
   titleLocked: 0 | 1;
-  /** Tail of the terminal scrollback, persisted so a restart isn't destructive.
-   * Written periodically (not on the metadata `update` path). */
+  /** Tail of the terminal scrollback. Written by setScrollback, not `update`. */
   scrollback: string | null;
-  /** Rail sort key. Defaults to `createdAt` (so untouched rows keep creation
-   * order) and is rewritten to a small index when you drag the rail around. */
+  /** Rail sort key: `createdAt` until you drag the rail, then a small index. */
   pos: number;
   /** Keep a handover notepad (and refresh it when idle); 0 turns both off. */
   handover: 0 | 1;
 }
 
-// Stable per-user location (works identically for the CLI and the packaged
-// desktop app); DEN_DB overrides it (used by tests).
+// Same location for the CLI and the packaged app; DEN_DB overrides it.
 const DB_PATH = process.env.DEN_DB ?? join(homedir(), ".den", "den.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
@@ -155,8 +151,7 @@ export const store = {
   update(row: SessionRow) {
     stmts.update.run(row);
   },
-  /** Persist just the scrollback tail (kept off the metadata `update` path so
-   * frequent buffer writes don't rewrite the whole row). */
+  /** Kept off `update` so frequent scrollback writes don't rewrite the row. */
   setScrollback(id: string, scrollback: string) {
     stmts.setScrollback.run({ id, scrollback });
   },

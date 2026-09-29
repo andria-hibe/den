@@ -66,7 +66,7 @@ interface RawUsage {
   cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number };
 }
 
-/** Sum and price the usage in a transcript's JSONL lines. Pure, for the test. */
+/** Sum and price the usage in a transcript's JSONL lines. */
 export function sumUsage(lines: string[]): Usage {
   // Last line wins per message id: every block of a message repeats its usage.
   const byMessage = new Map<string, { model: string; usage: RawUsage }>();

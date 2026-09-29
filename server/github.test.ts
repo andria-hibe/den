@@ -39,9 +39,8 @@ describe("summarizeChecks", () => {
     expect(r.counts.total).toBe(1);
   });
 
-  // The bug this source change fixes: the old statusCheckRollup kept superseded
-  // runs, so a re-run that went green still carried its stale FAILURE row and
-  // the PR read as failing forever. gh pr checks gives one row per check.
+  // statusCheckRollup keeps superseded runs, so a check re-run to green still
+  // carries its stale FAILURE row. gh pr checks gives one row per check.
   it("passes a PR whose failing check was re-run green (deduped input)", () => {
     const r = summarizeChecks([
       { bucket: "pass" }, // "Validate PR title", latest run

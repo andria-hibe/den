@@ -18,7 +18,7 @@ export function isValidSkillName(name: string): boolean {
 /** Pick the clean-up skill: $DEN_CLEANUP_SKILL, then the `cleanup_skill`
  * setting, then the one installed skill named `cleanup` or `*-cleanup`.
  * Null when there's no single answer; the button then sends a generic
- * prompt. Pure (the directory listing is passed in), for the test. */
+ * prompt. */
 export function pickCleanupSkill(
   configured: (string | null | undefined)[],
   installed: string[],

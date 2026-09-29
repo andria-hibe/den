@@ -1,12 +1,6 @@
-// "Run this app locally" support for the workspace header button.
-//
-// Given a workspace's cwd, figure out whether the app it belongs to can be run
-// locally, how to spin it up, and (when we can tell) whether it's already up and
-// what URL to open. Two recipes:
-//   - "runn": a runn checkout (has .runn/project.env). We can ask `runn status`
-//     for liveness + the app URL, and `runn up` spins it up.
-//   - "script": any repo with a dev-ish npm script. We can spin it up (run the
-//     script in a terminal) but can't generically know if it's already running.
+// How to run a workspace's app locally, for the workspace header button: a
+// runn checkout (`runn up`, liveness from `runn status`) or a dev-ish npm
+// script, whose liveness is known only when it declares a port.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
@@ -19,26 +13,23 @@ const exec = promisify(execFile);
 const HOME = homedir();
 
 export interface AppRunner {
-  /** Display name of the app (repo dir basename). */
   name: string;
-  /** How we know to run it, or null if we found no way. */
+  /** null when there's no known way to run it. */
   kind: "runn" | "script" | null;
-  /** Whether it appears to be running. null = we can't tell (script recipe). */
+  /** null = can't tell. */
   running: boolean | null;
-  /** URL to open when running, if known. */
   url?: string;
-  /** Shell command that spins it up (run in `dir`). */
+  /** Run in `dir`. */
   command?: string;
-  /** Shell command that tears it down (run in `dir`), for the stop button.
-   * Absent for a script app, which stops with Ctrl-C in its tab. */
+  /** Run in `dir`. Absent for a script app, which stops with Ctrl-C in its tab. */
   stopCommand?: string;
   /** runn: how many of the stack's containers are up (0 = nothing to stop). */
   containersUp?: number;
-  /** Working dir the command runs in (repo root). */
+  /** The repo root. */
   dir: string;
 }
 
-/** Walk up from cwd to the enclosing git repo root (bounded to $HOME). */
+/** The enclosing git repo root, searching no higher than $HOME. */
 function repoRoot(cwd: string): string {
   let d = cwd;
   while (d.startsWith(HOME) && d !== HOME) {
@@ -58,7 +49,7 @@ function runnUrlFromEnv(dir: string): string | undefined {
     const port = env.match(/^RUNN_PORT_APP=(\d+)$/m)?.[1]?.trim();
     if (host && port) return `https://${host}:${port}`;
   } catch {
-    // no ports file / unreadable — fall back to `runn status` output
+    // no ports file: `runn status` supplies the URL instead
   }
   return undefined;
 }
@@ -67,7 +58,7 @@ function runnUrlFromEnv(dir: string): string | undefined {
 export function parseRunnStatus(out: string): { running: boolean; url?: string; containersUp: number } {
   const url = out.match(/^App:\s*(\S+)/m)?.[1];
   const lines = out.split("\n");
-  // The app container line looks like: "runn_<proj>-app-1  ...  Up ... (healthy)"
+  // e.g. "runn_<proj>-app-1  ...  Up ... (healthy)"
   const running = lines.some((l) => /-app-\d+\b/.test(l) && /\bUp\b/.test(l));
   // Any container up means the stack holds memory, even when the app itself
   // has exited: that's what the stop button is for (#28).
@@ -89,12 +80,10 @@ export function archiveCommandFor(root: string): string | null {
 
 const DEV_SCRIPTS = ["dev", "start", "develop", "serve", "turbo:dev"];
 
-/** The first dev-ish script present in the repo's package.json, if any. */
 export function pickDevScript(dir: string): string | undefined {
   return pickDevScriptEntry(dir)?.name;
 }
 
-/** The chosen dev script's name + body, for port sniffing. */
 function pickDevScriptEntry(dir: string): { name: string; body: string } | undefined {
   try {
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
@@ -106,18 +95,15 @@ function pickDevScriptEntry(dir: string): { name: string; body: string } | undef
   }
 }
 
-/**
- * Pull an *explicitly declared* port out of a dev script (`--port 4000`, `-p
- * 4000`, `PORT=4000`). We deliberately don't guess tool defaults (5173, 3000,
- * …) — probing a default could hit an unrelated app and mislabel it "running".
- */
+/** The port a dev script explicitly declares. Tool defaults (5173, 3000) are
+ * never guessed: probing one could hit an unrelated app and mislabel it
+ * "running". */
 export function extractPort(script: string): number | undefined {
   const m = script.match(/(?:--port[=\s]|(?<![\w-])-p[=\s]|\bPORT=)(\d{2,5})\b/);
   const n = m ? Number(m[1]) : NaN;
   return n >= 1 && n <= 65535 ? n : undefined;
 }
 
-/** True if something is already listening on the local port (app is up). */
 function probePort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = createConnection({ port, host: "127.0.0.1" });
@@ -132,7 +118,6 @@ function probePort(port: number): Promise<boolean> {
   });
 }
 
-/** Detect the package manager from lockfiles (defaults to npm). */
 function detectPm(dir: string): string {
   if (existsSync(join(dir, "pnpm-lock.yaml"))) return "pnpm";
   if (existsSync(join(dir, "yarn.lock"))) return "yarn";
@@ -140,11 +125,11 @@ function detectPm(dir: string): string {
   return "npm";
 }
 
-/** Static detection (no subprocess): what/how, but not liveness. */
+/** How to run the app, without spawning anything; no liveness. */
 export function detectAppRunner(cwd: string): AppRunner {
   const dir = repoRoot(cwd);
   const name = basename(dir);
-  // runn takes precedence — it has a richer status/open story than a raw script.
+  // runn first: it can report liveness and the URL, a raw script can't.
   if (existsSync(join(dir, ".runn", "project.env"))) {
     return {
       name,
@@ -171,11 +156,8 @@ export function detectAppRunner(cwd: string): AppRunner {
   return { name, kind: null, running: null, dir };
 }
 
-/**
- * Detection + liveness. runn asks `runn status`; a script app is probed on its
- * declared port (if any). Knowing it's up lets the UI offer "open" instead of
- * "run" — so we never re-launch an app that's already running.
- */
+/** detectAppRunner plus liveness, so the UI offers "open" rather than
+ * re-launching an app that's already up. */
 export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
   const base = detectAppRunner(cwd);
   if (base.kind === "runn") {
@@ -187,7 +169,7 @@ export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
       const { running, url, containersUp } = parseRunnStatus(stdout);
       return { ...base, running, url: url ?? base.url, containersUp };
     } catch (e) {
-      // `runn` missing or errored — still offer to spin it up; treat as down.
+      // Still offer to start it.
       logWarn("runn status failed", e);
       return { ...base, running: false };
     }
@@ -200,29 +182,24 @@ export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
 }
 
 // --- Worktree setup (#10) ----------------------------------------------------
-// A fresh worktree of the work repo isn't ready to run: the repo's gitignored
-// local files (.env, generated artifacts, node_modules) live only in the main
-// checkout. Repos say how to bring one up themselves, so den reads that rather
-// than carrying anyone's setup steps: `conductor.json`'s `scripts.setup` (the
-// Conductor app's convention; runn declares `./scripts/setup-worktree.sh`
-// there), else a `scripts/setup-worktree.sh`. Whether it's needed comes from
-// `.worktreeinclude` (Claude Code's list of gitignored files a worktree
-// should have): a listed path the main checkout has and this worktree lacks.
+// A fresh worktree lacks the repo's gitignored local files (.env, generated
+// artifacts), which live only in the main checkout. den runs the repo's own
+// setup command rather than carrying anyone's setup steps.
 
 export interface WorktreeSetup {
-  /** Shell command that sets this worktree up (run in `dir`), or null. */
+  /** Run in `dir`. */
   command: string | null;
   /** Where the command came from, for the tooltip. */
   source: string | null;
-  /** The worktree's root. */
   dir: string;
-  /** This is the repo's own checkout, not an added worktree: nothing to copy in. */
+  /** The repo's own checkout: nothing to set up. */
   main: boolean;
-  /** Paths the main checkout has and this worktree is missing. */
+  /** Paths the main checkout has and this worktree lacks. */
   missing: string[];
 }
 
-/** The repo's own setup command, from conductor.json or a setup script. */
+/** `conductor.json`'s `scripts.setup` (the Conductor app's convention), else
+ * `scripts/setup-worktree.sh`. */
 export function setupCommandFor(root: string): { command: string; source: string } | null {
   try {
     const conductor = JSON.parse(readFileSync(join(root, "conductor.json"), "utf8")) as {
@@ -241,7 +218,7 @@ export function setupCommandFor(root: string): { command: string; source: string
   return null;
 }
 
-/** The plain paths (no globs) a `.worktreeinclude` lists. Pure, for the test. */
+/** The plain paths (no globs) a `.worktreeinclude` lists. */
 export function literalIncludes(text: string): string[] {
   return text
     .split("\n")
@@ -273,9 +250,9 @@ export function detectSetup(cwd: string): WorktreeSetup {
   const isMain = main === dir;
   const missing: string[] = [];
   if (!isMain) {
-    // The repo's own list when it has one (runn's setup copies node_modules
-    // only on request, so checking it there would never clear); otherwise the
-    // one thing every JS checkout needs.
+    // `.worktreeinclude` is Claude Code's list of gitignored files a worktree
+    // should have. node_modules only without one: runn's setup copies it only
+    // on request, so checking it there would never clear.
     let wanted: string[];
     try {
       wanted = literalIncludes(readFileSync(join(dir, ".worktreeinclude"), "utf8"));
@@ -289,10 +266,9 @@ export function detectSetup(cwd: string): WorktreeSetup {
   return { command: found?.command ?? null, source: found?.source ?? null, dir, main: isMain, missing };
 }
 
-/** A line for a workspace pane's system prompt when its checkout is a worktree
- * with a setup command, so Claude knows the likely fix when a test or the app
- * fails on a missing .env or dependency. ASCII, like every den prompt. Empty
- * when there's nothing to say. */
+/** A line for a workspace pane's system prompt naming the worktree's setup
+ * command, so Claude knows the likely fix when something fails on a missing
+ * .env or dependency. Empty when there's nothing to say. */
 export function setupHint(cwd: string): string {
   const s = detectSetup(cwd);
   if (s.main || !s.command) return "";

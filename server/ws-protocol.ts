@@ -1,5 +1,5 @@
-// Typed messages exchanged over the terminal WebSocket.
-// Shared shape between server (server/pty.ts) and web (src/useTerminal.ts).
+// Messages over the terminal WebSocket, shared by the server (app.ts,
+// sessions.ts) and web/src/useTerminal.ts.
 
 /** Messages the browser sends to the server. */
 export type ClientMessage =

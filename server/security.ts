@@ -40,12 +40,8 @@ function originIsLoopback(origin: string): boolean {
 }
 
 /**
- * True if a request is safe to serve: its Host is a loopback address (blocks DNS
- * rebinding) and, if it carries an Origin, that Origin is also loopback (blocks
- * cross-site WebSocket/fetch hijacking). A *missing* Origin is fine — that means a
- * non-browser client or a same-document navigation, neither of which is the
- * cross-origin threat this guards against. A present-but-non-loopback Origin —
- * including the opaque `null` origin — is rejected.
+ * True if a request is safe to serve: a loopback Host and, when an Origin is
+ * present, a loopback Origin (see the top of this file).
  */
 export function isLocalRequest(headers: {
   origin?: string;

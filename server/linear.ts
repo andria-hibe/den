@@ -60,8 +60,8 @@ async function graphql<T>(
   key: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  // Bound the request so a hung Linear API can't leave the route pending forever
-  // (git/gh calls all set timeouts; fetch has none by default).
+  // fetch has no timeout by default, so a hung Linear API would leave the route
+  // pending forever.
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), 15_000);
   let res: Response;

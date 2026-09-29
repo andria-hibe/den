@@ -4,12 +4,9 @@ import { resolve, join, dirname, sep } from "node:path";
 import { store } from "./store.ts";
 import { isValidBranch } from "../shared/branch.ts";
 
-// Where we remember the den source repo, so the "edit den" button always finds
-// it — even in the packaged app, which runs from the .app bundle (not the repo).
 const DEN_REPO_SETTING = "den_repo_path";
 
-// All filesystem browsing is sandboxed to the home directory — this is a local
-// personal tool, but there's no reason to let the UI wander the whole disk.
+// Filesystem browsing is sandboxed to the home directory.
 const HOME = homedir();
 
 export interface DirEntry {
@@ -17,18 +14,14 @@ export interface DirEntry {
   path: string;
 }
 
-/** String-level check: is the (already-resolved) path under HOME? */
+/** String-level check on an already-resolved path. */
 function underHome(r: string): boolean {
   return r === HOME || r.startsWith(HOME + sep);
 }
 
-/**
- * True if `p` is inside HOME even after resolving symlinks. `resolve()` alone
- * collapses `..` and absolute paths (blocking those), but a symlink *inside*
- * HOME can still point outside it — so we also realpath the nearest existing
- * ancestor and re-check. Paths that don't exist yet (e.g. a makeDir target) are
- * fine as long as their real, existing parent stays under HOME.
- */
+/** Is `p` inside HOME even after resolving symlinks? `resolve()` alone misses
+ * a symlink inside HOME that points outside it, so the nearest existing
+ * ancestor is realpathed too; that also covers paths that don't exist yet. */
 export function within(p: string): boolean {
   const r = resolve(p);
   if (!underHome(r)) return false;
@@ -45,9 +38,6 @@ export function within(p: string): boolean {
   }
 }
 
-// The primary work repo that "Work" sessions and PR/ticket checkouts default
-// into. It has to be an actual git repo (prepareWork/checkoutPr run git in it),
-// so it's a single configurable directory rather than a fixed path.
 const WORK_DIR_SETTING = "work_dir";
 
 /** If exactly one direct child of `dir` is a git repo, return its path. */
@@ -68,14 +58,9 @@ export function soleGitRepo(dir: string): string | null {
   return repos.length === 1 ? repos[0] : null;
 }
 
-/**
- * The primary work repo, resolved in order:
- *   1. $DEN_WORK_DIR
- *   2. the stored `work_dir` setting
- *   3. auto-detect the sole git repo directly under ~/Documents/work
- *   4. ~/Documents/work itself
- * The result is always re-checked against the HOME sandbox before use.
- */
+/** The primary work repo that Work sessions and PR/ticket checkouts default
+ * into. It must be a git repo, since prepareWork and checkoutPr run git in
+ * it. */
 export function workDir(): string {
   const work = join(HOME, "Documents", "work");
   for (const c of [process.env.DEN_WORK_DIR, store.getSetting(WORK_DIR_SETTING)]) {
@@ -86,13 +71,10 @@ export function workDir(): string {
   return soleGitRepo(work) ?? work;
 }
 
-// The branch new work branches start from, when it isn't the repo's default
-// branch (see baseRef in git.ts). Unset for most repos: den asks the repo.
 const BASE_BRANCH_SETTING = "base_branch";
 
-/** The configured base branch for new work branches: $DEN_BASE_BRANCH, then the
- * stored `base_branch` setting. Null when neither is set or valid, so git.ts
- * resolves the repo's own default. */
+/** The configured base branch for new work branches, for a repo whose team
+ * doesn't work off its default branch. Null means git.ts asks the repo. */
 export function baseBranchOverride(): string | null {
   for (const c of [process.env.DEN_BASE_BRANCH, store.getSetting(BASE_BRANCH_SETTING)]) {
     const name = c?.trim();
@@ -114,7 +96,6 @@ export function roots() {
   };
 }
 
-/** True if `r` looks like the den source checkout (not the packaged app). */
 function looksLikeDenRepo(r: string): boolean {
   return (
     within(r) &&
@@ -123,16 +104,10 @@ function looksLikeDenRepo(r: string): boolean {
   );
 }
 
-/**
- * The den *source* repo, for the "edit den" self-editing session — the checkout
- * you develop in, NOT the packaged /Applications/Den.app (editing that is
- * useless). Checks, in order: $DEN_REPO, the path we remembered from a previous
- * run, the usual location, and the current working dir. The **first time** it's
- * found (e.g. during `npm run dev`, whose cwd is the repo) the path is persisted
- * to the settings store — which the packaged app shares (`~/.den/den.db`) — so
- * from then on the "edit den" button reliably lands in the repo even though the
- * app itself runs from the bundle. Returns null only if it's never been located.
- */
+/** The den source checkout, for the "edit den" session. Once found (e.g.
+ * under `npm run dev`, whose cwd is the repo) it's saved to the settings
+ * store, which the packaged app shares, so the app finds the repo even though
+ * it runs from its bundle. */
 export function denRepo(): string | null {
   const candidates = [
     process.env.DEN_REPO,
@@ -173,7 +148,6 @@ export function listDirs(p: string): {
     .filter((e) => {
       if (e.name.startsWith(".")) return false;
       if (e.isDirectory()) return true;
-      // follow symlinks that point at directories
       if (e.isSymbolicLink()) return isDir(join(path, e.name));
       return false;
     })

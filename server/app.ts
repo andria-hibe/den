@@ -52,31 +52,27 @@ export function prNumber(v: unknown): number | null {
 /**
  * Strip control bytes from text pasted into a PTY. Pasted content is
  * attacker-controllable (PR/ticket comments reach it via "→ Claude"), so it must
- * not carry terminal escape sequences — in particular an embedded `\x1b[201~`
- * that would end bracketed paste early and inject live input, or OSC sequences
- * that spoof the title / touch the clipboard. Tab and newline are kept.
+ * not carry terminal escape sequences: an embedded `\x1b[201~` would end
+ * bracketed paste early and inject live input, and OSC sequences can spoof the
+ * title or touch the clipboard.
  */
 export function sanitizePaste(text: string): string {
-  // Drop ESC (0x1B), CR (0x0D), and the other C0 controls + DEL, leaving only
-  // \t (09) and \n (0A). Stripping CR too means a raw carriage return can't
-  // submit input in a pane that isn't honouring bracketed paste (e.g. a shell).
+  // Of the control bytes, keeps only \t and \n. Dropping CR means a raw CR
+  // can't submit input in a pane that ignores bracketed paste (e.g. a shell).
   return text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 }
 
-// Beat between a bracketed paste and the carriage return that submits it (for
-// `POST /api/sessions/:id/paste` with `submit`), so Claude's TUI has taken the
-// text into its input box before Enter arrives.
+// Beat between a bracketed paste and the carriage return that submits it, so
+// Claude's TUI has taken the text into its input box before Enter arrives.
 const PASTE_SUBMIT_DELAY_MS = 250;
 
-// Single-quote a path for a POSIX shell (wraps the ' → '\'' escape). Used to
-// build the `cd <dir> && …` command written into a spin-up shell tab.
+// Single-quote a path for a POSIX shell.
 export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
-/** Wrap an async fetcher in a TTL cache (the GitHub-PR and Linear polls share
- * this shape). `get(true)` bypasses the cache; `invalidate()` empties it (e.g.
- * when the Linear key changes). Errors are not cached — the next get retries. */
+/** Wrap an async fetcher in a TTL cache. `get(true)` bypasses the cache;
+ * errors are not cached, so the next get retries. */
 function ttlCache<T>(ttlMs: number, fn: () => Promise<T>) {
   let hit: { at: number; data: T } | null = null;
   return {
@@ -93,7 +89,7 @@ function ttlCache<T>(ttlMs: number, fn: () => Promise<T>) {
 }
 
 export interface StartOptions {
-  /** Port to bind. 0 = ephemeral (recommended for the desktop app). */
+  /** Port to bind; 0 = ephemeral. */
   port?: number;
   host?: string;
   /** Directory of the built web app to serve (for the packaged app). */
@@ -115,9 +111,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const app = Fastify({ logger: false });
   await app.register(websocket);
 
-  // Reject cross-origin / rebound requests before any handler runs. This covers
-  // both REST routes and the terminal WebSocket upgrade (a GET that hits this
-  // hook first), so a page you're browsing can't reach the local control plane.
+  // Before any handler, so it covers the terminal WebSocket upgrade too (a GET
+  // that hits this hook first): a page you're browsing can't reach den.
   app.addHook("onRequest", async (req, reply) => {
     if (!isLocalRequest(req.headers)) {
       reply.code(403).send({ error: "forbidden" });
@@ -153,20 +148,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // Existing checkouts of the work repo — its own working copy plus every
-  // `git worktree`. The New Session dialog offers these as "workspaces" so a
-  // Work session can join one instead of always making another. The repo is
-  // resolved server-side (workDir()), so nothing here takes a caller path.
-  // Which sessions have their cwd in a worktree. A worktree in use is never
-  // offered for removal: a live shell or Claude pane is working in it.
+  // A worktree a session is working in is never offered for removal.
   const sessionsIn = (path: string) =>
     sessions.list().filter((m) => m.cwd === path || m.cwd.startsWith(path + "/"));
 
+  // Every checkout of the work repo, the New Session dialog's "workspaces".
+  // The repo is resolved server-side, so nothing here takes a caller path.
   app.get("/api/git/worktrees", async (req, reply) => {
     const repo = roots().workRepo;
     try {
-      // Den-created worktrees also carry what removing them would lose and
-      // whether a session is using them, for the New Session dialog's cleanup.
+      // For the New Session dialog's cleanup.
       const worktrees = listWorktrees(repo).map((w) => {
         if (!isDenWorktree(repo, w.path)) return { ...w, den: false };
         let changes = null;
@@ -179,7 +170,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       });
       return { repo, base: repoBaseName(repo, baseBranchOverride()), worktrees };
     } catch (err) {
-      // Not a git repo (workDir() falls back to ~/Documents/work) — the dialog
+      // Not a git repo (workDir() falls back to ~/Documents/work): the dialog
       // drops to plain folder browsing.
       logWarn("git.worktrees", err);
       reply.code(400);
@@ -187,8 +178,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // One worktree's cleanup info, for the offer den makes when a session in it
-  // closes. `den: false` (or a 404) means there is nothing to offer.
+  // For the cleanup offer when a session closes. `den: false` (or a 404)
+  // means there is nothing to offer.
   app.get("/api/git/worktree", async (req, reply) => {
     const { path } = req.query as { path?: string };
     const repo = roots().workRepo;
@@ -213,8 +204,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // Remove a den-created worktree (its branch stays). `force` is required when
-  // it would lose uncommitted work, and only sent after the developer saw that.
+  // The branch stays. `force` is required when uncommitted work would be lost,
+  // and the client sends it only after the developer saw that.
   app.post("/api/git/worktrees/remove", async (req, reply) => {
     const { path, force } = (req.body ?? {}) as { path?: string; force?: boolean };
     const repo = roots().workRepo;
@@ -247,7 +238,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Past Claude sessions on disk, for resuming.
   app.get("/api/sessions/past", async () => ({ sessions: listPastSessions() }));
 
-  // Rail order after a drag: the workspace (groupId) order, top to bottom.
+  // The workspace (groupId) order, top to bottom.
   app.post("/api/sessions/reorder", async (req, reply) => {
     const body = (req.body ?? {}) as { groupIds?: unknown };
     if (
@@ -280,8 +271,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       /** Start a new work branch from this local branch instead of the repo base. */
       base?: string;
     };
-    // Reuse an existing running session for the same ticket (same look/work
-    // mode) so we never create duplicate sessions or branches for one issue.
+    // Reuse a running session for the same ticket and mode, so one issue never
+    // gets duplicate sessions or branches.
     if (body.ticket) {
       const existing = sessions
         .list()
@@ -294,7 +285,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         );
       if (existing) return existing;
     }
-    // Reuse an existing session for the same PR too.
     if (body.pr && body.prRepo) {
       const existing = sessions
         .list()
@@ -307,7 +297,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         );
       if (existing) return existing;
     }
-    // "Work on it": set up the branch/worktree first, then open there.
     if (body.branch && body.env) {
       try {
         if (body.base && !isValidBranch(body.base)) {
@@ -328,7 +317,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         return { error: "git_failed", message: "Could not prepare the branch." };
       }
     }
-    // PR review / edit: check out the PR so Claude has the code.
     if (body.pr && body.prRepo && body.env) {
       const pr = prNumber(body.pr);
       if (pr === null || !isValidRepo(body.prRepo)) {
@@ -345,8 +333,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         reply.code(500);
         return { error: "git_failed", message: "Could not check out the PR." };
       }
-      // Hand the review session the diff as a file so the whole change is in
-      // front of it immediately, without a `gh pr diff` round-trip of its own.
+      // So the whole change is in front of the session without a `gh pr diff`
+      // round-trip of its own.
       if (body.view === "review") {
         try {
           body.reviewDiff = (await getPrDiff(body.prRepo, pr)).slice(0, 200_000);
@@ -365,9 +353,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- Posting to GitHub (#16) ---
-  // Each of these writes to GitHub as the developer, so each is one explicit
-  // click in den on content the developer has just seen. Inputs are checked
-  // here as well as in the UI.
+  // Each writes to GitHub as the developer, reached by one explicit click on
+  // content they've just seen. Inputs are checked here as well as in the UI.
   const MAX_POST = 65_000; // GitHub's comment body limit is 65,536
   const postError = (reply: { code: (n: number) => void }, where: string, err: unknown) => {
     logWarn(where, err);
@@ -442,8 +429,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // The rail's clean-up button (#29): the skill it names, and where it opens.
   app.get("/api/cleanup", async () => ({ skill: cleanupSkill(), cwd: roots().workRepo }));
 
-  // What a Claude pane has spent (#11): its conversation, priced from the
-  // transcript, plus den's idle handovers for it.
+  // What a Claude pane has spent (#11).
   app.get("/api/sessions/:id/usage", async (req, reply) => {
     const { id } = req.params as { id: string };
     const u = sessions.usage(id);
@@ -454,7 +440,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return u;
   });
 
-  // Turn a workspace's handover (notepad instruction + idle refresh) on or off.
   app.post("/api/sessions/:id/handover", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { on } = (req.body ?? {}) as { on?: boolean };
@@ -466,7 +451,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
-  // Add another shell pane (tab) to the workspace the given session belongs to.
   app.post("/api/sessions/:id/shell", async (req, reply) => {
     const { id } = req.params as { id: string };
     const session = sessions.get(id);
@@ -483,7 +467,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
-  // Re-spawn an exited session's PTY (e.g. after den was closed/reopened).
   app.post("/api/sessions/:id/restart", async (req, reply) => {
     const { id } = req.params as { id: string };
     const meta = sessions.restart(id);
@@ -505,9 +488,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
-  // Paste text into a session's Claude prompt. Bracketed paste keeps multi-line
-  // input as one entry; by default it does NOT auto-submit (the "→ Claude"
-  // comment buttons want you to read it first).
+  // Bracketed paste keeps multi-line input as one entry. By default it does
+  // not submit: the "→ Claude" buttons want you to read it first.
   //
   // `submit: true` follows the paste with a carriage return, for the actions that
   // mean "do this now" (den's own pre-review prompt). The CR is generated here,
@@ -518,8 +500,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // taken the text.
   //
   // A submit also waits for the pane to be ready first (`waitUntilIdle`): a
-  // freshly spawned Claude drops input while it's still drawing, and "send this
-  // now" that silently vanishes is worse than one that takes a moment.
+  // freshly spawned Claude drops input while it's still drawing.
   app.post("/api/sessions/:id/paste", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { text, submit } = (req.body ?? {}) as {
@@ -545,8 +526,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true, submitted: !!submit, ready };
   });
 
-  // Can the app this workspace is working on be run locally? Returns how to run
-  // it, whether it's already up, and a URL to open (see server/apprun.ts).
   // Which shell tab den launched each workspace's app in (#28), by group.
   const appTabs = new Map<string, string>();
   const liveAppTab = (groupId: string) => {
@@ -564,8 +543,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     try {
       const status = await appRunnerStatus(session.cwd);
-      // Whether den has a live tab running this app (a script app can be
-      // stopped only through it).
+      // A script app can be stopped only through den's tab.
       return { ...status, appTab: !!liveAppTab(session.groupId) };
     } catch (e) {
       logWarn("app runner status failed", e);
@@ -574,9 +552,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // Spin up the workspace's app in a fresh shell tab: adds a shell to the group,
-  // then types `cd <repo> && <command>` into it. Returns the new shell's meta so
-  // the client can switch to that tab.
+  // Typed into a new shell tab rather than run here, so the output is in front
+  // of you and Ctrl-C works. Returns the tab's meta so the client can switch.
   app.post("/api/app/run", async (req, reply) => {
     const { sessionId } = (req.body ?? {}) as { sessionId?: string };
     const session = sessionId ? sessions.get(sessionId) : null;
@@ -594,21 +571,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(404);
       return { error: "not_found" };
     }
-    // Type the command once the fresh login shell has settled (early keystrokes
-    // can be eaten by zsh prompt init).
+    // A fresh login shell eats keystrokes typed during zsh's prompt init.
     const shell = sessions.get(meta.id);
     const cmd = `cd ${shellQuote(runner.dir)} && ${runner.command}\r`;
     setTimeout(() => shell?.write(cmd), 400);
-    // Remember the tab, so stop can Ctrl-C a script app there (#28).
+    // So stop can Ctrl-C a script app there (#28).
     appTabs.set(session.groupId, meta.id);
     reply.code(201);
     return meta;
   });
 
-  // Stop the workspace's app (#28). A stack with a teardown command (runn's
-  // `runn down`, from conductor.json) gets it typed into a new shell tab, like
-  // run, so you see it go down. A script app gets Ctrl-C in the tab den ran it
-  // in. Returns the new tab's meta, or { interrupted: true }.
+  // Stop the workspace's app (#28). A stack with a teardown command gets it
+  // typed into a new shell tab, like run; a script app gets Ctrl-C in the tab
+  // den ran it in. Returns the new tab's meta, or { interrupted: true }.
   app.post("/api/app/stop", async (req, reply) => {
     const { sessionId } = (req.body ?? {}) as { sessionId?: string };
     const session = sessionId ? sessions.get(sessionId) : null;
@@ -683,8 +658,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return detectSetup(session.cwd);
   });
 
-  // Run it the way the run button runs the app: in a fresh shell tab, typed in
-  // so the output is in front of you and Ctrl-C works.
+  // Typed into a new shell tab, like the run button.
   app.post("/api/app/setup", async (req, reply) => {
     const { sessionId } = (req.body ?? {}) as { sessionId?: string };
     const session = sessionId ? sessions.get(sessionId) : null;
@@ -744,8 +718,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true };
   });
 
-  // The review pane's reading guide (written by the review session; see
-  // reviewInstruction). Read-only from the client: only Claude writes it.
+  // Read-only from the client: only the review session writes the guide.
   app.get("/api/review/guide/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
     if (!isValidGroupId(groupId)) {
@@ -768,7 +741,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // Single-PR detail (description + colleagues' reviews/comments).
   app.get("/api/github/pr", async (req, reply) => {
     const { repo, number } = req.query as { repo?: string; number?: string };
     const n = prNumber(number);
@@ -785,7 +757,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
-  // Raw unified diff for a PR.
   app.get("/api/github/pr/diff", async (req, reply) => {
     const { repo, number } = req.query as { repo?: string; number?: string };
     const n = prNumber(number);

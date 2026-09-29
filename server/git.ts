@@ -4,8 +4,7 @@ import { join, sep } from "node:path";
 import { logWarn } from "./log.ts";
 import { isValidBranch } from "../shared/branch.ts";
 
-// The branch-name rule lives in shared/ so the New Session dialog can apply it
-// too; re-exported here because git.ts is where the server reaches for it.
+// The rule lives in shared/ so the New Session dialog can apply it too.
 export { isValidBranch } from "../shared/branch.ts";
 
 function assertValidBranch(branch: string): void {
@@ -20,12 +19,8 @@ function git(cwd: string, args: string[], timeout = 20000): string {
   }).trim();
 }
 
-/**
- * One checkout of a repo — the primary working copy or an added worktree.
- * These are what den calls "workspaces" in the UI: the New Session dialog lists
- * them so a Work session can join one you already have instead of making
- * another.
- */
+/** One checkout of a repo: the primary working copy or an added worktree.
+ * The UI calls these "workspaces". */
 export interface Worktree {
   path: string;
   /** Branch name, or null when the worktree is on a detached HEAD. */
@@ -38,12 +33,9 @@ export interface Worktree {
   bare: boolean;
 }
 
-/**
- * Parse `git worktree list --porcelain`. Each record is a blank-line-separated
- * block starting with `worktree <path>`, then `HEAD <sha>` and either
- * `branch refs/heads/<name>` or `detached`, plus optional `bare`/`locked`/
- * `prunable` flags. Split out from the git call so it can be unit-tested.
- */
+/** Parse `git worktree list --porcelain`: blank-line-separated blocks of
+ * `worktree <path>`, `HEAD <sha>`, `branch refs/heads/<name>` or `detached`,
+ * and optional `bare`/`locked`/`prunable` flags. */
 export function parseWorktrees(out: string): Worktree[] {
   const trees: Worktree[] = [];
   for (const block of out.split(/\n\s*\n+/)) {
@@ -69,14 +61,13 @@ export function listWorktrees(repo: string): Worktree[] {
   return parseWorktrees(git(repo, ["worktree", "list", "--porcelain"]));
 }
 
-/** Where den puts the worktrees it creates (`prepareWork`, `checkoutPr`),
- * under the repo. The folder is the signal that den made one: Claude Code's
- * own worktrees live in `.claude/worktrees/`, and hand-made ones anywhere
- * else, and den never offers to remove those. */
+/** Where den puts the worktrees it creates, under the repo. The folder is how
+ * den knows it made one: it never offers to remove Claude Code's
+ * `.claude/worktrees/` or hand-made ones. */
 export const DEN_WORKTREE_DIR = ".claude-worktrees";
 
-/** Did den create this worktree? True for a path inside `<repo>/.claude-worktrees/`,
- * never for the folder itself or the repo's own checkout. Pure, for the test. */
+/** Did den create this worktree? Never true for the folder itself or the
+ * repo's own checkout. */
 export function isDenWorktree(repo: string, path: string): boolean {
   const root = join(repo, DEN_WORKTREE_DIR) + sep;
   return path.startsWith(root) && path.length > root.length;
@@ -91,10 +82,9 @@ export interface WorktreeInfo extends Worktree {
   inUse?: boolean;
 }
 
-/** What removing a worktree would cost. Removing keeps the branch, so its
- * commits survive; what is lost is `dirty` (uncommitted changes, counted as
- * `git status` lines) and, on a detached HEAD, any `unpushed` commits, which no
- * branch holds. */
+/** What removing a worktree would cost. Removing keeps the branch, so only
+ * `dirty` (uncommitted `git status` lines) is lost, plus `unpushed` commits on
+ * a detached HEAD, which no branch holds. */
 export interface WorktreeChanges {
   dirty: number;
   /** Commits on HEAD that no remote branch has. */
@@ -102,7 +92,7 @@ export interface WorktreeChanges {
   detached: boolean;
 }
 
-/** Would removing a worktree with these changes lose work? Pure, for the test. */
+/** Would removing a worktree with these changes lose work? */
 export function losesWork(c: WorktreeChanges): boolean {
   return c.dirty > 0 || (c.detached && c.unpushed > 0);
 }
@@ -124,10 +114,8 @@ export function worktreeChanges(path: string): WorktreeChanges {
   return { dirty: status ? status.split("\n").length : 0, unpushed, detached };
 }
 
-/** Remove a den-created worktree, keeping its branch. Refuses anything den did
- * not create (see isDenWorktree) or that git does not list as a worktree of
- * `repo`, and refuses to lose work unless `force` is set (the caller has shown
- * the developer what goes). */
+/** Remove a den-created worktree, keeping its branch. `force` means the
+ * caller has shown the developer what would be lost. */
 export function removeWorktree(repo: string, path: string, force: boolean): void {
   if (!isDenWorktree(repo, path)) throw new Error("not_den_worktree");
   if (!listWorktrees(repo).some((w) => w.path === path)) throw new Error("not_a_worktree");
@@ -154,16 +142,10 @@ function branchExists(repo: string, branch: string): boolean {
   }
 }
 
-/**
- * Branch names to try as the base for a new branch, most trusted first: the
- * configured override (`base_branch`, see `baseBranchOverride` in fs.ts), then
- * the repo's own default branch, then `master` and `main` as a last resort.
- * Deduped, and names that fail `isValidBranch` are dropped, since each one
- * reaches git as an argument.
- *
- * The override exists because the branch a team works off is not always the
- * one GitHub calls the default. Pure, for the test.
- */
+/** Branch names to try as the base for a new branch, most trusted first. The
+ * override (see `baseBranchOverride` in fs.ts) exists because the branch a
+ * team works off is not always the one GitHub calls the default. Invalid
+ * names are dropped because each one reaches git as an argument. */
 export function baseCandidates(
   override: string | null | undefined,
   repoDefault: string | null | undefined,
@@ -175,8 +157,7 @@ export function baseCandidates(
 }
 
 /** The first candidate that resolves, preferring the freshly fetched
- * remote-tracking ref (`origin/<name>`) over a local branch that may be stale.
- * Null when none resolves. Pure (the lookup is passed in), for the test. */
+ * `origin/<name>` over a local branch that may be stale. */
 export function pickBaseRef(
   names: string[],
   hasRef: (ref: string) => boolean,
@@ -189,8 +170,7 @@ export function pickBaseRef(
   return null;
 }
 
-/** The branch `origin/HEAD` points at, set when the repo was cloned. Local
- * and cheap, so it's asked first. */
+/** The branch `origin/HEAD` points at, set when the repo was cloned. */
 function remoteHeadBranch(repo: string): string | null {
   try {
     const ref = git(repo, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
@@ -232,13 +212,8 @@ function hasRef(repo: string, ref: string): boolean {
   }
 }
 
-/**
- * The ref a new branch starts from: the repo's base branch, freshly fetched.
- * Resolved from the override, then `origin/HEAD`, then GitHub's default
- * branch, then `master`/`main` (see `baseCandidates`). A repo based on
- * `development` used to get a branch off a stale `master`, or off HEAD when
- * there was no master, because only master/main were ever tried.
- */
+/** The ref a new branch starts from: the repo's base branch, freshly
+ * fetched. */
 export function baseRef(repo: string, override?: string | null): string {
   const repoDefault = override ? null : (remoteHeadBranch(repo) ?? githubDefaultBranch(repo));
   const names = baseCandidates(override, repoDefault);
@@ -263,18 +238,11 @@ export function baseRef(repo: string, override?: string | null): string {
 
 export type WorkEnv = "local" | "worktree";
 
-/**
- * Prepare a branch to work on and return the directory to open Claude in.
- * - "local": checkout the branch in the repo itself.
- * - "worktree": add a git worktree under <repo>/.claude-worktrees/<branch> so
- *   several tickets can run in parallel without touching the main checkout.
- * The branch is created (from a fresh base, see baseRef) if it doesn't exist
- * yet. `baseOverride` is the configured base branch, if any. `stackOn` starts
- * the new branch from another local branch instead, for a ticket that builds on
- * the one before it (#26); it is used as the local ref, not origin's, because
- * the ticket it stacks on usually has commits it hasn't pushed. Neither applies
- * to a branch that already exists, which is reused as it is.
- */
+/** Check out a branch to work on, locally or in a new worktree, creating it
+ * if needed, and return the directory to open Claude in. `stackOn` starts a
+ * new branch from another ticket's branch (#26), using the local ref because
+ * that ticket usually has unpushed commits. An existing branch is reused
+ * as it is. */
 export function prepareWork(
   repo: string,
   branch: string,
@@ -283,8 +251,8 @@ export function prepareWork(
   stackOn?: string | null,
 ): { cwd: string } {
   assertValidBranch(branch);
-  // If the branch already lives in a worktree (e.g. Claude Code's own), reuse it
-  // rather than creating a duplicate or erroring that it's already checked out.
+  // Reuse a worktree that already has the branch (e.g. Claude Code's own):
+  // git refuses to check out a branch twice.
   const existingWt = worktreeForBranch(repo, branch);
   if (existingWt) return { cwd: existingWt };
 
@@ -308,7 +276,6 @@ export function prepareWork(
     return { cwd: dir };
   }
 
-  // local
   if (exists) {
     git(repo, ["checkout", branch]);
   } else {
@@ -317,10 +284,7 @@ export function prepareWork(
   return { cwd: repo };
 }
 
-/**
- * Check out a PR (by number) so Claude has the code — for reviewing others' PRs
- * or editing your own. Uses `gh pr checkout`, which handles forks.
- */
+/** Check out a PR with `gh pr checkout`, which handles forks. */
 export function checkoutPr(
   repoDir: string,
   ghRepo: string,
@@ -331,7 +295,6 @@ export function checkoutPr(
   // A non-integer PR number would flow into the worktree path (`pr-${number}`)
   // and the `gh` positional — reject it before either.
   if (!Number.isInteger(number) || number <= 0) throw new Error("invalid_pr");
-  // Reuse an existing worktree for the PR's branch if there is one.
   if (branch) {
     const existingWt = worktreeForBranch(repoDir, branch);
     if (existingWt) return { cwd: existingWt };

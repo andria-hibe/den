@@ -5,10 +5,9 @@ import { logWarn } from "./log.ts";
 const exec = promisify(execFile);
 
 /**
- * True if `repo` is a well-formed GitHub "owner/name" slug. Client-supplied repo
- * values flow into `gh --repo <repo>`; constraining them to GitHub's identifier
- * charset keeps anything odd from reaching the authenticated CLI. (It sits in a
- * value position, so it isn't flag-injectable — this is defence in depth.)
+ * True if `repo` is a well-formed GitHub "owner/name" slug. Client-supplied
+ * values reach `gh --repo`; that's a value position, so this is defence in
+ * depth rather than a flag-injection guard.
  */
 export function isValidRepo(repo: string): boolean {
   // First char isn't a dash, so the whole value can never be read as a flag.
@@ -35,14 +34,14 @@ export interface PullRequest {
   checks: CheckState;
   checkCounts: { passed: number; failed: number; pending: number; total: number };
   review: ReviewState;
-  /** Ticket id parsed from the branch (e.g. "fast-5979"), for later linking. */
+  /** Ticket id parsed from the branch (e.g. "fast-5979"). */
   ticketHint?: string;
   /** True for your own PRs (authored), false for others' (review-requested). */
   isMine: boolean;
   /** Whether this PR needs *your* action right now. For authored PRs: failing
    * checks or changes requested. For review-requested PRs: you owe a review
-   * (first review or a re-review). A review-requested PR's own CI status does
-   * NOT count — that's the author's problem, not yours. */
+   * (first review or a re-review). A review-requested PR's own CI does not
+   * count. */
   needsAttention: boolean;
   /** Short human reason for `needsAttention`, for a card tooltip. */
   attentionReason?: string;
@@ -71,9 +70,9 @@ async function gh(args: string[]): Promise<string> {
 /**
  * Like `gh()`, but for subcommands that use the **exit code as a status** and
  * still print their `--json` payload. `gh pr checks` exits non-zero when checks
- * are failing (1) or still running (8) — exactly the cases we most need to
- * read — so a thrown error must not lose the output. promisified `execFile`
- * attaches the captured streams to the error, so recover `stdout` from there.
+ * are failing (1) or still running (8), exactly the cases we need to read.
+ * Promisified `execFile` attaches the captured streams to the error, so
+ * `stdout` is recovered from there.
  */
 async function ghAllowFail(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
@@ -123,10 +122,10 @@ export interface CheckRow {
  * PR reads as failing forever (seen on Runn-Fast/runn#20662: 116 rollup rows vs
  * 99 real checks, one stale "Validate PR title" failure). It is also capped at
  * ~100 contexts, which runn PRs sit right at. `gh pr checks` is deduped to the
- * latest run per check and uncapped, so it matches what GitHub shows you.
+ * latest run per check and uncapped.
  *
- * `skipping`/`cancel` don't count either way (as SKIPPED/CANCELLED didn't
- * before); an unrecognized bucket is ignored rather than invented as a failure.
+ * `skipping`/`cancel` don't count either way; an unrecognized bucket is
+ * ignored rather than read as a failure.
  */
 export function summarizeChecks(rows: CheckRow[]): {
   state: CheckState;
@@ -179,9 +178,8 @@ export function reviewFrom(decision: string | null): ReviewState {
   }
 }
 
-// Branch names look like "jordan-fast-5979-stretch-..." — pull the "fast-NNNN".
-// Lowercased, matching LinearIssue.ticketHint, so hints compare directly.
-// (Also used by sessions.ts for a session's branch → ticket chip.)
+// Branch names look like "jordan-fast-5979-stretch-...". Lowercased to match
+// LinearIssue.ticketHint, so hints compare directly.
 export function parseTicketHint(branch?: string | null): string | undefined {
   const m = branch?.match(/([a-z]+-\d+)/i);
   return m ? m[1].toLowerCase() : undefined;
@@ -192,10 +190,8 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
   let branch: string | undefined;
   let checks = summarizeChecks([]);
   let review: ReviewState = "none";
-  // Branch/review and CI come from two different gh subcommands (see
-  // summarizeChecks on why CI can't come from the rollup), so fetch them
-  // together and let each fail on its own — a CI hiccup shouldn't cost us the
-  // branch name, and vice versa.
+  // Two gh subcommands (see summarizeChecks for why CI can't come from the
+  // rollup); each may fail without costing the other.
   const [meta, rows] = await Promise.allSettled([
     gh([
       "pr",
@@ -263,10 +259,9 @@ async function mapLimit<T, R>(
 }
 
 /**
- * Does one of *your own* PRs need your action? Only when you have to act: a
- * colleague requested changes, or CI is failing (drafts included — failing
- * checks on your WIP are still yours to fix). A PR's own CI status is your
- * problem here, unlike the review-requested bucket below.
+ * Does one of your own PRs need your action? When a colleague requested
+ * changes, or CI is failing (drafts included: failing checks on your WIP are
+ * still yours to fix).
  */
 export function authoredAttention(p: Pick<PullRequest, "review" | "checks">): {
   needsAttention: boolean;
@@ -281,12 +276,10 @@ export function authoredAttention(p: Pick<PullRequest, "review" | "checks">): {
 }
 
 /**
- * Does a PR you were *asked to review* need your action? Only while a review
- * request from you is still open (`reviewRequestedFromMe`) — that's GitHub's own
- * record of whether you owe one. Submitting a review clears the request, so the
- * card goes quiet while the PR stays in the bucket; a re-request re-opens it and
- * the "!" comes back. Its own CI is irrelevant to you. Drafts and
- * already-approved PRs never flag: nothing is waiting on you there.
+ * Does a PR you were asked to review need your action? Only while a review
+ * request from you is open (`reviewRequestedFromMe`), GitHub's own record of
+ * whether you owe one: submitting a review clears it, a re-request reopens it.
+ * Its CI is irrelevant to you. Drafts and already-approved PRs never flag.
  */
 export function reviewAttention(
   p: Pick<PullRequest, "isDraft" | "review" | "reviewRequestedFromMe" | "reviewedByMe">,
@@ -308,14 +301,11 @@ export function prKey(p: { repo: string; number: number }): string {
 }
 
 /**
- * Build the "review requested" bucket from the PRs of two searches
- * (`--review-requested=@me` and `--reviewed-by=@me`), flag each with whether a
- * review is still requested from you / you have already reviewed it, and sort.
- *
- * Reviewing a PR clears GitHub's review request, which used to make the card
- * vanish mid-flight — so the bucket also carries what you've reviewed, and only
- * drops it when the PR is merged or closed (both searches are `--state=open`).
- * Ones still waiting on you sort first, then most recently updated.
+ * The "review requested" bucket, from the `--review-requested=@me` and
+ * `--reviewed-by=@me` searches. Reviewing a PR clears GitHub's review
+ * request, so the reviewed-by search keeps the card until the PR is merged or
+ * closed (both searches are `--state=open`). Ones still waiting on you sort
+ * first, then most recently updated.
  */
 export function buildReviewBucket(
   prs: PullRequest[],
@@ -404,8 +394,7 @@ export interface PrDetail {
 }
 
 export async function getPrDetail(repo: string, number: number): Promise<PrDetail> {
-  // Three independent gh round-trips (PR body/reviews, viewer login, inline
-  // review threads) — run them together; the my-PR pane opens on this.
+  // Run together: the my-PR pane opens on this.
   const [out, me, reviewComments] = await Promise.all([
     gh([
       "pr", "view", String(number), "--repo", repo,
@@ -450,9 +439,8 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
 }
 
 // Inline, line-level review comments on the diff (not returned by pr view).
-// Fetched via GraphQL review *threads* rather than the REST comments endpoint,
-// because only the thread carries `isResolved` — which we need so the UI can
-// hide comments that have already been resolved.
+// Fetched via GraphQL review threads rather than the REST comments endpoint,
+// because only the thread carries `isResolved`.
 const REVIEW_THREADS_QUERY =
   `query($owner:String!,$name:String!,$number:Int!){` +
   `repository(owner:$owner,name:$name){pullRequest(number:$number){` +
@@ -543,7 +531,7 @@ export interface ReviewComment {
 }
 
 /** The REST body for "create a review". Inline comments sit on the new side
- * of the diff. Pure, for the test. */
+ * of the diff. */
 export function reviewRequestBody(event: ReviewEvent, body: string, comments: ReviewComment[]) {
   return {
     event,
@@ -613,8 +601,8 @@ let cachedLogin: string | null = null;
 async function viewerLogin(): Promise<string> {
   if (cachedLogin) return cachedLogin;
   try {
-    // Only cache a real login — a transient gh failure must not poison the cache
-    // with "" for the whole process lifetime (which would mis-attribute "my PRs").
+    // Only cache a real login: a transient gh failure must not cache "" for
+    // the whole process lifetime.
     const login = (await gh(["api", "user", "--jq", ".login"])).trim();
     if (login) cachedLogin = login;
     return login;
