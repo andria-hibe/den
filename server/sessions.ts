@@ -286,11 +286,44 @@ export function testingRules(): string {
   );
 }
 
+/** How a pane that writes code should comment it: why, not what, and only
+ * what it verified. It says it overrides matching the surrounding comment
+ * density because Claude Code's own system prompt asks for that, which in a
+ * heavily commented repo means more comments. Appended wherever testingRules
+ * is. */
+export function commentRules(): string {
+  return (
+    `Comments: say why, and only what you know.\n` +
+    `- A comment explains why the code is this way, not what it does. If the ` +
+    `code or a well-chosen name already shows it, write nothing.\n` +
+    `- Write only a reason you verified. If you can't point to the reason, ` +
+    `write nothing, or only the part you verified. A plausible guess is worse ` +
+    `than no comment: the next reader trusts it, and it outlives the code it ` +
+    `describes.\n` +
+    `- Write for a reader who never saw this conversation. Don't narrate the ` +
+    `change or how you got there: no "now", "previously", "changed from", ` +
+    `"fixed a bug where", "as requested", no notes to the reviewer, and no ` +
+    `mention of your own mistakes. That belongs in the commit message or the ` +
+    `PR.\n` +
+    `- Stay on the code next to the comment. No asides and no open questions or ` +
+    `TODOs; those go in a ticket. Don't restate a schema, type, or list that ` +
+    `lives elsewhere; point to it once.\n` +
+    `- One sentence by default. Write more only for something that breaks ` +
+    `silently without it: an invariant the signature doesn't show, a pairing ` +
+    `across files, or a workaround for an outside bug (link it).\n` +
+    `- If your change makes a nearby comment false, fix that comment. Otherwise ` +
+    `leave existing comments alone, and don't comment code you didn't change.\n` +
+    `- Doc comments on exported API (JSDoc, YARD) and the reasons on lint ` +
+    `suppressions are a separate thing and stay.\n` +
+    `- These rules win over matching the surrounding code's comment density.`
+  );
+}
+
 /** The system prompt for a Claude workspace's main pane: the progress notepad
  * plus the house rules. Shared by create() and restartArgs() via
  * workspaceArgs(). */
 export function workspaceInstruction(notepad: string): string {
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${denIssueRule()}`;
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
 }
 
 /** The system prompt for a my-PR pane (#5): which PR is on screen, how den
@@ -313,7 +346,7 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}\n${testingRules()}\n${denIssueRule()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`
   );
 }
 
@@ -1268,7 +1301,7 @@ class SessionManager {
     // the notepad instruction (the notepad stays for the developer's own use).
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
-      : `${houseRules()}\n${testingRules()}\n${denIssueRule()}`;
+      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
     // In a worktree with a setup command, say what it is (#10).
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;

@@ -645,6 +645,13 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
 
 ## Conventions & gotchas (hard-won)
 
+- **Comments say why, and only what you verified** (andria, 2026-09-29): no
+  restating the code, no narrating the change or your own fixes, no asides or
+  TODOs, one sentence unless something breaks silently without it. Den tells
+  the sessions it spawns the same (`commentRules()` in `sessions.ts`, appended
+  wherever `testingRules()` is), and the rule says it beats Claude Code's own
+  "match the surrounding comment density", which this comment-heavy repo would
+  otherwise pull the wrong way. Existing comments aren't rewritten in passing.
 - **Pixel art**: render via canvas + `image-rendering: pixelated` at an *integer*
   pixel scale; animate with `steps()` (fractional transforms/offsets blur it).
 - **xterm FitAddon + padding**: never put padding on the element xterm is opened

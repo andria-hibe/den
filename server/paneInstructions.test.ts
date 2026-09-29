@@ -7,6 +7,7 @@ import {
   denIssueRule,
   reviewInstruction,
   testingRules,
+  commentRules,
   workspaceInstruction,
 } from "./sessions.ts";
 
@@ -74,12 +75,14 @@ describe("lookInstruction", () => {
   });
 });
 
-describe("testingRules", () => {
-  it("is ASCII and reaches the panes that write code, not the one that only reads", () => {
-    expect(isAscii(testingRules())).toBe(true);
-    expect(workspaceInstruction("/n.md")).toContain(testingRules());
-    expect(myPrInstruction(1, "o/r", "b")).toContain(testingRules());
-    expect(lookInstruction("T-1", "t", "/n.md")).not.toContain(testingRules());
+describe("testingRules and commentRules", () => {
+  it("are ASCII and reach the panes that write code, not the one that only reads", () => {
+    for (const rules of [testingRules(), commentRules()]) {
+      expect(isAscii(rules)).toBe(true);
+      expect(workspaceInstruction("/n.md")).toContain(rules);
+      expect(myPrInstruction(1, "o/r", "b")).toContain(rules);
+      expect(lookInstruction("T-1", "t", "/n.md")).not.toContain(rules);
+    }
   });
 });
 
