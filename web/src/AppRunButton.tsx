@@ -19,7 +19,7 @@ export interface AppRunner {
 /** A repo script as a person would say it: drops the usual "is the tool
  * installed" guard and "|| echo" fallback, so conductor.json's
  * `command -v runn >/dev/null 2>&1 && runn down || echo ...` reads as
- * `runn down`. Show the full command in a tooltip. Pure, for the test. */
+ * `runn down`. Show the full command in a tooltip. */
 export function shortCommand(cmd: string): string {
   return cmd
     .replace(/^command -v \S+ >\/dev\/null 2>&1 && /, "")
@@ -27,17 +27,15 @@ export function shortCommand(cmd: string): string {
     .trim();
 }
 
-/** Is there something for the stop button to stop? Pure, for the test. */
+/** Is there something for the stop button to stop? */
 export function canStop(r: AppRunner | null): boolean {
   if (!r?.kind) return false;
   if (r.kind === "runn") return !!r.stopCommand && (r.containersUp ?? 0) > 0;
   return !!r.appTab;
 }
 
-// Workspace-header button that runs the app this workspace is working on.
-// If we can tell it's already up (runn), it becomes an "open" link; otherwise
-// it's a "run" button that spins the app up in a fresh shell tab. Hidden when
-// the workspace has no locally-runnable app.
+// Runs the workspace's app in a new shell tab, or links to it once den can
+// tell it's up.
 export function AppRunButton({
   sessionId,
   status,
@@ -146,10 +144,8 @@ interface WorktreeSetup {
   missing: string[];
 }
 
-// Workspace-header button that runs the repo's own worktree setup (#10), from
-// its conductor.json or setup script, in a fresh shell tab. Only in an added
-// worktree (the main checkout has nothing to copy in); highlighted when the
-// worktree is missing files the main checkout has.
+// Runs the repo's own worktree setup (#10) in a new shell tab. Only in an
+// added worktree: the main checkout has nothing to copy in.
 export function SetupButton({
   sessionId,
   status,

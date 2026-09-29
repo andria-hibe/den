@@ -1,9 +1,7 @@
-// Turn den's review (the notepad, split per file by parseReview) into a GitHub
-// review (#16): each bullet that names a line inside the diff becomes an inline
-// comment on that line, and everything else goes in the review's body under
-// its file's name. GitHub rejects the whole review if one inline comment sits
-// on a line outside the diff, so each line is checked against the diff first.
-// Pure, for the test; PostReviewDialog shows the result before anything posts.
+// Turns den's review into a GitHub review (#16): a bullet naming a line inside
+// the diff becomes an inline comment, and the rest goes in the body under its
+// file's name. GitHub rejects the whole review if one inline comment sits
+// outside the diff, so each line is checked against the diff first.
 import { diffForFiles, lineNumbers } from "./DiffView.tsx";
 import type { ReviewComment } from "../../server/github.ts";
 

@@ -3,10 +3,8 @@ import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { isHandover } from "../../shared/handover.ts";
 
-/** Is a scroll box at (or within `slack` px of) its bottom? The notepad follows
- * new entries only while this holds, so it never yanks someone who has
- * scrolled up to read an older entry. The slack absorbs sub-pixel rounding and
- * a trailing margin. Pure, for the test. */
+/** Is a scroll box at (or within `slack` px of) its bottom? The slack absorbs
+ * sub-pixel rounding and a trailing margin. */
 export function isNearBottom(
   scrollTop: number,
   clientHeight: number,
@@ -16,12 +14,9 @@ export function isNearBottom(
   return scrollHeight - (scrollTop + clientHeight) <= slack;
 }
 
-// A workspace's handover notepad. Renders markdown in view mode; edit + save.
-// A handover (shared/handover.ts) is rewritten in place at the top, so it
-// opens at the top and den leaves the scroll alone. An older notepad that is
-// still an appended log follows the newest entry instead: it scrolls to the
-// bottom when the content changes, unless you have scrolled up, and picks
-// following back up once you scroll to the bottom again.
+// A handover is rewritten in place at the top, so den leaves its scroll
+// alone. An older notepad that is still an appended log follows the bottom
+// instead, unless the reader has scrolled up.
 export function NotepadPane({
   groupId,
   handover = true,

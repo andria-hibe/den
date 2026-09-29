@@ -58,8 +58,7 @@ function Notes({ detail, sessionId }: { detail: PrDetail; sessionId: string }) {
   );
 }
 
-/** Inline, line-level review comments shown with the code they point at,
- * grouped by file — a comment-focused diff view. */
+/** Inline review comments grouped by file, each with the code it points at. */
 function InlineComments({
   detail,
   sessionId,
@@ -70,8 +69,7 @@ function InlineComments({
   /** Refetch after a reply or a resolve posted from here. */
   onChanged: () => void;
 }) {
-  // Resolved threads are hidden by default so the tab shows what still needs
-  // action; a toggle reveals them (dimmed, badged) so nothing is lost.
+  // Resolved threads start hidden so the tab shows what still needs action.
   const [showResolved, setShowResolved] = useState(false);
   const all = detail.reviewComments;
   if (all.length === 0)
@@ -140,9 +138,8 @@ function InlineComments({
   );
 }
 
-/** Reviewing someone else's PR: one tabbed pane above (the review — general
- * notes then the diff, annotated per file — or the PR description), session
- * below. Two regions, one splitter: it has to work on a small screen. */
+/** Reviewing someone else's PR: a tabbed pane (guide, review, description)
+ * above the session. Two regions, one splitter, so it fits a small screen. */
 export function PrReviewView({
   repo,
   number,
@@ -156,14 +153,12 @@ export function PrReviewView({
   repo: string;
   number: number;
   sessionId: string;
-  /** The session's workspace group — the notepad (where the review lands) is
-   * keyed by it. Happens to equal sessionId for single-pane review sessions,
-   * but that's the server's implementation detail, not ours to rely on. */
+  /** Keys the notepad the review lands in. Don't assume it equals sessionId. */
   groupId: string;
   /** Start on its own when the view opens: the full pre-review, or the
    * reading guide only. Null: wait to be asked. */
   autoReview: "full" | "guide" | null;
-  /** Fired once the auto pre-review has been sent, so it only ever fires once. */
+  /** Fired once the auto pre-review is sent, so App can stop it re-firing. */
   onAutoReviewStarted?: () => void;
   header: ReactNode;
   terminal: ReactNode;
@@ -172,34 +167,27 @@ export function PrReviewView({
   const [diff, setDiff] = useState<string>("");
   const [review, setReview] = useState<string>("");
   const [guide, setGuide] = useState<string>("");
-  // A review has been asked for but hasn't landed in the notepad yet — the only
-  // state where a walking fox is honest (an empty notepad on its own just means
-  // nobody has asked yet). The guide has its own flag: either can be asked for
-  // alone.
+  // Asked for but not landed yet: the only state where a walking fox is
+  // honest, since an empty notepad usually means nobody asked. The guide has its
+  // own flag because either can be asked for alone.
   const [requested, setRequested] = useState(false);
   const [guideRequested, setGuideRequested] = useState(false);
   const started = useRef(false);
   const [upperFrac, setUpperFrac] = usePersistentNumber("den.prDiffFrac", 0.6);
-  // Guide first: it is the orientation you want before the findings.
   const [tab, setTab] = usePersistentString("den.prReviewTab", "guide", [
     "guide",
     "review",
     "description",
   ] as const);
   const rootRef = useRef<HTMLDivElement>(null);
-  // The post-to-GitHub preview is open (#16).
+  // The post-to-GitHub preview (#16).
   const [posting, setPosting] = useState(false);
 
-  // The review is filed per file by `## <path>` headings, so each file's
-  // comments can sit beside that file's diff; the rest is the general review.
   const files = useMemo(() => diffFiles(diff), [diff]);
   const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
-  // Churn starts collapsed: by path, or because the guide filed it as churn.
   const guideChurn = useMemo(() => churnFromGuide(parseGuide(guide, files).sections), [guide, files]);
   const startCollapsed = (f: string) => isChurnPath(f) || guideChurn.has(f);
-  // Why a file shows no comments: nobody asked yet, the review is being written,
-  // or it landed with nothing to say. Both tabs render the notes column, so they
-  // read the same state.
+  // Both tabs render the notes column, so they share this state.
   const noteState = review.trim() ? "ready" : requested ? "waiting" : "idle";
 
   useEffect(() => {
@@ -210,9 +198,7 @@ export function PrReviewView({
       .catch(() => {});
   }, [repo, number]);
 
-  // The session writes its finished review to the workspace notepad and its
-  // reading guide to a sibling guide file (see reviewInstruction, server-side);
-  // poll both on one timer so each fills in as Claude produces it.
+  // Poll the review and the guide on one timer, so each fills in as it's written.
   useEffect(() => {
     let stop = false;
     const load = () => {
@@ -231,18 +217,11 @@ export function PrReviewView({
     };
   }, [groupId]);
 
-  // The prompts live in prompts.ts, where a test holds them to ASCII.
   const guideAsk = guidePrompt(number, repo);
   const reviewAsk = reviewPrompt(number, repo);
 
-  // "Have Claude pre-review the diff": send the prompt AND submit it — picking
-  // that option means "start the review", so it shouldn't also need an Enter in
-  // the session. No client-side delay: the server holds the request until the
-  // pane is ready (see the paste route), which a fixed timeout can't get right.
-  // onAutoReviewStarted lets App clear its flag, so coming back to this session
-  // later doesn't kick off the whole review a second time.
-  // The full auto path asks for both, guide first (see autoReviewPrompt); the
-  // cheap one asks for the guide alone and leaves the finding pass to you.
+  // Submitted, not just pasted: choosing a pre-review means "start now". No
+  // client-side delay, since the server holds the paste until the pane is ready.
   const autoAsk = autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo);
 
   useEffect(() => {
@@ -309,8 +288,6 @@ export function PrReviewView({
             onRequested={() => setGuideRequested(true)}
           />
         ) : tab === "review" ? (
-          // One scroll region: the general review, then the diff with each
-          // file's comments beside it.
           <div className="pr-review-scroll">
             <div className="pr-review-overall">
               <div className="pr-review-head">
@@ -407,7 +384,7 @@ export function PrMyView({
 }) {
   const { detail, reload } = usePrDetail(repo, number);
   const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
-  // Remembered across session switches + restarts (my-PR view is keyed-remounted).
+  // Persisted because the my-PR view remounts on every session switch.
   const [tab, setTab] = usePersistentString("den.myPrTab", "overview", [
     "overview",
     "inline",

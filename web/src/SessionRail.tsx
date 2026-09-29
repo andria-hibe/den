@@ -2,9 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
 
-// The left column: one row per workspace (role === "main"), with rename-in-place,
-// attention nudges, restart/close buttons, and the new-session actions below.
-// Pure presentation — all state (sessions, rename draft) lives in App.
+// The left column, one row per workspace. Pure presentation: all state lives in App.
 export function SessionRail({
   rail,
   activeId,
@@ -49,7 +47,6 @@ export function SessionRail({
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
-  // Move the row at `from` to `to` and hand the new workspace order upwards.
   const commitMove = (from: number, to: number) => {
     const next = moveItem(rail, from, to);
     if (next !== rail) onReorder(next.map((s) => s.groupId));

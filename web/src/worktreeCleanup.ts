@@ -1,6 +1,6 @@
 // Wording and rules for removing a worktree den created. Removing one keeps
 // its branch (server/git.ts removeWorktree), so what can be lost is only
-// uncommitted work and commits on a detached HEAD. Pure, for the test.
+// uncommitted work and commits on a detached HEAD.
 import type { WorktreeChanges, WorktreeInfo } from "../../server/git.ts";
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;

@@ -1,8 +1,7 @@
 import type { CSSProperties } from "react";
 import type { PullRequest } from "../../server/github.ts";
 
-// Small display helpers shared across the work panels, dialogs, and comment
-// views — one copy each, so the variants can't drift.
+// Display helpers, one copy each so the variants can't drift.
 
 /** Compact age for a card corner: "5m", "3h", "2d". */
 export function relTime(time: string | number): string {
@@ -21,8 +20,7 @@ export function relTimeAgo(time: string | number): string {
   return `${relTime(time)} ago`;
 }
 
-/** A work-panel card linked to an open session is tinted with that session's
- * colour (left stripe + faint wash) so related work reads at a glance. */
+/** Tints a work-panel card with the colour of its open session. */
 export function accentStyle(color?: string): CSSProperties | undefined {
   if (!color) return undefined;
   return {
@@ -43,7 +41,7 @@ export function formatUSD(usd: number): string {
   return `$${Math.round(usd).toLocaleString("en-US")}`;
 }
 
-/** A token count at a glance: 950, 12.3k, 51.7M. */
+/** A token count at a glance: 950, 4.2k, 12k, 51.7M. */
 export function formatTokens(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1e6) return `${(n / 1e3).toFixed(n < 1e4 ? 1 : 0)}k`;

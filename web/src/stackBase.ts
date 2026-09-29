@@ -1,7 +1,6 @@
-// Which branches a new work branch can start from, besides the repo's base
-// branch (#26): the other branches you have open in a worktree, since a ticket
-// that builds on another one is almost always stacked on a branch you are
-// working on. Pure, for the test.
+// Which branches a new work branch can start from besides the repo's base
+// (#26): the branches open in a worktree, since a ticket that builds on
+// another is stacked on a branch you are working on.
 import type { Worktree } from "../../server/git.ts";
 
 /** Branches to offer as a base for `creating`, in worktree order: each open

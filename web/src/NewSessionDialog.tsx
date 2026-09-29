@@ -21,11 +21,9 @@ interface Listing {
 }
 type Mode = "work" | "personal" | "other" | "resume";
 /**
- * Work sessions live in a *workspace* — one checkout of the work repo: its own
- * working copy or a `git worktree`. Rather than always dropping into the repo
- * root, "Work" first asks which workspace to open in ("where"), then either
- * lists the ones that already exist ("existing") or takes a branch name for a
- * fresh worktree ("new"). `null` means we fell through to folder browsing.
+ * "Work" asks which workspace (a checkout of the work repo) to open in, then
+ * lists the existing ones or takes a branch name for a new worktree. `null`
+ * means folder browsing.
  */
 type WorkStep = "where" | "existing" | "new" | null;
 interface PastSession {
@@ -74,7 +72,6 @@ export function NewSessionDialog({
       .catch(() => setError("could not load folders"));
   }, []);
 
-  // Den-made worktrees that can go in one click (unused, nothing to lose).
   const batch = cleanRemovable(worktrees ?? []);
 
   // Remove worktrees one at a time, then reload the list so what's shown is
@@ -157,13 +154,11 @@ export function NewSessionDialog({
     navigate(start);
   };
 
-  // Back to the four top-level cards.
   const backToModes = () => {
     setMode(null);
     setWorkStep(null);
   };
 
-  // Leave the workspace flow and browse folders under the work repo instead.
   const browseWorkRepo = () => {
     setWorkStep(null);
     if (roots) navigate(roots.workRepo);

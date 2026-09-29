@@ -30,7 +30,7 @@ import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 
-// Modifier symbol shown in the shortcuts hint (⌘ on macOS, Ctrl elsewhere).
+// Modifier shown in the shortcuts hint.
 const MOD =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)
     ? "⌘"
@@ -41,11 +41,9 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-  // A den-made worktree left behind by the session just closed, offered for removal.
+  // What the session just closed left behind (worktree, running stack), offered for cleanup.
   const [cleanup, setCleanup] = useState<{ worktree: WorktreeInfo | null; stack: StackToStop | null } | null>(null);
 
-  // The session list + everything that mutates it (create/rename/restart/close,
-  // shell tabs, selection, the 4s server poll).
   const {
     sessions,
     activeId,
@@ -68,8 +66,7 @@ export function App() {
 
   // Close a session, then offer to clean up what it leaves behind (#15, #28):
   // its checkout's stack if one is still up, and the worktree when den made it
-  // and no other session uses it (the server says which). Anything else,
-  // including a failed lookup, just closes.
+  // and no other session uses it.
   const closeAndOfferCleanup = async (id: string) => {
     const s = sessions.find((x) => x.id === id);
     const cwd = s?.cwd;
@@ -98,15 +95,11 @@ export function App() {
     if (worktree || (stack && !othersHere)) setCleanup({ worktree, stack: othersHere ? null : stack });
   };
 
-  // GitHub PRs + Linear issues come from one shared poll (WorkData), so the
-  // topbar fox and the work panels never drift out of phase.
   const work = useWorkData();
   const prs = work.flatPrs;
   const issues = work.issues;
-  // Topbar fox pose, derived from every attention source: alert if a PR needs
-  // me, an urgent ticket isn't started, or I have unread Linear notifications;
-  // else happy if any PRs are open; else sit. A PR I'm only *reviewing* failing its CI is the author's problem,
-  // so it doesn't count — the server clears its needsAttention.
+  // A PR I'm only reviewing that fails CI doesn't count: the server clears its
+  // needsAttention.
   const foxInput = {
     prNeedsMe: prs.some((p) => p.needsAttention),
     prCount: prs.length,
@@ -114,10 +107,8 @@ export function App() {
     urgentTickets: work.issues.filter(isUrgentUnstarted).length,
   };
   const statusPose = deriveFoxPose(foxInput);
-  // The tooltip says *which* things need you, not just that something does.
   const reasons = foxReasons(foxInput);
   const statusTitle = reasons.length ? `something needs you: ${reasons.join(", ")}` : STATUS_TITLE[statusPose];
-  // Click the topbar fox to open a popover showing the whole cast.
   const [foxPopOpen, setFoxPopOpen] = useState(false);
   const foxPopRef = useRef<HTMLSpanElement>(null);
   // Last element the arrow-key roving focus landed on (survives re-renders).
@@ -130,7 +121,6 @@ export function App() {
   // The PR whose review session should start on its own, and how (#11).
   const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "guide" } | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  // Collapse the colour picker whenever we switch sessions.
   useEffect(() => setColorPickerOpen(false), [activeId]);
   const [workRepoRoot, setWorkRepoRoot] = useState<string>("");
   const [denRoot, setDenRoot] = useState<string>("");
@@ -144,7 +134,6 @@ export function App() {
       .catch(() => {});
   }, []);
 
-  // Resizable panels (persisted).
   const [railW, setRailW] = usePersistentNumber("den.railW", 240);
   const [workW, setWorkW] = usePersistentNumber("den.workW", 300);
   const [mainFrac, setMainFrac] = usePersistentNumber("den.wsMainFrac", 0.6);
@@ -152,7 +141,6 @@ export function App() {
   const wsRef = useRef<HTMLDivElement>(null);
   const wsBottomRef = useRef<HTMLDivElement>(null);
 
-  // Close the fox popover on an outside click or Escape.
   useEffect(() => {
     if (!foxPopOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -169,10 +157,8 @@ export function App() {
     };
   }, [foxPopOpen]);
 
-  // Arrow-key roving focus across rail / center / work columns.
   useRovingFocus(navRef);
 
-  // Native OS notifications for session bells + PRs newly needing you.
   useNotifications({
     sessions,
     activeId,
@@ -180,9 +166,7 @@ export function App() {
     prsNeedingAttention: prs.filter((p) => p.needsAttention),
   });
 
-  // The colour of a session working on a given ticket / PR, so the work-panel
-  // card can be tinted to match its session (running sessions win over exited
-  // ones). Lets you see at a glance which cards have a live session.
+  // The colour of the session working on a ticket / PR, to tint its work card.
   const hintEq = (a?: string | null, b?: string | null) =>
     !!a && !!b && a.toLowerCase() === b.toLowerCase();
   const sessionColor = (match: (s: SessionMeta) => boolean) => {
@@ -203,10 +187,9 @@ export function App() {
   }, [errMsg]);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
-  // Sessions shown in the rail (one per workspace); sub-shells are hidden.
+  // One rail row per workspace.
   const rail = sessions.filter((s) => s.role === "main");
-  // A Claude workspace can hold several shell panes (tabs). Which tab is active
-  // is tracked per group; falls back to the first shell when unset/closed.
+  // The workspace's active shell tab, else its first when unset or closed.
   const groupShells =
     active && !active.shell
       ? sessions.filter(
@@ -224,9 +207,6 @@ export function App() {
     setEditingId(null);
   };
 
-  // Cmd/Ctrl+N new claude · Cmd/Ctrl+T new shell · Cmd/Ctrl+1–9 switch to the
-  // Nth rail session · Cmd/Ctrl+W close the active. Suppressed while a modal or
-  // inline rename is open.
   useKeyboardShortcuts({
     rail,
     activeId,
@@ -252,7 +232,7 @@ export function App() {
   const openTicket = (issue: LinearIssue) => {
     const existing = sessionForTicket(issue);
     if (existing) {
-      selectSession(existing.id); // already open — just switch to it
+      selectSession(existing.id);
       return;
     }
     setTicketModal({ issue, startAtWork: false });
@@ -280,7 +260,7 @@ export function App() {
     setTicketModal(null);
     const existing = sessionForTicket(issue, { work: true });
     if (existing) {
-      selectSession(existing.id); // reuse the working session/branch
+      selectSession(existing.id);
       return;
     }
     addSession({
@@ -294,10 +274,9 @@ export function App() {
     });
   };
 
-  // --- Edit den itself (self-editing workspace) ---
-  // A normal 3-pane Claude workspace rooted in den's own source, with a handover
-  // seeded into the notepad. The sentinel ticket gives us race-safe reuse (one
-  // editor at a time) + a locked, descriptive title.
+  // --- Edit den itself ---
+  // The sentinel ticket gives race-safe reuse (one editor at a time) and a
+  // locked title.
   const DEN_TICKET = "den:self-edit";
 
   const openDenEditor = () => {
@@ -316,16 +295,13 @@ export function App() {
       cwd: denRoot,
       ticket: DEN_TICKET,
       name: "🦊 edit den",
-      // No seed: the notepad starts as the empty handover (shared/handover.ts)
-      // that every workspace gets, and the opener lives in the initial prompt.
+      // No seed: the empty handover every workspace gets, plus the initial prompt.
       initialPrompt: denPrompt(),
     });
   };
 
   // --- Clean up the work repo (#29) ---
-  // One Claude workspace in the work repo's main checkout, primed to clean up
-  // merged worktrees, branches, and idle stacks with the developer's own skill.
-  // The sentinel ticket reuses it, like the den editor.
+  // The sentinel ticket reuses one workspace, like the den editor.
   const CLEANUP_TICKET = "den:cleanup";
   const openCleanup = async () => {
     const existing = sessions.find(
@@ -406,12 +382,8 @@ export function App() {
           />
         )}
         {opts?.workspace && s.ticket === DEN_TICKET && (
-          // Open den's *latest iteration* — the dev server serving your current
-          // source edits — in a real browser. That's Vite's :5173 (run it via
-          // ▶ run den → npm run dev). We deliberately don't use the running
-          // instance's origin: in the packaged app that's the installed build,
-          // not the edits you're making here. Electron routes this target=_blank
-          // link to the OS browser.
+          // Vite's dev server, not this instance's origin: in the packaged app
+          // that origin is the installed build, not the edits being made here.
           <a
             className="btn btn-ghost-outline app-run-btn running"
             href="http://localhost:5173"
@@ -824,8 +796,7 @@ export function App() {
           }}
           onCreateWorktree={(branch, base) => {
             setShowNew(false);
-            // The server creates (or reuses) the worktree for the branch and
-            // opens the session there — same path a ticket's "Work on it" takes.
+            // Same path as a ticket's "Work on it": the server makes or reuses the worktree.
             addSession({ branch, env: "worktree", base: base ?? undefined });
           }}
           onResume={(cwd, resumeId) => {

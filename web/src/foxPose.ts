@@ -18,12 +18,8 @@ export interface FoxInput {
   urgentTickets: number;
 }
 
-// The topbar status fox's pose is derived from every attention source — never
-// set inline. `alert` when something needs *your* action: a PR needing you
-// (authored PR failing CI / changes requested, or a review you owe), unread
-// Linear notifications, or an urgent ticket nobody has started. Else `happy`
-// when any PRs are open, else `sit`. (`sleep`/`walk` are used elsewhere —
-// empty state and loading rows — not here.)
+// The topbar fox's pose, derived rather than set inline so every attention
+// source counts. `sleep` and `walk` are for the empty state and loading rows.
 export function deriveFoxPose(input: FoxInput): FoxPose {
   if (foxReasons(input).length > 0) return "alert";
   if (input.prCount > 0) return "happy";

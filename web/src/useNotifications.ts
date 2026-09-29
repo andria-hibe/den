@@ -3,11 +3,10 @@ import type { PullRequest } from "../../server/github.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { prKey } from "./format.ts";
 
-// Native OS notifications for the two things that need you when den isn't in
-// focus: a background session ringing the bell, and a PR newly needing your
-// action (CI failing / changes requested / a review you owe). We fire only on
-// *transitions* — the state present at startup is seeded silently so a fresh
-// launch never spams. A `null` "previous" ref means "not seeded yet".
+// Native OS notifications for a background session ringing the bell and a PR
+// newly needing you. Only transitions notify: the state at startup is seeded
+// silently so a fresh launch never spams. A `null` "previous" ref means "not
+// seeded yet".
 function notify(title: string, body: string) {
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;

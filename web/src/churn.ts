@@ -1,7 +1,6 @@
-// Which files in a diff are churn (lockfiles, generated code, snapshots), so
-// the diff view can start them collapsed (#18). Two signals: the path itself,
-// and the reading guide, which files churn into a last section whose title
-// says so ("Churn", "Lockfile and generated files"). Pure, for the test.
+// Which files in a diff are churn, so the diff view can start them collapsed
+// (#18): by path, or because the reading guide files them under a section
+// titled as churn ("Churn", "Lockfile and generated files").
 
 const CHURN_PATHS: RegExp[] = [
   /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?)$/,

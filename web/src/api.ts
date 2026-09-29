@@ -1,5 +1,4 @@
-// Thin fetch wrapper: throws on non-2xx, surfacing the server's {error|message}
-// when present. Used across the app so callers can just try/catch.
+// Throws on non-2xx, with the server's {error|message} when present.
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   // Only set a JSON content-type when there's actually a body — Fastify rejects
   // an empty body when content-type is application/json (breaks DELETE).

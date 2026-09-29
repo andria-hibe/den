@@ -1,6 +1,3 @@
-// Renders a unified diff (from `gh pr diff`) grouped per file, with a left
-// column holding the review's comments for that file, aligned to (and sticky
-// alongside) the file's block — so the review reads next to the code it's about.
 import { useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.ts";
 import { highlightLines, languageFor } from "./highlight.ts";
@@ -40,11 +37,9 @@ export interface LineNos {
 const NO_NOS: LineNos = { old: null, new: null };
 const HUNK_HEADER = /^@@+ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
-/** Walk a unified diff's lines and number them the way the file itself is
- * numbered, so a review saying "line 448" can be found in the diff. Counters
- * come from each `@@ -old +new @@` header; anything outside a hunk (the
- * `diff --git`/`index`/`---`/`+++` preamble) is unnumbered — note those meta
- * lines also start with `-`/`+`, which is why numbering only runs inside a hunk. */
+/** Number a unified diff's lines the way the files are numbered, so a review
+ * saying "line 448" can be found. Only lines inside a hunk are numbered: the
+ * `---`/`+++` preamble also starts with `-`/`+`. */
 export function lineNumbers(lines: string[]): LineNos[] {
   let oldNo = 0;
   let newNo = 0;
@@ -67,7 +62,6 @@ export function lineNumbers(lines: string[]): LineNos[] {
   });
 }
 
-/** One diff line: the two number gutters, then the text. */
 function DiffLine({
   line,
   nos,
@@ -152,8 +146,7 @@ function DiffFileBlock({
 }) {
   const b = block;
   const nums = useMemo(() => lineNumbers(b.lines), [b.lines]);
-  // Highlighting runs only for an expanded file, so a 40-file PR with most
-  // files collapsed pays for what's on screen.
+  // Only expanded files are highlighted, so collapsed ones cost nothing.
   const html = useHighlighted(b.file, b.lines, nums, !collapsed);
   const { add, del } = useMemo(() => changeCounts(b.lines), [b.lines]);
   return (
@@ -220,9 +213,8 @@ export function diffFiles(diff: string): string[] {
     .filter((f): f is string => !!f);
 }
 
-/** The sub-diff covering just `files`, in the order given — how the guide view
- * renders one section's changes (its own order, not the diff's). Files the diff
- * doesn't contain are skipped. */
+/** The sub-diff covering just `files`, in the order given (a guide section's
+ * order, not the diff's). Files the diff doesn't contain are skipped. */
 export function diffForFiles(diff: string, files: string[]): string {
   const byFile = new Map<string, string[]>();
   for (const b of parseFiles(diff)) if (b.file) byFile.set(b.file, b.lines);
@@ -251,9 +243,8 @@ function parseFiles(diff: string): FileBlock[] {
   return blocks;
 }
 
-/** A single diff hunk (e.g. the `diff_hunk` GitHub attaches to a review
- * comment), colour-coded like the full diff view. The last line is the one the
- * comment is anchored to, so we mark it. */
+/** One diff hunk, such as the `diff_hunk` GitHub attaches to a review comment.
+ * Its last line is the one the comment is anchored to, so it's marked. */
 export function DiffHunk({ hunk }: { hunk: string }) {
   const lines = hunk.replace(/\n+$/, "").split("\n");
   const nums = lineNumbers(lines);
@@ -284,11 +275,11 @@ export function DiffView({
   diff: string;
   /** The review's comments per file (markdown), shown in the left column. */
   notes?: Record<string, string>;
-  /** Why a file has no comments: nobody asked yet ("idle"), the review is being
-   * written ("waiting"), or it landed and had nothing to say ("ready"). */
+  /** Why a file has no comments: nobody asked ("idle"), being written
+   * ("waiting"), or nothing to say ("ready"). */
   noteState?: "idle" | "waiting" | "ready";
-  // When present, each file block gets a "→ Claude" button that pastes just
-  // that file's diff into the session for a targeted review.
+  // When present, each file gets a "→ review" button asking the session for a
+  // targeted review of that file.
   sessionId?: string;
   prNumber?: number;
   /** Files to start collapsed (churn: lockfiles, generated code). A file with

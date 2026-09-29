@@ -1,12 +1,8 @@
 import { useEffect, type RefObject } from "react";
 
-// Arrow-key roving focus. Moves a visible focus ring across three columns —
-// rail sessions, the center pane, and work cards (tickets/PRs). Up/Down within
-// a column, Left/Right between columns; Enter activates (dives into the terminal
-// for the center pane); Escape leaves a terminal/input back to the rail. Bails
-// whenever focus is in a terminal or text field so typing is never hijacked.
-//
-// `navRef` remembers the last element the ring landed on, surviving re-renders.
+// Arrow-key roving focus across the rail, the center pane, and the work cards.
+// Bails whenever focus is in a terminal or text field, so typing is never
+// hijacked. `navRef` remembers the last element the ring landed on.
 export function useRovingFocus(navRef: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const typing = (el: Element | null) =>
@@ -37,12 +33,11 @@ export function useRovingFocus(navRef: RefObject<HTMLElement | null>) {
       el.focus();
       navRef.current = el;
     };
-    // A mouse interaction ends keyboard navigation — drop the ring.
+    // A mouse interaction ends keyboard navigation.
     const onDown = () => clearRing();
 
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
-      // Escape steps out of a terminal/input back to the rail.
       if (e.key === "Escape" && typing(active)) {
         const rail =
           document.querySelector<HTMLElement>(".rail .session.active") ??

@@ -1,10 +1,6 @@
-// The Review pane's "Guide" tab: the PR read in the order it was written, not
-// in file-alphabetical order. The review session writes a reading guide (see
-// reviewInstruction, server-side) that groups related changes into sections with
-// the purpose and impact of each; this renders each section's prose above that
-// section's own diffs, so you meet the core of the implementation first and the
-// churn last. The review's per-file comments still sit beside each file, so the
-// guide is a complete way to read the change on its own.
+// The review pane's Guide tab: each section of the reading guide above that
+// section's own diffs, with the review's per-file comments still beside each
+// file.
 import { useMemo } from "react";
 import { DiffView, diffForFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
@@ -13,7 +9,6 @@ import { churnFromGuide, isChurnPath } from "./churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
 import { ToClaude } from "./ToClaude.tsx";
 
-/** One guide section: its explanation, then the diffs it groups. */
 function Section({
   index,
   title,
@@ -36,8 +31,6 @@ function Section({
   prNumber: number;
 }) {
   const sub = useMemo(() => diffForFiles(diff, files), [diff, files]);
-  // A section the guide calls churn starts folded, and so does any lockfile or
-  // generated file wherever it's filed.
   const churnSection = churnFromGuide([{ title, files }]).size > 0;
   return (
     <section className="guide-section">
@@ -75,18 +68,14 @@ export function PrGuideTab({
   requested,
   onRequested,
 }: {
-  /** The guide markdown as the session has written it so far. */
   guide: string;
-  /** The PR's full unified diff. */
   diff: string;
-  /** The paths the diff touches, in diff order (the guide's fallback order). */
+  /** The paths the diff touches, in diff order. */
   files: string[];
-  /** The review's per-file comments, shown beside each file here too. */
   notes?: Record<string, string>;
   noteState: "idle" | "waiting" | "ready";
   sessionId: string;
   prNumber: number;
-  /** The paste that asks the session for the guide. */
   prompt: string;
   /** A guide has been asked for but hasn't landed yet — the only state where a
    * walking fox is honest (see the review tab's `requested`). */

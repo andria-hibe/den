@@ -2,8 +2,6 @@ import { useState } from "react";
 import type { LinearIssue } from "../../server/linear.ts";
 import { BasePicker, useWorkBases } from "./BasePicker.tsx";
 
-// Shown when you click a Linear ticket: look at it, or work on it (in a new
-// worktree or the default local checkout).
 export function TicketDialog({
   issue,
   startAtWork = false,

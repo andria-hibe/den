@@ -4,8 +4,7 @@ import { renderMarkdown } from "./markdown.ts";
 import { relTimeAgo } from "./format.ts";
 import type { LinearComment } from "../../server/linear.ts";
 
-// Comments on a Linear ticket, shown in the read-only "look" view. Fetches
-// lazily per ticket; stays quiet (renders nothing) on error or when empty.
+// Renders nothing on error or when there are no comments.
 export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<LinearComment[] | null>(null);
   const [failed, setFailed] = useState(false);

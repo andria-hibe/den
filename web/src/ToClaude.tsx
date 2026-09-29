@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { api } from "./api.ts";
 
-/** Button that pastes a framed instruction into a session's Claude prompt via
- * bracketed paste (keeps multi-line as one entry, does not auto-submit). Shared
- * by the PR views (comment → Claude) and the diff view (file → targeted review). */
+/** Button that pastes an instruction into a session's Claude prompt as one
+ * bracketed paste, so multi-line text stays one entry. */
 export function ToClaude({
   sessionId,
   text,
@@ -18,7 +17,7 @@ export function ToClaude({
   label?: string;
   title?: string;
   className?: string;
-  /** Fired once the paste lands — lets the caller show a "working on it" state. */
+  /** Fired once the paste lands. */
   onSent?: () => void;
   /** Press Enter for the user too. For buttons that mean "do this now" (the
    * review); the comment buttons leave it off so you can read before sending. */

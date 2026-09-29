@@ -2,11 +2,8 @@ import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
-// Ticket / PR chips for a session (workspace header + rail rows). The session's
-// *explicit* link (the ticket or PR it was opened for) wins — that's what makes
-// the chip correct per session. Only sessions that were never linked to one
-// explicitly fall back to matching their branch's ticket hint against your open
-// work. Renders null when the session has nothing to link.
+// Ticket / PR chips for a session. The ticket or PR it was opened for wins;
+// only a session with no explicit link falls back to its branch's ticket hint.
 export function WorkLinkChips({
   s,
   issues,

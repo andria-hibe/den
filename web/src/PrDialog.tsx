@@ -6,7 +6,6 @@ import type { PullRequest } from "../../server/github.ts";
  * small enough to read yourself, or nothing until you ask. */
 export type PreReview = "full" | "guide" | "none";
 
-// Shown when you click a GitHub PR. Others' PRs → review; your own → edit.
 export function PrDialog({
   pr,
   onReview,

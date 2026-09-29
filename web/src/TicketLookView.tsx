@@ -5,9 +5,7 @@ import { TicketComments } from "./TicketComments.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 
-// A "just looking" ticket session: the ticket detail (Description / Comments
-// tabs) above, the Claude pane below, one draggable splitter. The tab and the
-// split are persisted, so they survive session switches and restarts.
+// A "just looking" ticket session: the ticket above, the Claude pane below.
 export function TicketLookView({
   ticketId,
   issues,
@@ -17,7 +15,7 @@ export function TicketLookView({
 }: {
   ticketId: string | null;
   issues: LinearIssue[];
-  /** "work on it" — open the work dialog for this issue. */
+  /** Open the work dialog for this issue. */
   onWork: (issue: LinearIssue) => void;
   header: ReactNode;
   terminal: ReactNode;

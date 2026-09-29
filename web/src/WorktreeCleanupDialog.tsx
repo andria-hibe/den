@@ -13,14 +13,10 @@ export interface StackToStop {
   containersUp: number;
 }
 
-// Offered after you close a session, for what it leaves behind (#15, #28):
-// - a stack still running for that checkout: stop it (runn down), so its
-//   containers don't outlive the work;
-// - a worktree den made that nothing else uses: remove it. Removing keeps the
-//   branch; the dialog says what, if anything, would be lost, and a removal
-//   that loses work starts unticked and is labelled as such.
-// Stopping runs first, since a stack whose checkout is gone can't be found by
-// its own teardown any more.
+// Offered after closing a session, for what it leaves behind (#15, #28): a
+// stack still running for its checkout, and a worktree den made that nothing
+// else uses. A removal that would lose work starts unticked. Stopping runs
+// first, since a stack whose checkout is gone can't be found by its teardown.
 export function WorktreeCleanupDialog({
   worktree,
   stack,

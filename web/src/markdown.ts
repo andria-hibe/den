@@ -26,10 +26,8 @@ export function renderMarkdown(md: string): string {
   let html = "";
   let inCode = false;
   let inList = false;
-  // The paragraph or list item being built. Markdown treats a single newline as
-  // a soft break, so wrapped prose joins its paragraph and a wrapped bullet
-  // stays inside its <li> instead of escaping the list — which matters most for
-  // the review and its reading guide, both hard-wrapped prose.
+  // The paragraph or list item being built. A single newline is a soft break,
+  // so hard-wrapped prose (the review, the guide) stays in its paragraph or <li>.
   let pending: { kind: "p" | "li"; text: string } | null = null;
 
   const flush = () => {
@@ -87,7 +85,6 @@ export function renderMarkdown(md: string): string {
     } else if (raw.trim() === "") {
       closeList();
     } else if (pending && !NEW_BLOCK.test(raw)) {
-      // Soft line break: continue whatever block is open.
       pending.text += ` ${raw.trim()}`;
     } else {
       closeList();

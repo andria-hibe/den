@@ -1,12 +1,9 @@
-// The prompts the PR views paste into a Claude session. They live here, apart
-// from the components that send them, for the reason reviewInstruction lives
-// apart from the code that spawns the session: they are rules the model reads,
-// and prompts.test.ts holds every one of them to ASCII (shared/ascii.ts). A
-// prompt with an em dash in it teaches the pane to write one back, and a review
-// pane's output is pasted into GitHub.
+// Every prompt den pastes into a Claude pane lives here so prompts.test.ts can
+// hold each to ASCII: a prompt with an em dash teaches the pane to write one
+// back, and a review pane's output is pasted into GitHub.
 //
-// Each one mirrors the shape reviewInstruction (server/sessions.ts) sets, so den
-// can render what the session writes. Change them together.
+// The review prompts mirror the shape reviewInstruction (server/sessions.ts)
+// sets, so den can render what the session writes. Change them together.
 import type { PrReviewNote } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import { HANDOVER_TEMPLATE } from "../../shared/handover.ts";
@@ -27,9 +24,8 @@ export function guidePrompt(number: number, repo: string): string {
   );
 }
 
-/** Ask a review pane for the review. The PR is checked out in the session's
- * worktree, so Claude reads the diff and the code around it, and you can follow
- * up right there. The structure is what parseReview files per file. */
+/** Ask a review pane for the review, in the structure parseReview files per
+ * file. */
 export function reviewPrompt(number: number, repo: string): string {
   return (
     `Please review pull request #${number} (${repo}). The PR's full diff has been ` +
@@ -107,8 +103,7 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
   );
 }
 
-/** A ticket's details as markdown, without its title: state, branch, link,
- * and description. */
+/** A ticket's details as markdown, without its title. */
 function ticketDetails(issue: LinearIssue): string {
   const parts = [`**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`];
   if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
@@ -123,18 +118,15 @@ function ticketDetails(issue: LinearIssue): string {
   return parts.join("\n");
 }
 
-/** A ticket as markdown: title, state, branch, link, and description. A look
- * pane gets this as the file its system prompt points at (lookInstruction), so
- * the session can read the ticket you are both looking at. */
+/** A ticket as markdown: the file a look pane's system prompt points at
+ * (lookInstruction). */
 export function ticketBrief(issue: LinearIssue): string {
   return `# ${issue.identifier}: ${issue.title}\n\n${ticketDetails(issue)}`;
 }
 
 /** The notepad a ticket workspace starts with: the empty handover first, so
- * the notepad opens on where the work stands, then the ticket below it, so the
- * session has the ticket on disk. After a restart this is the only copy of the
- * ticket the session can see, which is why progressInstruction tells it to
- * read the notepad first. */
+ * it opens on where the work stands, then the ticket. After a restart this is
+ * the session's only copy of the ticket. */
 export function ticketNotesSeed(issue: LinearIssue): string {
   return (
     `# ${issue.identifier}: ${issue.title}\n\n${HANDOVER_TEMPLATE}\n---\n\n` +

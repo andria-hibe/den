@@ -22,13 +22,9 @@ export interface AddSessionOpts {
 }
 
 /**
- * Owns the session list and everything that mutates it: create / rename /
- * recolour / restart / close, shell tabs, the active selection, and the 4s
- * poll that syncs names/status/attention from the server.
- *
- * The poll **only merges existing rows, never adds new ones** — so every
- * mutation that can create a session out-of-band (addSession, addShellTab,
- * launchApp) refetches the full list itself.
+ * The session list, the active selection, and everything that mutates them.
+ * The 4s poll only merges existing rows, never adds new ones, so every
+ * mutation that can create a session refetches the full list itself.
  */
 export function useSessions({
   editingId,
@@ -113,7 +109,6 @@ export function useSessions({
     );
   };
 
-  // Re-spawn an exited session's PTY in place (keeps cwd/name/branch/ticket/PR).
   // The terminal is keyed by `id:status`, so flipping to running remounts it and
   // reconnects to the fresh process.
   const restartSession = async (id: string) => {
@@ -124,13 +119,11 @@ export function useSessions({
       setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
       setActiveId(meta.id);
     } catch (e) {
-      // 409 cannot_restart just means it's already running (e.g. a double-click);
-      // that's benign, so don't nag with a toast.
+      // cannot_restart means it's already running (a double-click): no toast.
       if ((e as Error).message !== "cannot_restart") onError((e as Error).message);
     }
   };
 
-  // Turn a workspace's handover on or off; the server returns the new meta.
   const setHandover = async (id: string, on: boolean) => {
     try {
       const meta = await api<SessionMeta>(`/api/sessions/${id}/handover`, {
@@ -155,8 +148,6 @@ export function useSessions({
     });
   };
 
-  // Add another shell tab to the given workspace and switch to it. Refetches
-  // the full list (the 4s poll only merges existing rows, never adds new ones).
   const addShellTab = async (anyIdInGroup: string, groupId: string) => {
     try {
       const meta = await api<SessionMeta>(
@@ -171,8 +162,6 @@ export function useSessions({
     }
   };
 
-  // Spin up the workspace's app in a fresh shell tab (server adds the shell and
-  // types the run command into it), then switch to that tab.
   // Run the app (or, with "setup", the worktree's setup command) in a new
   // shell tab of the workspace, and switch to that tab.
   const launchApp = async (sessionId: string, what: "run" | "setup" = "run") => {
@@ -209,13 +198,11 @@ export function useSessions({
     }
   };
 
-  // Close a single shell tab (leaves the rest of the workspace intact).
   const closeShellTab = async (shellId: string, groupId: string) => {
     try {
       await api(`/api/sessions/${shellId}?scope=one`, { method: "DELETE" });
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== shellId);
-        // If the closed tab was active, fall back to another shell in the group.
         setShellTab((m) => {
           if (m[groupId] !== shellId) return m;
           const fallback = next.find(
@@ -230,9 +217,8 @@ export function useSessions({
     }
   };
 
-  // Persist a dragged rail order (workspace order, top to bottom). Applied
-  // locally first so the row lands where you dropped it without waiting on the
-  // round-trip; the server's answer is the authority if the two disagree.
+  // Applied locally first so the row lands where it was dropped without waiting
+  // on the round-trip; the server's answer wins if the two disagree.
   const reorderRail = async (groupIds: string[]) => {
     setSessions((prev) => sortByGroupOrder(prev, groupIds));
     try {
@@ -251,8 +237,8 @@ export function useSessions({
       prev.map((s) => (s.id === id ? { ...s, status: "exited" } : s)),
     );
 
-  // Selecting a session views it — clear its attention nudge optimistically
-  // (the server also clears it when the terminal re-attaches).
+  // Clears the attention nudge optimistically; the server clears it too when
+  // the terminal attaches.
   const selectSession = (id: string) => {
     setActiveId(id);
     setSessions((prev) =>
@@ -260,8 +246,7 @@ export function useSessions({
     );
   };
 
-  // Terminal-set title (Claude/shell) for a session — apply unless the user is
-  // mid-rename of it.
+  // A Claude pane's terminal title, unless the user is mid-rename of it.
   const applyTitle = (id: string, name: string) =>
     setSessions((prev) =>
       prev.map((s) => (s.id === id && editingId !== id ? { ...s, name } : s)),

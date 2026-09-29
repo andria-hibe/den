@@ -13,11 +13,8 @@ import { api } from "./api.ts";
 import { prKey } from "./format.ts";
 import { usePersistentJson } from "./usePersistent.ts";
 
-// Single source of truth for GitHub PRs + Linear issues. Previously App, the
-// WorkPanel, and the LinearSection each ran their own 60s poll of the same two
-// endpoints, so the topbar fox and the panels could drift out of phase (e.g. a
-// manual refresh in a panel left the fox stale). This provider polls each
-// resource once and shares the result, so everything reads the same data.
+// The one poll of GitHub PRs and Linear issues, shared so the topbar fox and
+// the panels never drift out of phase.
 const POLL_MS = 60_000;
 
 interface WorkDataValue {
@@ -27,9 +24,7 @@ interface WorkDataValue {
   prsError: string | null;
   prsLoading: boolean;
   refreshPrs: () => void;
-  /** Silence a PR's "!" attention flag until the PR next changes (e.g. you're
-   *  choosing not to review it). Clears the card badge, the topbar fox, and OS
-   *  notifications together, since they all read the same shared data. */
+  /** Silence a PR's "!" attention flag until the PR next changes. */
   dismissPrAttention: (pr: PullRequest) => void;
   // Linear
   linear: LinearData | null;
@@ -68,10 +63,8 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [refreshPrs]);
 
-  // Dismissed attention flags: prKey → the PR's `updatedAt` when you dismissed
-  // it. The dismissal is scoped to that snapshot — if the PR later changes
-  // (a new push / comment / review), the "!" comes back, mirroring how the OS
-  // notifications only react to transitions.
+  // prKey → the PR's `updatedAt` when dismissed. Once the PR changes (a push,
+  // comment, or review), the "!" comes back.
   const [dismissed, setDismissed] = usePersistentJson<Record<string, string>>(
     "den.dismissedPrAttn",
     {},
@@ -84,9 +77,8 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     [setDismissed],
   );
 
-  // Apply the dismissals: any PR whose dismissed snapshot still matches its
-  // current `updatedAt` has its needsAttention cleared. Every consumer (cards,
-  // fox, notifications) reads these derived buckets, so they never disagree.
+  // Every consumer (cards, fox, notifications) reads these derived buckets, so
+  // they never disagree about a dismissal.
   const dprs = useMemo<PrBuckets | null>(() => {
     if (!prs) return null;
     const clear = (list: PullRequest[]) =>
@@ -102,9 +94,8 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     };
   }, [prs, dismissed]);
 
-  // Prune stale dismissals so localStorage doesn't grow forever: drop any entry
-  // whose PR has left the list (merged/closed) or moved on (updatedAt changed —
-  // it re-alerts anyway, so the record is spent).
+  // Prune dismissals whose PR has left the list or changed since, so
+  // localStorage doesn't grow forever.
   useEffect(() => {
     if (!prs) return;
     const live = new Map(
@@ -132,8 +123,8 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
   const [linearError, setLinearError] = useState<string | null>(null);
   const [linearLoading, setLinearLoading] = useState(false);
 
-  // Raw fetch (not api()): a 409 means "no Linear key yet", which is a state,
-  // not an error — it needs the status code, which api() folds into a throw.
+  // Raw fetch, not api(): a 409 means "no Linear key yet", a state rather than
+  // an error, and api() folds the status code into a throw.
   const refreshIssues = useCallback(async (refresh = false) => {
     setLinearLoading(true);
     setLinearError(null);
@@ -154,7 +145,6 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Initial connection check, then load if connected.
   useEffect(() => {
     api<{ connected: boolean }>("/api/linear/status")
       .then((s) => {
@@ -164,7 +154,6 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
       .catch(() => setLinearConnected(false));
   }, [refreshIssues]);
 
-  // Poll only while connected.
   useEffect(() => {
     if (!linearConnected) return;
     const t = setInterval(() => refreshIssues(), POLL_MS);

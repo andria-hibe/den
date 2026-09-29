@@ -1,6 +1,4 @@
-// Pure list-order helpers for dragging the session rail around. Kept out of the
-// components so the fiddly index arithmetic (which off-by-one moves an item to
-// the wrong side?) can be unit-tested on its own.
+// List-order helpers for dragging the session rail.
 
 /** Move the item at `from` so it sits at index `to`, returning a new array. */
 export function moveItem<T>(list: T[], from: number, to: number): T[] {
@@ -16,8 +14,8 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
 /**
  * Order a flat session list so its workspaces follow `groupIds`.
  *
- * Used for the optimistic local update after a drag — the server does the same
- * thing (`reorderPositions` in server/sessions.ts) when it persists the order.
+ * The optimistic update after a drag; keep it in step with
+ * `reorderPositions` in server/sessions.ts, which persists the order.
  * A group the order doesn't name keeps its place after the named ones, and the
  * panes within a workspace keep their relative order (the sort is stable).
  */

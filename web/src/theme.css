@@ -58,7 +58,7 @@ body {
   background-size: 22px 22px;
 }
 
-/* Pixel-friendly rendering hook for future sprites */
+/* Crisp scaling for pixel art. */
 .pixel {
   image-rendering: pixelated;
 }
@@ -310,8 +310,7 @@ body {
   gap: 14px;
 }
 /* Stepped bob so `top` only ever holds integer values — a fractional offset
-   knocks the sprite off the device-pixel grid and anti-aliases (blurs) it.
-   Whole-pixel steps also read as authentic pixel-art idle motion. */
+   knocks the sprite off the device-pixel grid and anti-aliases (blurs) it. */
 .fox-bob {
   position: relative;
   animation: fox-bob 1.8s steps(1, jump-end) infinite;
@@ -359,9 +358,8 @@ body {
   70% { opacity: 1; }
   100% { opacity: 0; transform: translate(18px, -46px) rotate(8deg); }
 }
-/* Same sleeping-fox idle in the compact status popover, scaled to fit so the
-   z's stay near the fox's head instead of drifting into the row above. Given a
-   glow + a little more size so they read clearly against the panel. */
+/* The sleeping fox in the status popover, scaled so the z's stay near its
+   head instead of drifting into the row above. */
 .fox-pop .zzz {
   font-size: 13px;
   animation-name: z-drift-mini;
@@ -580,7 +578,6 @@ body {
   color: var(--ink);
 }
 
-/* colour swatches in the terminal header */
 /* Colour picker: a single dot button that pops the swatch list on click,
    so the choices don't take up header space while idle. */
 .color-picker {
@@ -696,8 +693,8 @@ body {
   padding: 2px 4px 6px;
 }
 
-/* Arrow-key roving focus ring (rail sessions, center pane, work cards). The
-   .roving-focus class is toggled by the keyboard-nav handler in App.tsx. */
+/* Arrow-key roving focus ring, a class set by useRovingFocus.ts: a scripted
+   .focus() can't be relied on to trigger :focus-visible. */
 .session.roving-focus,
 .pr-card.roving-focus {
   outline: 2.5px solid var(--pink-deep);
@@ -1267,8 +1264,8 @@ body {
   color: #7a2a45;
   border-color: transparent;
 }
-/* A PR you've already reviewed: it stays in "review requested" until it merges,
-   so mark why it's still listed (quietly — it isn't waiting on you). */
+/* A PR you've already reviewed stays in "review requested" until it merges or
+   closes, so mark quietly why it's still listed. */
 .pr-badge.reviewed {
   background: transparent;
   color: var(--ink-soft);
@@ -1609,7 +1606,7 @@ body {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 .diff-note-file {
-  /* A button (it folds the file), styled as the file label it replaced. */
+  /* A button (it folds the file), styled as a label. */
   display: block;
   width: 100%;
   text-align: left;

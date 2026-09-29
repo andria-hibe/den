@@ -1,14 +1,10 @@
-// Splits the markdown review a review session writes to its notepad into an
-// overall section plus per-file sections, so den can render each file's comments
-// beside that file's own diff instead of in a separate column.
-//
-// The contract is set by `reviewInstruction` (server/sessions.ts): general
-// review first, then one `## <file path>` heading per file commented on. Parsing
-// is deliberately forgiving — Claude may shorten the path, wrap it in backticks,
-// or pick a different heading level.
+// Splits a review session's notepad into the general review and per-file
+// sections, in the format `reviewInstruction` (server/sessions.ts) sets.
+// Parsing is forgiving: Claude may shorten the path, backtick it, or pick a
+// different heading level.
 
 export interface ParsedReview {
-  /** Everything before the first per-file heading — the general review. */
+  /** Everything before the first per-file heading. */
   overall: string;
   /** Per-file comments, keyed by the path as it appears in the diff. */
   byFile: Record<string, string>;
@@ -32,7 +28,6 @@ function stripEmphasis(text: string): string {
   }
 }
 
-/** Strip the decoration Claude tends to put around a path in a heading. */
 function normalize(text: string): string {
   return stripEmphasis(text.replace(/`/g, ""))
     .replace(/^[*_\s]*(file|path)[*_\s]*[:\-–—]\s*[*_\s]*/i, "")
@@ -87,7 +82,6 @@ export function parseReview(md: string, files: string[]): ParsedReview {
       const text = normalize(m[2]);
       const file = matchFile(text, files);
       if (file) {
-        // The heading is just the path — the diff block already shows it.
         bucket = fileLines.get(file) ?? [];
         fileLines.set(file, bucket);
         continue;

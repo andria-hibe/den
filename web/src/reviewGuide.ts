@@ -1,27 +1,20 @@
-// Splits the "reading guide" a review session writes to its guide file into an
-// intro plus ordered sections, each carrying the files it groups — so den can
-// render the diff in the order the change makes sense in (core implementation
-// first, churn last) instead of file-alphabetical order.
-//
-// The contract is set by `reviewInstruction` (server/sessions.ts): a short intro,
-// then one `## <section title>` heading per group of related changes, most
-// important first, each with a `Files: path/a.ts, path/b.ts` line. Parsing is
-// deliberately forgiving in the same way `reviewNotes.ts` is: Claude may bullet
-// the paths, wrap them in backticks, shorten them, or pick another heading level.
+// Parses the reading guide a review session writes. The format is set by
+// `reviewInstruction` (server/sessions.ts). Parsing is forgiving, like
+// `reviewNotes.ts`: Claude may bullet the paths, backtick or shorten them, or
+// pick another heading level.
 
 import { looksLikePath, matchFile } from "./reviewNotes.ts";
 
 export interface GuideSection {
-  /** The section's heading, decoration stripped. */
   title: string;
-  /** The section's prose (its purpose and impact), minus the file list. */
+  /** The section's prose, minus the file list. */
   body: string;
   /** The diff paths this section groups, in diff order. */
   files: string[];
 }
 
 export interface ParsedGuide {
-  /** Everything before the first section heading — what the PR does overall. */
+  /** Everything before the first section heading. */
   intro: string;
   sections: GuideSection[];
   /** Changed files no section claimed, in diff order. */
@@ -36,7 +29,6 @@ const FILES_LINE = /^\s*(?:[-*+]\s+)?[*_`]*(?:files?|paths?)[*_`]*\s*:\s*(.*)$/i
 /** A title that just names the document; the UI already labels the intro. */
 const GENERIC = /^(reading\s+)?(guide|overview|summary|orientation|intro(duction)?)$/i;
 
-/** Strip the emphasis/backticks/trailing colon Claude puts around a heading. */
 function cleanTitle(text: string): string {
   return text
     .replace(/`/g, "")
@@ -45,10 +37,8 @@ function cleanTitle(text: string): string {
     .trim();
 }
 
-/** Pull the diff paths out of a `Files:` line or one of its bullets. Tokens are
- * matched against the diff, so prose ("and", "the new helper") drops out on its
- * own — `matchFile` already tolerates backticks, a shortened path and trailing
- * punctuation. */
+/** The diff paths in a `Files:` line or one of its bullets. Tokens are matched
+ * against the diff, so prose drops out on its own. */
 function pathsIn(text: string, files: string[]): string[] {
   const out: string[] = [];
   for (const raw of text.split(/[,;]+|\s+/)) {

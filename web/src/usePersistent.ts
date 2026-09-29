@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 
-// localStorage-backed state hooks, shared by pane sizes, remembered tabs, and
-// the dismissed-PR-attention map. (They grew up inside Splitter.tsx because
-// pane sizes were the first user; they're independent of it.)
+// localStorage-backed state hooks.
 
 /** A number that persists to localStorage (used for pane sizes). */
 export function usePersistentNumber(key: string, initial: number) {
@@ -37,10 +35,9 @@ export function usePersistentString<T extends string>(
 }
 
 /**
- * A JSON-serialisable value that persists to localStorage. Used for the set of
- * PR attention flags you've dismissed (a `{ key: updatedAt }` map). A malformed
- * or stale stored value falls back to `initial`. The setter is `useState`'s, so
- * it's stable across renders (safe as an effect/callback dependency).
+ * A JSON-serialisable value that persists to localStorage. A stored value that
+ * doesn't parse falls back to `initial`. The setter is `useState`'s, so it's
+ * stable across renders (safe as an effect/callback dependency).
  */
 export function usePersistentJson<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {

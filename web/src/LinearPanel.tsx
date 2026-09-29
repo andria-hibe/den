@@ -7,9 +7,7 @@ import { accentStyle, relTime } from "./format.ts";
 import { usePersistentString } from "./usePersistent.ts";
 import { useWorkData } from "./WorkData.tsx";
 
-// The Linear section splits assigned tickets by their identifier prefix into
-// FAST-* and CYCLE-* tabs (the two teams the maintainer works across). Anything
-// that's neither falls under "other" so no ticket ever goes missing.
+// FAST-* and CYCLE-* tabs: the two teams the maintainer works across.
 function issueGroup(identifier: string): "fast" | "cycle" | "other" {
   const prefix = identifier.split("-")[0]?.toUpperCase();
   if (prefix === "FAST") return "fast";
@@ -166,8 +164,7 @@ export function LinearSection({
   const fastIssues = issues.filter((i) => issueGroup(i.identifier) === "fast");
   const cycleIssues = issues.filter((i) => issueGroup(i.identifier) === "cycle");
   const otherIssues = issues.filter((i) => issueGroup(i.identifier) === "other");
-  // Tickets that are neither FAST nor CYCLE ride along on whichever tab is
-  // active so they never vanish.
+  // Tickets from any other team show on the FAST tab, so none go missing.
   const shown = tab === "fast" ? [...fastIssues, ...otherIssues] : cycleIssues;
 
   return (

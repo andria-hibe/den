@@ -1,13 +1,11 @@
-// Syntax highlighting for the diff view (#18). highlight.js core plus only the
-// languages den's diffs actually hold (the work repo is TypeScript, Ruby, CSS,
-// ERB, YAML, JSON, Markdown, shell), to keep the bundle small.
+// Syntax highlighting for the diff view (#18): highlight.js core plus only the
+// languages den's diffs hold, to keep the bundle small.
 //
-// A diff must stay one DOM row per line (the gutter, the add/del tint, and the
-// review column all key off it), but highlighting line by line would lose
-// anything that spans lines: a block comment, a template string. So a file's
-// hunk lines are highlighted as one text and the HTML is split back into
-// lines, closing the open spans at each line end and reopening them on the
-// next line. Pure, for the test.
+// A diff must stay one DOM row per line (the gutter, the tint, and the review
+// column key off it), but highlighting line by line would lose anything that
+// spans lines, like a block comment. So a file's hunk lines are highlighted as
+// one text and the HTML is split back into lines, closing the open spans at
+// each line end and reopening them on the next.
 import hljs from "highlight.js/lib/core";
 import typescript from "highlight.js/lib/languages/typescript";
 import javascript from "highlight.js/lib/languages/javascript";

@@ -5,9 +5,8 @@ import { isAscii } from "../../shared/ascii.ts";
 import type { ReviewPost } from "./reviewPost.ts";
 import type { PrReviewNote, ReviewEvent } from "../../server/github.ts";
 
-// Posting to GitHub from den (#16). Nothing here posts on its own: each action
-// shows what goes, and posts only on the developer's click. Den's server makes
-// the call, never a review session (whose permissions deny every gh write).
+// Posting to GitHub from den (#16). Each action shows what goes and posts only
+// on the developer's click, from den's server, never from a review session.
 
 /** Characters that won't survive a paste into GitHub (see shared/ascii.ts). */
 function nonAscii(text: string): number {
@@ -106,8 +105,7 @@ export function PostReviewDialog({
   );
 }
 
-/** Reply to and resolve one inline thread on your own PR. Sits under the
- * thread's last comment. */
+/** Reply to and resolve one inline thread on your own PR. */
 export function ThreadActions({
   repo,
   number,
