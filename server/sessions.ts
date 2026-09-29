@@ -33,10 +33,9 @@ function gitBranch(cwd: string): string | null {
   }
 }
 
-const SCROLLBACK_CAP = 256 * 1024; // bytes of raw terminal output kept per session
+const SCROLLBACK_CAP = 256 * 1024; // characters of terminal output kept per session
 
-// Per-workspace progress notepads live here (outside the project so we never
-// pollute a repo). The main Claude is granted write access to this dir.
+// Outside any repo, so a notepad never ends up in a commit.
 const PROGRESS_DIR = join(os.homedir(), ".den", "progress");
 
 // groupIds are randomUUIDs. Validate before building a path so a crafted id
@@ -50,9 +49,7 @@ export const notepadPath = (groupId: string) => {
   return join(PROGRESS_DIR, `${groupId}.md`);
 };
 
-// PR-review sessions get their own guardrails (see buildReviewPermissions).
-// The PR's diff and the per-session permission settings file live here, outside
-// any repo. Both are cleaned up when the workspace is closed.
+// A review pane's diff, guide, and settings file; remove() deletes them.
 const REVIEW_DIR = join(os.homedir(), ".den", "review");
 const reviewDiffPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
@@ -62,47 +59,26 @@ const reviewSettingsPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.settings.json`);
 };
-// The reading guide: the review session's grouping of the change (see
-// reviewInstruction), which den renders as the review pane's Guide tab. Kept
-// beside the diff rather than in the notepad, so the review's `## <path>`
-// sections and the guide's `## <section title>` ones never have to share a
-// parser.
+// Kept out of the notepad so the review's `## <path>` headings and the
+// guide's `## <section title>` ones never share a parser.
 export const reviewGuidePath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.guide.md`);
 };
 
-/** The Claude permission rules for a PR-review pane.
+/** The Claude permission rules for a PR-review pane. The deny list is a
+ * backstop under reviewInstruction, which does the real work: a deny can't be
+ * prompted past, but a shell can still reach the same place another way
+ * (`git -C`, a wrapper script, an alias). `gh api` is denied because it can
+ * POST anything.
  *
- * A review pane has a **shell and can edit files** — reviewing a PR properly
- * means running the tests, bisecting a suspicion, trying a fix. What it must
- * never do is change the PR: the primary guard is the instruction
- * (`reviewInstruction` — no commits, no pushes, edits only on a scratch branch),
- * and these deny rules are the backstop under it, blocking the direct path to
- * anything that leaves this machine or rewrites history:
- *  - `git push` / `git commit` in any form (the prefix covers flags/subargs);
- *  - the `gh` subcommands that write to the PR, the repo, or the issue tracker,
- *    while `gh pr view|diff|checks` stay available for reading;
- *  - `gh api`, which can POST anything.
- * They are a backstop, not a sandbox: a deny can't be prompted past, but a
- * determined shell can still reach the same place by another route (a wrapper
- * script, `git -C`, an alias). The instruction does the real work.
+ * The allow list saves the review and guide without a prompt, plus the
+ * read-only commands a review runs constantly: without them the code-review
+ * skill stalls on a prompt for every `git show`. `git fetch` only moves local
+ * refs. Deny beats allow, so none of this loosens the backstop.
  *
- * The `allow` list is the notepad and the guide file (so the finished review and
- * its reading guide both save without a
- * prompt) plus the commands a review runs constantly that are read-only toward
- * the repo and GitHub: `git log/show/diff/status/blame/grep/fetch`, `rg`/`grep`,
- * and the `gh pr view|diff|checks` reads. Without these, the code-review
- * skill's finding pass stalls on a prompt for every `git show` (seen live
- * 2026-08-22). `git fetch` is included: it only updates local refs, and a
- * review often needs it to compare a stale worktree against the PR head.
- * Deny beats allow in Claude's permission rules, so none of this loosens the
- * push/commit/gh-write backstop. Everything else follows den's normal
- * permission behaviour (`--permission-mode default`), i.e. Claude asks before
- * it acts, exactly like any other pane.
- *
- * Pure (no I/O) so it's unit-testable. `notepadAbs` and `guideAbs` must be
- * absolute; they're emitted as Claude's "//<path>" root-anchored specifier. */
+ * `notepadAbs` and `guideAbs` must be absolute; they're emitted as Claude's
+ * "//<path>" root-anchored specifier. */
 export function buildReviewPermissions(notepadAbs: string, guideAbs: string) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
@@ -147,21 +123,10 @@ export function scratchBranch(branch: string | null | undefined): string {
   return `andria/changes-to-${branch || "this-pr"}`;
 }
 
-/** The system-prompt instruction for a workspace main pane's notepad (#27).
- * One file with two readers (shared/handover.ts):
- * - four sections at the top for the developer (HANDOVER_HEADINGS), in plain
- *   language with no technical detail, so they see where things stand in one
- *   glance;
- * - "Session notes" below, the handover for the next session, written by the
- *   session for itself with the full technical context.
- * Both are rewritten in place. The notepad used to be an append-only log of
- * timestamped bullets, which mixed the two readers and had to be read bottom-up.
- *
- * It tells the session to read the notepad first: a restart does not re-inject
- * the initial prompt, so the session notes are how a restarted pane picks up
- * the thread, and for a ticket workspace the notepad (seeded by
- * `ticketNotesSeed`) is the only copy of the ticket it sees. Shared by create()
- * and restart(); ASCII-only, like reviewInstruction, and tested the same way. */
+/** The system prompt for a workspace main pane's handover notepad (#27). It
+ * says to read the notepad first because a restart doesn't re-inject the
+ * initial prompt: the session notes are how a restarted pane picks up the
+ * thread, and for a ticket the notepad is its only copy of the ticket. */
 export function progressInstruction(file: string): string {
   const [stands, done, next, waiting] = HANDOVER_HEADINGS;
   return (
@@ -198,18 +163,10 @@ export function progressInstruction(file: string): string {
   );
 }
 
-/** The rules for anything a session writes that leaves this machine: commit
- * messages, PR titles and descriptions, and GitHub replies. Appended to every
- * pane that can commit or open a PR (workspace mains, my-PR panes, look panes),
- * so one string carries them and they cannot drift between pane kinds.
- *
- * - **Plain ASCII**, for the reason reviewInstruction gives: andria pastes and
- *   posts this text, and a curly quote or an em dash survives as mojibake.
- * - **Every PR opens as a draft** (#24). A PR that opens ready for review
- *   notifies reviewers before anyone has looked at it, and that call belongs to
- *   the developer. There is no deny backstop for this: permission patterns are
- *   prefix matches, so `Bash(gh pr create:*)` cannot express "only with
- *   --draft", and deny beats allow. The instruction carries it alone. */
+/** Rules for anything a session writes that leaves this machine, for every
+ * pane that can commit or open a PR. The draft rule (#24) has no deny
+ * backstop: permission patterns are prefix matches, so `Bash(gh pr create:*)`
+ * can't say "only with --draft". */
 export function houseRules(): string {
   return (
     `House rules for anything you write that leaves this machine (commit ` +
@@ -224,9 +181,8 @@ export function houseRules(): string {
   );
 }
 
-/** den's own GitHub repo ("owner/name"), from its checkout's origin remote,
- * for the file-a-den-issue rule. Falls back to the maintainer's repo. */
 let denSlugCache: string | null = null;
+/** den's GitHub repo ("owner/name"), from its checkout's origin remote. */
 export function denIssueRepo(): string {
   if (denSlugCache) return denSlugCache;
   let slug = "andria-hibe/den";
@@ -244,11 +200,9 @@ export function denIssueRepo(): string {
   return slug;
 }
 
-/** Every den-spawned session files den's own bugs and ideas where they'll be
- * seen: as issues in den's repo, the backlog (andria, 2026-09-29). Den's repo
- * is public and the work repo usually isn't, so the rule keeps the work out of
- * the issue. Appended to every pane kind, including review panes, whose
- * never-post rule makes this the one named exception. ASCII like every prompt. */
+/** Tells a session to file den's bugs and ideas as issues in den's repo.
+ * That repo is public, so the rule keeps the work out of the issue. Every pane
+ * kind gets it; for a review pane it's the one exception to never posting. */
 export function denIssueRule(): string {
   const repo = denIssueRepo();
   return (
@@ -264,14 +218,7 @@ export function denIssueRule(): string {
   );
 }
 
-/** How a pane that writes code should treat tests: only the ones that earn
- * their keep. Every test is time on every run and something to maintain, so a
- * session adds tests for important, core behaviour and nothing else: not
- * low-value checks, not duplicates of coverage the suite already has, and not
- * tests pinning its own fixes or its review follow-ups (unless that change has
- * become core to how the feature works, judged conservatively). KISS. Appended to
- * workspace and my-PR panes (the ones that change code); a review pane
- * reviews, and a look pane only reads. */
+/** How a pane that changes code (workspace, my-PR) should treat tests. */
 export function testingRules(): string {
   return (
     `Tests: add them only for important, core behaviour, the logic a ` +
@@ -286,11 +233,9 @@ export function testingRules(): string {
   );
 }
 
-/** How a pane that writes code should comment it: why, not what, and only
- * what it verified. It says it overrides matching the surrounding comment
- * density because Claude Code's own system prompt asks for that, which in a
- * heavily commented repo means more comments. Appended wherever testingRules
- * is. */
+/** How a pane that changes code should comment it. The last rule overrides
+ * Claude Code's own "match the surrounding comment density", which in a
+ * heavily commented repo asks for more comments. */
 export function commentRules(): string {
   return (
     `Comments: say why, and only what you know.\n` +
@@ -319,18 +264,14 @@ export function commentRules(): string {
   );
 }
 
-/** The system prompt for a Claude workspace's main pane: the progress notepad
- * plus the house rules. Shared by create() and restartArgs() via
- * workspaceArgs(). */
+/** The system prompt for a Claude workspace's main pane. */
 export function workspaceInstruction(notepad: string): string {
   return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
 }
 
-/** The system prompt for a my-PR pane (#5): which PR is on screen, how den
- * feeds it comments, and the house rules, since its replies reach reviewers on
- * GitHub. It gets no notepad: the my-PR layout has nowhere to render one, and
- * the PR's own commits are the record of what changed. Unlike a review pane it
- * is meant to commit and push, so it gets no deny backstop. */
+/** The system prompt for a my-PR pane (#5). No notepad: the layout has
+ * nowhere to show one, and the PR's commits are the record. No deny backstop
+ * either, since this pane is meant to commit and push. */
 export function myPrInstruction(
   pr: number | null,
   repo: string | null,
@@ -350,11 +291,9 @@ export function myPrInstruction(
   );
 }
 
-/** The system prompt for a look pane (#7): the developer is reading a Linear
- * ticket beside this session, so it should know which one. The ticket's text
- * is saved to a file (the group's notepad path, seeded by the client with
- * `ticketBrief`) rather than inlined, so a restart rebuilds the same prompt
- * without den needing the description again, and remove() cleans it up. */
+/** The system prompt for a look pane (#7). The ticket is saved to a file
+ * rather than inlined, so a restart rebuilds the same prompt without den
+ * needing the description again. */
 export function lookInstruction(
   ticket: string | null,
   title: string,
@@ -370,43 +309,14 @@ export function lookInstruction(
   );
 }
 
-/** System-prompt instruction for a PR-review pane. The session has a full shell
- * (see buildReviewPermissions), so the rules that keep it from touching the PR
- * live here: never commit, never push, and any change it needs to make goes on a
- * local scratch branch. It reads the diff from a file den provides and saves its
- * review to the notepad, which den renders beside the diff. Shared by create()
- * and restart() so the wiring survives a restart.
+/** The system prompt for a PR-review pane, and the primary guard against a
+ * review changing the PR: the pane has a full shell, and
+ * buildReviewPermissions is only the backstop.
  *
- * It also fixes the *shape* of the review, because the developer copies these
- * comments straight into GitHub:
- * - **Plain ASCII only.** An em dash or a curly quote survives a copy-paste as a
- *   character that reads as mojibake in some boxes and breaks a code snippet in
- *   others. The instruction below is itself ASCII-only for the same reason -- an
- *   instruction full of em dashes teaches the model to write them back.
- *   The `isAscii` test guards that.
- * - **Short, ranked, actionable bullets.** One issue per bullet, "path:line"
- *   first, five bullets per file, worst first, no praise or recap. Shaped for a
- *   reader who acts off the first line of each bullet -- Claude Code's built-in
- *   "Concise" style plus the `i-have-adhd` skill, both of which andria runs.
- *   Note the "just as thoroughly" clause: Concise makes the *writing* terse, not
- *   the review. Do not let a later edit turn the bullet cap into a reading cap.
- *
- * It asks for two deliverables, both files den renders:
- * - the **reading guide** (guideFile): the change grouped into sections by what
- *   they do, most important first, each explained. This is den's answer to
- *   reading a PR in file-alphabetical order -- the Guide tab renders each
- *   section's prose above that section's own diffs (`parseGuide` +
- *   `PrGuide.tsx`). It orients, it does not review.
- * - the **review** (notepad): the findings, filed per file.
- *
- * The finding pass runs through Claude Code's built-in code-review skill
- * (adversarially verified findings, ranked worst-first) targeted at the PR's
- * branch, with --comment and --fix explicitly forbidden (--comment posts to
- * GitHub; --fix edits the working tree). The skill is a first pass, not the
- * review: its report renders only in the terminal, so the instruction tells the
- * session to fold the findings into the notepad and cover what the skill's
- * correctness/simplification scope misses.
- */
+ * Keep it ASCII: the developer pastes the review into GitHub, and an
+ * instruction full of em dashes teaches the model to write them back. Keep the
+ * "just as thoroughly" clause: the bullet cap limits the writing, never the
+ * reading. */
 export function reviewInstruction(
   notepad: string,
   diffFile: string,
@@ -497,24 +407,19 @@ export function reviewInstruction(
   );
 }
 
-/** The review instruction and the review it asks for must both pass this: see
- * reviewInstruction. Re-exported for the test. */
+/** Re-exported for the tests. */
 export { isAscii } from "../shared/ascii.ts";
 
 /**
  * Which conversation a restarting Claude pane reopens:
- * 1. its own pinned session, if that transcript exists -> resume it;
+ * 1. its pinned session, if that transcript exists -> resume it;
  * 2. a pinned id with no transcript -> start fresh under the same id. Claude
- *    Code writes no transcript until the first message (verified 2026-09-28),
- *    so this is every pane restarted before anyone typed in it, plus any
- *    transcript Claude Code's cleanup deleted. It must NOT borrow another
- *    conversation: several panes share a folder (look panes and the work
- *    repo's main checkout), so "newest in this cwd" is often another ticket's
- *    session (#25);
- * 3. no pinned id at all (a row from before den pinned ids) -> the newest
- *    conversation recorded in this cwd, the best guess for which was its own;
+ *    Code writes no transcript until the first message, so this is any pane
+ *    restarted before anyone typed in it. Never borrow another conversation:
+ *    look panes share the work repo's main checkout, so "newest in this cwd"
+ *    is often another ticket's session (#25);
+ * 3. no pinned id (an old row) -> the newest conversation in this cwd;
  * 4. else a fresh session under a new id.
- * Pure (the lookups are passed in), for the test.
  */
 export function chooseResume(
   pinnedId: string | null,
@@ -528,12 +433,10 @@ export function chooseResume(
 }
 
 /** How long a workspace pane sits with no output before den refreshes its
- * handover (#23). `$DEN_IDLE_HANDOVER_MIN` or the `idle_handover_min` setting
- * override it; "0" or "off" turns the feature off. */
+ * handover (#23), unless overridden (see idleHandoverMs). */
 export const IDLE_HANDOVER_MS = 30 * 60_000;
 
-/** The idle window in ms, from $DEN_IDLE_HANDOVER_MIN, then the
- * `idle_handover_min` setting, then IDLE_HANDOVER_MS. 0 means off. */
+/** The idle window in ms; 0 means off. */
 function idleHandoverMs(): number {
   for (const raw of [process.env.DEN_IDLE_HANDOVER_MIN, store.getSetting("idle_handover_min")]) {
     if (raw == null || raw === "") continue;
@@ -548,14 +451,9 @@ function idleHandoverMs(): number {
  * current: sessions update it at the end of a step, then print their reply. */
 export const NOTEPAD_FRESH_MS = 2 * 60_000;
 
-/**
- * Is an idle handover due for this pane? All of:
- * - someone typed or pasted since the last handover (else a pane left alone
- *   would get one every idle period);
- * - it has produced output, and none for `idleMs`;
- * - its notepad was not already written near the end of that output.
- * Pure, for the test.
- */
+/** Is an idle handover due? Only after input since the last one (else an
+ * untouched pane gets one every idle period), `idleMs` without output, and no
+ * notepad write near the end of that output. */
 export function idleHandoverDue(p: {
   now: number;
   idleMs: number;
@@ -570,9 +468,8 @@ export function idleHandoverDue(p: {
   return p.notepadMtime < p.lastOutputAt - NOTEPAD_FRESH_MS;
 }
 
-/** The usage in `claude -p --output-format json` output, as a Usage. Null
- * when it can't be read. Prefers Claude Code's own `total_cost_usd`. Pure,
- * for the test. */
+/** The spend in `claude -p --output-format json` output, or null without a
+ * `total_cost_usd`. */
 export function forkUsage(stdout: string): Usage | null {
   try {
     const o = JSON.parse(stdout) as {
@@ -600,7 +497,7 @@ export function forkUsage(stdout: string): Usage | null {
  * conversation (see SessionManager.runIdleHandover), never in the live pane:
  * a pane waiting at a permission prompt looks exactly as idle as a finished
  * one, and typing into it would answer the prompt, or send a draft the
- * developer left in the input box. ASCII, like every den prompt. */
+ * developer left in the input box. */
 export function idleHandoverPrompt(notepad: string): string {
   return (
     `den: this session has gone quiet. Bring your handover at ${notepad} up to ` +
@@ -614,18 +511,11 @@ export function idleHandoverPrompt(notepad: string): string {
 }
 
 /**
- * Does a PTY look ready to receive scripted input? True once it has produced
- * some output and then gone quiet — i.e. the TUI has finished drawing and isn't
- * mid-response.
- *
- * This matters because Claude's TUI **drops input that arrives while it's still
- * starting up**: measured against a real session, a paste 6s after spawn vanished
- * without trace while the same paste at 12s landed. A fixed delay is therefore a
- * guess that silently loses the prompt on a slow start, which is why anything den
- * sends on its own (the pre-review) waits for this instead.
- *
- * `lastOutputAt` of 0 means nothing has been emitted yet — still booting, so not
- * ready (never "idle since forever").
+ * Does a PTY look ready for scripted input: some output, then `idleMs` of
+ * quiet? Claude's TUI drops input that arrives while it's starting up
+ * (measured: a paste 6s after spawn vanished, the same paste at 12s landed),
+ * so anything den sends on its own waits for this rather than a fixed delay.
+ * No output yet means still booting, not idle.
  */
 export function ptyLooksIdle(
   lastOutputAt: number,
@@ -672,7 +562,7 @@ export interface SessionMeta {
   pid: number | null;
   createdAt: number;
   lastActive: number;
-  /** Workspace grouping. A Claude workspace = a "main" pane + a "shell" pane. */
+  /** A Claude workspace is one "main" pane plus its "shell" tabs. */
   groupId: string;
   role: "main" | "shell";
   /** Git branch of the working dir (captured at start), and its ticket hint. */
@@ -691,14 +581,13 @@ export interface SessionMeta {
   prRepo: string | null;
   /** Rail sort key (see `reorder`). The list arrives already sorted by it. */
   pos: number;
-  /** A workspace keeps a handover notepad, refreshed when idle (#11 toggle). */
+  /** Keeps a handover: the notepad instruction and the idle refresh (#11). */
   handover: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
 
-/** Everything a DenSession is born with — named, because nine positional
- * strings/numbers in a row invite silently transposed arguments. */
+/** Named, because nine positional arguments invite silent transpositions. */
 interface SessionInit {
   id: string;
   name: string;
@@ -749,7 +638,7 @@ class DenSession {
   /** Set when the terminal rings the bell while unwatched (Claude wants input). */
   attention = false;
 
-  /** Overrides the default spawn args (used for the main Claude of a workspace). */
+  /** Claude's args; null means the default (a login shell, or `claude -n <name>`). */
   spawnArgs: string[] | null = null;
   /** The Claude conversation id this pane owns (pinned via `--session-id` at
    * spawn), so a restart can `--resume` the *same* conversation rather than
@@ -805,9 +694,8 @@ class DenSession {
         env: { ...process.env, TERM: "xterm-256color" },
       });
     } catch (err) {
-      // Missing binary (e.g. `claude`/shell not on PATH) or a bad cwd: don't let
-      // it crash the create-session request — surface the pane as exited so the
-      // UI can show it failed instead of the whole server falling over.
+      // A missing binary or a bad cwd: show the pane as exited rather than
+      // failing the create request.
       logWarn(`pty.spawn ${file}`, err);
       this.status = "exited";
       this.term = null;
@@ -833,7 +721,6 @@ class DenSession {
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
     }
-    // A bell while nobody's watching = this session wants your attention.
     if (this.listeners.size === 0 && data.includes("\u0007")) {
       this.attention = true;
     }
@@ -841,16 +728,10 @@ class DenSession {
     this.emit({ type: "output", data });
   }
 
-  /**
-   * Terminals (incl. Claude Code) announce their title with an OSC escape:
-   * ESC ] 0|1|2 ; <title> BEL (or ST). Pick up the latest one and use it as the
-   * session name — Claude sets this once it has a sense of the topic. Skipped
-   * once the user has renamed manually (titleLocked).
-   */
+  /** Use the latest OSC title (ESC ] 0|1|2 ; <title> BEL or ST) as the session
+   * name. Claude panes only: shells retitle to the cwd/command on every
+   * prompt, which flaps. */
   private maybeTitle(chunk: string) {
-    // Only Claude sessions auto-title (it sets a topic-based title). Shells set
-    // the title to the cwd/command on every prompt, which just flaps — those
-    // keep their given name and can still be renamed by hand.
     if (this.shell || this.titleLocked) return;
     const data = this.oscCarry + chunk;
     const re = /\x1b\][012];([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
@@ -875,7 +756,6 @@ class DenSession {
     }
   }
 
-  /** Lock the title (user renamed) so the terminal can't override it. */
   lockTitle() {
     this.titleLocked = true;
   }
@@ -905,7 +785,7 @@ class DenSession {
    * Wait until the PTY looks ready for scripted input (see `ptyLooksIdle`), so a
    * paste den sends itself isn't swallowed by a TUI that's still drawing. Returns
    * whether it settled; on timeout the caller can still go ahead (a lost paste is
-   * no worse than not trying). Already-idle sessions return immediately.
+   * no worse than not trying).
    */
   async waitUntilIdle(idleMs = 800, timeoutMs = 30_000): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
@@ -994,7 +874,7 @@ class DenSession {
     this.bufferBytes = text.length;
   }
 
-  /** Drop the scrollback (used on restart — the re-spawned process starts fresh). */
+  /** Drop the scrollback; a restarted process starts fresh. */
   clearBuffer() {
     this.buffer = [];
     this.bufferBytes = 0;
@@ -1018,15 +898,12 @@ class SessionManager {
   private colorIdx = 0;
 
   constructor() {
-    // Periodically persist any session whose scrollback changed, so a restart
-    // can replay recent output instead of showing an empty pane.
     const timer = setInterval(() => {
       for (const s of this.sessions.values()) s.persistScrollback();
     }, SCROLLBACK_FLUSH_MS);
     // Don't keep the process alive just for this (CLI/tests exit cleanly).
     timer.unref?.();
-    // Idle handovers (#23): checked every minute, or faster when the idle
-    // window is set very short (for testing).
+    // Faster than once a minute only when the window is set very short.
     const idleMs = idleHandoverMs();
     if (idleMs > 0) {
       const idleTimer = setInterval(() => this.checkIdleHandovers(), Math.min(60_000, idleMs / 2));
@@ -1175,8 +1052,7 @@ class SessionManager {
       return s.meta();
     }
 
-    // Single-pane Claude sessions: "just looking" at a ticket, or a GitHub PR
-    // review / your-own-PR view. (No shell/notepad — the layout is specialised.)
+    // Single-pane Claude sessions: a ticket look, a PR review, or a my-PR view.
     if (opts.look || opts.view) {
       const name =
         opts.name ?? opts.ticket ?? (opts.pr ? `PR #${opts.pr}` : "look");
@@ -1185,8 +1061,6 @@ class SessionManager {
         createdAt: now, lastActive: now, groupId, role: "main",
       });
       s.claudeSessionId = randomUUID();
-      // Each kind gets its own system prompt from one builder, shared with
-      // restartArgs (see singlePaneArgs).
       s.branch = branch;
       s.ticket = opts.ticket ?? null;
       s.look = !!opts.look;
@@ -1197,13 +1071,12 @@ class SessionManager {
         "--session-id", s.claudeSessionId, "-n", name,
         ...this.singlePaneArgs(s, { diff: opts.reviewDiff, seed: opts.notepadSeed }),
       ];
-      // Keep the descriptive ticket/PR title — don't let the terminal retitle it.
+      // Keep the ticket/PR title rather than Claude's.
       if (opts.ticket || opts.pr) s.titleLocked = true;
       this.spawnSession(s);
       return s.meta();
     }
 
-    // Claude workspace: main pane + shell pane + notepad.
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
     this.ensureNotepad(groupId, opts.notepadSeed);
 
@@ -1219,14 +1092,12 @@ class SessionManager {
         ? ["--resume", opts.resumeId]
         : ["--session-id", main.claudeSessionId, "-n", name]),
       ...this.workspaceArgs(groupId, cwd),
-      // An initial prompt (e.g. the ticket) becomes Claude's first message. The
-      // `--` end-of-options separator means a prompt starting with "-" is read as
-      // the positional prompt, never as a flag (arg-injection guard).
+      // `--` so a prompt starting with "-" is read as the prompt, never a flag.
       ...(opts.initialPrompt && !opts.resumeId ? ["--", opts.initialPrompt] : []),
     ];
     main.branch = branch;
     main.ticket = opts.ticket ?? null;
-    // Keep the ticket title as the session name (don't let Claude retitle it).
+    // Keep the ticket title rather than Claude's.
     if (opts.ticket) main.titleLocked = true;
     this.spawnSession(main);
 
@@ -1261,20 +1132,14 @@ class SessionManager {
     return term.meta();
   }
 
-  /**
-   * Re-spawn an exited session's PTY in place, keeping its cwd/name/colour/
-   * branch/ticket/PR context — so an exited pane (e.g. after den was closed and
-   * reopened, when live PTYs don't survive) can be brought back to life without
-   * losing its identity. Args are rebuilt from the persisted context rather than
-   * reused, so restart never re-injects a one-time initial prompt. Returns the
-   * refreshed meta, or null if the session is unknown or already running.
-   */
+  /** Re-spawn an exited session's PTY in place, keeping its identity and
+   * context. Args are rebuilt rather than reused, so a restart never re-sends
+   * a one-time initial prompt. Null if unknown or already running. */
   restart(id: string): SessionMeta | null {
     const s = this.sessions.get(id);
     if (!s || s.status === "running") return null;
-    // Rebuild claude args from context (shells fall back to the login shell).
     s.spawnArgs = s.shell ? null : this.restartArgs(s);
-    s.clearBuffer(); // fresh terminal — the exited scrollback was just history
+    s.clearBuffer();
     s.spawn();
     store.update(s.toRow());
     return s.meta();
@@ -1282,8 +1147,7 @@ class SessionManager {
 
   /** Claude spawn args for a restart, rebuilt from the session's context by
    * the same builders create() uses, so a revived pane gets exactly the system
-   * prompt a fresh one would. (No initial prompt: that's a one-time create-only
-   * thing.) */
+   * prompt a fresh one would. */
   private restartArgs(s: DenSession): string[] {
     const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
@@ -1302,19 +1166,14 @@ class SessionManager {
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
       : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
-    // In a worktree with a setup command, say what it is (#10).
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return ["--add-dir", PROGRESS_DIR, "--append-system-prompt", prompt];
   }
 
   /** The system prompt (and any files it names) for a single-pane Claude
-   * session, by kind, shared by create() and restartArgs(). `diff` and `seed`
-   * come only from create; a restart keeps what was saved before.
-   * - review: reviewArgs (guardrails, notepad, diff, guide).
-   * - mypr: the PR it is on and the house rules; no files.
-   * - look: the ticket, saved to the group's notepad path so a restart can
-   *   point at it again. */
+   * session, shared by create() and restartArgs(). `diff` and `seed` come only
+   * from create; a restart keeps what was saved before. */
   private singlePaneArgs(
     s: DenSession,
     from: { diff?: string; seed?: string } = {},
@@ -1338,14 +1197,9 @@ class SessionManager {
     return [];
   }
 
-  /** The guardrail + notepad wiring for a PR-review pane's Claude args, shared
-   * by create() and restartArgs() — ONE builder, so the deny backstop and the
-   * review instruction can never drift between a fresh review and a revived
-   * one. The pane has a normal shell; the settings file carries the deny
-   * backstop (no push/commit/gh writes) and the notepad allow, and
-   * `--permission-mode default` keeps those deny rules in force. Pass `diff`
-   * on create to capture the PR's diff; omit on restart to keep what was
-   * captured before (and the notepad, seeded empty, keeps its content too). */
+  /** A review pane's settings file, files, and system prompt. Pass `diff` on
+   * create; a restart omits it and keeps the captured diff. `--permission-mode
+   * default` keeps the settings file's deny rules in force. */
   private reviewArgs(groupId: string, branch: string | null, diff?: string): string[] {
     const file = this.ensureNotepad(groupId, "");
     const diffFile = this.ensureReviewDiff(groupId, diff);
@@ -1466,12 +1320,9 @@ class SessionManager {
         store.delete(other.id);
       }
     }
-    // The progress notepad is scoped to this workspace — closing the workspace
-    // deletes it too, so ~/.den/progress doesn't fill with orphaned notes. (Mere
-    // exit/restart keeps it, since the session lives on and can be revived.)
+    // Closing the workspace deletes its files; exit and restart keep them.
     try {
       rmSync(notepadPath(groupId), { force: true });
-      // Review panes also leave a diff + settings file behind — clear those too.
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
