@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { usePersistentString } from "./usePersistent.ts";
 import type { PullRequest } from "../../server/github.ts";
 
@@ -13,7 +14,7 @@ export function PrDialog({
   onClose,
 }: {
   pr: PullRequest;
-  onReview: (pr: PullRequest, opts: { preReview: PreReview }) => void;
+  onReview: (pr: PullRequest, opts: { preReview: PreReview; owned: boolean }) => void;
   onEditMine: (pr: PullRequest, env: "local" | "worktree") => void;
   onClose: () => void;
 }) {
@@ -23,6 +24,8 @@ export function PrDialog({
     "guide",
     "none",
   ] as const);
+  // Not remembered: taking over someone else's PR is a per-PR call.
+  const [owned, setOwned] = useState(false);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -96,10 +99,17 @@ export function PrDialog({
                 </label>
               ))}
             </div>
+            <label className="pr-prereview pr-own">
+              <input type="checkbox" checked={owned} onChange={(e) => setOwned(e.target.checked)} />
+              <span>
+                Work on it yourself
+                <span className="pr-prereview-sub"> · Claude can edit, commit, push, and post on this PR as if it were yours</span>
+              </span>
+            </label>
             <button
               className="btn btn-primary"
               style={{ width: "100%" }}
-              onClick={() => onReview(pr, { preReview })}
+              onClick={() => onReview(pr, { preReview, owned })}
             >
               start review →
             </button>

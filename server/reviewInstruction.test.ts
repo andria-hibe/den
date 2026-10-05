@@ -76,6 +76,16 @@ describe("reviewInstruction", () => {
     expect(INSTRUCTION).toContain("leave both files as they are");
   });
 
+  it("lets a PR the developer has taken on commit and push, under the house rules", () => {
+    const owned = reviewInstruction(NOTEPAD, DIFF, "feature/thing", GUIDE, true);
+    expect(isAscii(owned)).toBe(true);
+    expect(owned).not.toContain("NEVER commit");
+    expect(owned).not.toContain("andria/changes-to-");
+    expect(owned).toContain("--draft");
+    expect(owned).toContain("THE READING GUIDE");
+    expect(owned).toContain("WRITE THE WHOLE REVIEW IN PLAIN ASCII");
+  });
+
   it("still targets the checkout when the branch is unknown", () => {
     const noBranch = reviewInstruction(NOTEPAD, DIFF, null, GUIDE);
     expect(noBranch).toContain("checked-out branch");

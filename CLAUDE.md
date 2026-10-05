@@ -736,6 +736,15 @@ local control plane, not a public API:
      `gh pr view|diff|checks` stay open for reading. It is a backstop, **not** a
      sandbox: a shell can still reach those places another way (`git -C`, a
      wrapper script, an alias), which is why the instruction carries the weight.
+  **"Work on it yourself"** (`owned`, a sessions column) lifts both layers
+  for one review pane, when the developer takes someone else's PR on: the
+  PR dialog's checkbox, or the header's `OwnPrToggle`
+  (`POST /api/sessions/:id/owned` -> `setOwned`, which kills a running pane
+  and restarts it into the same conversation, since the rules live in its
+  system prompt and settings file). `reviewInstruction(..., owned)` swaps
+  the never-commit rules for "commit, push, and post when asked" plus
+  `houseRules`/`testingRules`/`commentRules`; the guide and review
+  deliverables stay. `buildReviewPermissions(..., owned)` empties `deny`.
   The `allow` list is the notepad and the guide file (`Edit(//<notepad>)`,
   `Edit(//<guide>)`, so the finished review and its reading guide save without a
   prompt) plus the reads a review runs constantly — `git

@@ -1954,6 +1954,30 @@ body {
   color: var(--ink-soft);
   font-size: 12px;
 }
+.pr-own {
+  margin: 0 4px 12px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--border);
+}
+
+/* A review pane's "work on it yourself" switch: pink while Claude may push. */
+.own-pr-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.own-pr-btn.on {
+  border-color: var(--pink-deep);
+  color: var(--pink-deep);
+  background: color-mix(in srgb, var(--pink) 22%, transparent);
+}
+.own-pr-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
 
 /* Error toast */
 .toast {

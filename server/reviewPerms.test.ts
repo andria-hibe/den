@@ -59,6 +59,14 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
   });
 });
 
+describe("buildReviewPermissions for a PR the developer has taken on", () => {
+  it("drops the deny backstop but keeps the allow list", () => {
+    const { permissions } = buildReviewPermissions(NOTEPAD, GUIDE, true);
+    expect(permissions.deny).toEqual([]);
+    expect(permissions.allow).toEqual(buildReviewPermissions(NOTEPAD, GUIDE).permissions.allow);
+  });
+});
+
 describe("scratchBranch", () => {
   it("prefixes the PR's branch, so the PR's own branch never carries edits", () => {
     expect(scratchBranch("fast-1234-add-thing")).toBe(

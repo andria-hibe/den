@@ -145,6 +145,7 @@ export function PrReviewView({
   number,
   sessionId,
   groupId,
+  owned,
   autoReview,
   onAutoReviewStarted,
   header,
@@ -155,6 +156,8 @@ export function PrReviewView({
   sessionId: string;
   /** Keys the notepad the review lands in. Don't assume it equals sessionId. */
   groupId: string;
+  /** The developer has taken the PR on (see OwnPrToggle). */
+  owned: boolean;
   /** Start on its own when the view opens: the full pre-review, or the
    * reading guide only. Null: wait to be asked. */
   autoReview: "full" | "guide" | null;
@@ -218,11 +221,11 @@ export function PrReviewView({
   }, [groupId]);
 
   const guideAsk = guidePrompt(number, repo);
-  const reviewAsk = reviewPrompt(number, repo);
+  const reviewAsk = reviewPrompt(number, repo, owned);
 
   // Submitted, not just pasted: choosing a pre-review means "start now". No
   // client-side delay, since the server holds the paste until the pane is ready.
-  const autoAsk = autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo);
+  const autoAsk = autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo, owned);
 
   useEffect(() => {
     if (!autoReview || started.current) return;

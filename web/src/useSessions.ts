@@ -19,6 +19,8 @@ export interface AddSessionOpts {
   pr?: number;
   prRepo?: string;
   initialPrompt?: string;
+  /** A review pane that works on the PR as your own. */
+  owned?: boolean;
 }
 
 /**
@@ -131,6 +133,19 @@ export function useSessions({
         body: JSON.stringify({ on }),
       });
       setSessions((prev) => prev.map((s) => (s.id === meta.id ? { ...s, handover: meta.handover } : s)));
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
+  // Resolves once the server has restarted the pane in its new mode.
+  const setOwned = async (id: string, on: boolean) => {
+    try {
+      const meta = await api<SessionMeta>(`/api/sessions/${id}/owned`, {
+        method: "POST",
+        body: JSON.stringify({ on }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
     } catch (e) {
       onError((e as Error).message);
     }
@@ -262,6 +277,7 @@ export function useSessions({
     restartSession,
     closeSession,
     setHandover,
+    setOwned,
     addShellTab,
     launchApp,
     stopApp,

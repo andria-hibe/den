@@ -6,6 +6,7 @@ import { SpendChip } from "./SpendChip.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
+import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
@@ -54,6 +55,7 @@ export function App() {
     restartSession,
     closeSession,
     setHandover,
+    setOwned,
     addShellTab,
     launchApp,
     stopApp,
@@ -366,6 +368,13 @@ export function App() {
         }}
       >
         {!s.shell && <SpendChip sessionId={s.id} />}
+        {s.view === "review" && (
+          <OwnPrToggle
+            owned={s.owned}
+            running={s.status === "running"}
+            onSwitch={(on) => setOwned(s.id, on)}
+          />
+        )}
         {opts?.workspace && (
           <SetupButton
             sessionId={s.id}
@@ -423,7 +432,7 @@ export function App() {
     setPrModal(pr);
   };
 
-  const reviewPr = (pr: PullRequest, opts: { preReview: PreReview }) => {
+  const reviewPr = (pr: PullRequest, opts: { preReview: PreReview; owned: boolean }) => {
     setPrModal(null);
     const existing = sessionForPr(pr);
     if (existing) {
@@ -433,6 +442,7 @@ export function App() {
     if (opts.preReview !== "none") setAutoReviewPr({ pr: pr.number, mode: opts.preReview });
     addSession({
       view: "review",
+      owned: opts.owned,
       pr: pr.number,
       prRepo: pr.repo,
       env: "worktree",
@@ -626,6 +636,7 @@ export function App() {
             number={active.pr}
             sessionId={active.id}
             groupId={active.groupId}
+            owned={active.owned}
             autoReview={autoReviewPr?.pr === active.pr ? autoReviewPr.mode : null}
             onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}

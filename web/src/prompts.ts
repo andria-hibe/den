@@ -26,12 +26,15 @@ export function guidePrompt(number: number, repo: string): string {
 
 /** Ask a review pane for the review, in the structure parseReview files per
  * file. */
-export function reviewPrompt(number: number, repo: string): string {
+export function reviewPrompt(number: number, repo: string, owned = false): string {
   return (
     `Please review pull request #${number} (${repo}). The PR's full diff has been ` +
     `saved to a file for you (see your instructions) and the PR is checked out in ` +
-    `your working directory. Run whatever you need, but don't commit or push, and ` +
-    `keep any experiment on the scratch branch named in your instructions. ` +
+    `your working directory. ` +
+    (owned
+      ? `Report first: don't change, commit, or post anything as part of this review. `
+      : `Run whatever you need, but don't commit or push, and keep any experiment ` +
+        `on the scratch branch named in your instructions. `) +
     `Read the diff, then read the changed files for context. Do the finding pass ` +
     `with the code-review skill as your instructions describe, then write your review ` +
     `to the notepad as markdown in this shape: first the general review (a short ` +
@@ -44,10 +47,10 @@ export function reviewPrompt(number: number, repo: string): string {
 
 /** The auto pre-review asks for both, guide first: it is the reading order for
  * the review that follows, and it lands while the finding pass is still running. */
-export function autoReviewPrompt(number: number, repo: string): string {
+export function autoReviewPrompt(number: number, repo: string, owned = false): string {
   return (
     `${guidePrompt(number, repo)}\n\nThen, once the guide file is saved, review ` +
-    `the PR too. ${reviewPrompt(number, repo)}`
+    `the PR too. ${reviewPrompt(number, repo, owned)}`
   );
 }
 

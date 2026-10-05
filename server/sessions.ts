@@ -78,13 +78,16 @@ export const reviewGuidePath = (groupId: string) => {
  * skill stalls on a prompt for every `git show`. `git fetch` only moves local
  * refs. Deny beats allow, so none of this loosens the backstop.
  *
+ * `owned` (the developer has taken the PR on) drops the deny list, since
+ * that pane is meant to commit, push, and post.
+ *
  * `notepadAbs` and `guideAbs` must be absolute; they're emitted as Claude's
  * "//<path>" root-anchored specifier. */
-export function buildReviewPermissions(notepadAbs: string, guideAbs: string) {
+export function buildReviewPermissions(notepadAbs: string, guideAbs: string, owned = false) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
     permissions: {
-      deny: [
+      deny: owned ? ([] as string[]) : [
         "Bash(git push:*)",
         "Bash(git commit:*)",
         "Bash(gh pr merge:*)",
@@ -312,7 +315,9 @@ export function lookInstruction(
 
 /** The system prompt for a PR-review pane, and the primary guard against a
  * review changing the PR: the pane has a full shell, and
- * buildReviewPermissions is only the backstop.
+ * buildReviewPermissions is only the backstop. With `owned` the developer has
+ * taken the PR on, so the guard gives way to the rules of a pane that commits
+ * and posts; the guide and review deliverables stay the same.
  *
  * Keep it ASCII: the developer pastes the review into GitHub, and an
  * instruction full of em dashes teaches the model to write them back. Keep the
@@ -323,28 +328,43 @@ export function reviewInstruction(
   diffFile: string,
   branch: string | null | undefined,
   guideFile: string,
+  owned = false,
 ): string {
   const scratch = scratchBranch(branch);
+  const rules = owned
+    ? `You're working on a GitHub pull request inside a tool called "den". ` +
+      `Someone else opened it, but the developer has taken it on: treat it as ` +
+      `the developer's own PR. You have a full shell, and you may edit the code ` +
+      `on the PR's branch` + (branch ? ` (${branch})` : "") + `, commit, push ` +
+      `to it, and post to GitHub (reviews, comments, replies to review threads). ` +
+      `Make the code changes the developer asks for and run the checks that ` +
+      `cover them. Commit, push, and post only when the developer asks, then say ` +
+      `briefly what you did. Anything you post goes out under the developer's ` +
+      `name.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n` +
+      `The PR's full unified diff, as it was when den opened this PR, is saved ` +
+      `at ${diffFile}; once you push, use git or \`gh pr diff\` for the current ` +
+      `change. Read the changed files in your working directory for context. `
+    : `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
+      `someone else's work and your job is to review it, not to change it. You have ` +
+      `a full shell and can run anything you need to understand the change: the ` +
+      `tests, a build, git history, gh reads. But these rules are absolute:\n` +
+      `1. NEVER commit. Not on the PR's branch, not anywhere.\n` +
+      `2. NEVER push, and never post anything to GitHub. No \`git push\`, no ` +
+      `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
+      `review goes in the notepad file named below and nowhere else; the developer ` +
+      `decides what, if anything, reaches GitHub. The one exception is an issue ` +
+      `about den itself, as described at the end.\n` +
+      `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
+      `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
+      `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +
+      `it with no base argument while the PR's branch is checked out, so the ` +
+      `scratch branch starts from the PR's code, not from master. Keep ` +
+      `it local and uncommitted, and say so in your review rather than leaving it ` +
+      `as a surprise. Never leave the PR's own branch modified.\n` +
+      `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +
+      `read the changed files in your working directory for surrounding context. `;
   return (
-    `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
-    `someone else's work and your job is to review it, not to change it. You have ` +
-    `a full shell and can run anything you need to understand the change: the ` +
-    `tests, a build, git history, gh reads. But these rules are absolute:\n` +
-    `1. NEVER commit. Not on the PR's branch, not anywhere.\n` +
-    `2. NEVER push, and never post anything to GitHub. No \`git push\`, no ` +
-    `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
-    `review goes in the notepad file named below and nowhere else; the developer ` +
-    `decides what, if anything, reaches GitHub. The one exception is an issue ` +
-    `about den itself, as described at the end.\n` +
-    `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
-    `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
-    `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +
-    `it with no base argument while the PR's branch is checked out, so the ` +
-    `scratch branch starts from the PR's code, not from master. Keep ` +
-    `it local and uncommitted, and say so in your review rather than leaving it ` +
-    `as a surprise. Never leave the PR's own branch modified.\n` +
-    `The PR's full unified diff is saved at ${diffFile}; read that first, then ` +
-    `read the changed files in your working directory for surrounding context. ` +
+    rules +
     `You have two deliverables: a reading guide and a review. Write the guide ` +
     `first when asked for both - it is quick and it orients the developer while ` +
     `the finding pass runs.\n` +
@@ -367,7 +387,10 @@ export function reviewInstruction(
     `at high effort against this PR's ` +
     (branch ? `branch (${branch})` : `checked-out branch`) +
     `; it hunts correctness bugs and verifies its findings before reporting. ` +
-    `Never pass --comment (posts to GitHub) or --fix (edits the working tree). ` +
+    (owned
+      ? `Don't pass --comment (posts to GitHub) or --fix (edits the working ` +
+        `tree) unless the developer asks for that. `
+      : `Never pass --comment (posts to GitHub) or --fix (edits the working tree). `) +
     `Its report renders in the terminal only and is not the deliverable: fold ` +
     `the verified findings into the notepad review described next, and cover ` +
     `yourself what its scope misses (design, tests, naming, missing cases). If ` +
@@ -584,6 +607,8 @@ export interface SessionMeta {
   pos: number;
   /** Keeps a handover: the notepad instruction and the idle refresh (#11). */
   handover: boolean;
+  /** A review pane the developer has taken on: it may commit, push, and post. */
+  owned: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -626,6 +651,8 @@ class DenSession {
   handoverRunning = false;
   /** Keep a handover (the notepad instruction and the idle refresh). */
   handover = true;
+  /** A review pane working on the PR as the developer's own. */
+  owned = false;
   /** What den's idle handovers for this pane have spent. They run as headless
    * forks that save no transcript, so their usage is tracked here instead
    * (in memory: it resets when den restarts). */
@@ -837,6 +864,7 @@ class DenSession {
       prRepo: this.prRepo,
       pos: this.pos,
       handover: this.handover,
+      owned: this.owned,
     };
   }
 
@@ -865,6 +893,7 @@ class DenSession {
       scrollback: null,
       pos: this.pos,
       handover: this.handover ? 1 : 0,
+      owned: this.owned ? 1 : 0,
     };
   }
 
@@ -997,6 +1026,7 @@ class SessionManager {
       s.prRepo = row.prRepo ?? null;
       s.titleLocked = row.titleLocked === 1;
       s.handover = row.handover !== 0;
+      s.owned = row.owned === 1;
       if (row.scrollback) s.restoreScrollback(row.scrollback);
       this.sessions.set(s.id, s);
     }
@@ -1034,6 +1064,8 @@ class SessionManager {
     initialPrompt?: string;
     /** The PR's unified diff, for a review pane's read-only diff file. */
     reviewDiff?: string;
+    /** A review pane that works on the PR as the developer's own. */
+    owned?: boolean;
   }) {
     const now = Date.now();
     const shell = opts.shell ?? false;
@@ -1068,6 +1100,7 @@ class SessionManager {
       s.view = opts.view ?? null;
       s.pr = opts.pr ?? null;
       s.prRepo = opts.prRepo ?? null;
+      s.owned = s.view === "review" && !!opts.owned;
       s.spawnArgs = [
         "--session-id", s.claudeSessionId, "-n", name,
         ...this.singlePaneArgs(s, { diff: opts.reviewDiff, seed: opts.notepadSeed }),
@@ -1184,7 +1217,7 @@ class SessionManager {
     from: { diff?: string; seed?: string } = {},
   ): string[] {
     // A review pane's settings file carries the status line too.
-    if (s.view === "review") return this.reviewArgs(s.groupId, s.branch, from.diff);
+    if (s.view === "review") return this.reviewArgs(s, from.diff);
     const settings = ["--settings", JSON.stringify(statusLineSettings(s.groupId))];
     if (s.view === "mypr") {
       return [...settings, "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch)];
@@ -1208,17 +1241,17 @@ class SessionManager {
   /** A review pane's settings file, files, and system prompt. Pass `diff` on
    * create; a restart omits it and keeps the captured diff. `--permission-mode
    * default` keeps the settings file's deny rules in force. */
-  private reviewArgs(groupId: string, branch: string | null, diff?: string): string[] {
-    const file = this.ensureNotepad(groupId, "");
-    const diffFile = this.ensureReviewDiff(groupId, diff);
-    const guideFile = this.ensureReviewGuide(groupId);
-    const settingsFile = this.ensureReviewPerms(groupId);
+  private reviewArgs(s: DenSession, diff?: string): string[] {
+    const file = this.ensureNotepad(s.groupId, "");
+    const diffFile = this.ensureReviewDiff(s.groupId, diff);
+    const guideFile = this.ensureReviewGuide(s.groupId);
+    const settingsFile = this.ensureReviewPerms(s.groupId, s.owned);
     return [
       "--settings", settingsFile,
       "--permission-mode", "default",
       "--add-dir", PROGRESS_DIR,
       "--add-dir", REVIEW_DIR,
-      "--append-system-prompt", reviewInstruction(file, diffFile, branch, guideFile),
+      "--append-system-prompt", reviewInstruction(file, diffFile, s.branch, guideFile, s.owned),
     ];
   }
 
@@ -1246,6 +1279,26 @@ class SessionManager {
       total: addUsage(conversation, s.handoverUsage),
       limits: readLimits(),
     };
+  }
+
+  /** Switch a review pane between reviewing the PR and working on it as the
+   * developer's own. Its rules live in the system prompt and settings file,
+   * so a running pane is restarted into the same conversation to pick them up.
+   * Null if it isn't a review pane. */
+  async setOwned(id: string, on: boolean): Promise<SessionMeta | null> {
+    const s = this.sessions.get(id);
+    if (!s || s.view !== "review") return null;
+    s.owned = on;
+    store.update(s.toRow());
+    if (s.status === "running") {
+      s.kill();
+      const deadline = Date.now() + 5000;
+      while (s.status === "running" && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (s.status === "running") return s.meta();
+    }
+    return this.restart(id);
   }
 
   /** Turn a workspace's handover on or off. The idle refresh follows at once;
@@ -1384,10 +1437,10 @@ class SessionManager {
   /** Write a per-session Claude settings file carrying a review pane's deny
    * backstop + notepad allow (see buildReviewPermissions) and return its path,
    * for `--settings`. */
-  private ensureReviewPerms(groupId: string): string {
+  private ensureReviewPerms(groupId: string, owned: boolean): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
     const settings = {
-      ...buildReviewPermissions(notepadPath(groupId), reviewGuidePath(groupId)),
+      ...buildReviewPermissions(notepadPath(groupId), reviewGuidePath(groupId), owned),
       ...statusLineSettings(groupId),
     };
     const file = reviewSettingsPath(groupId);

@@ -268,6 +268,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       prRepo?: string;
       initialPrompt?: string;
       reviewDiff?: string;
+      owned?: boolean;
       /** Start a new work branch from this local branch instead of the repo base. */
       base?: string;
     };
@@ -447,6 +448,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (!meta) {
       reply.code(400);
       return { error: "not_a_workspace" };
+    }
+    return meta;
+  });
+
+  app.post("/api/sessions/:id/owned", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { on } = (req.body ?? {}) as { on?: boolean };
+    const meta = await sessions.setOwned(id, on === true);
+    if (!meta) {
+      reply.code(400);
+      return { error: "not_a_review" };
     }
     return meta;
   });
