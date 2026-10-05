@@ -11,6 +11,7 @@ import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../
 import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
+import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
 import { denRepo } from "./fs.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
@@ -1168,7 +1169,11 @@ class SessionManager {
       : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
-    return ["--add-dir", PROGRESS_DIR, "--append-system-prompt", prompt];
+    return [
+      "--settings", JSON.stringify(statusLineSettings(groupId)),
+      "--add-dir", PROGRESS_DIR,
+      "--append-system-prompt", prompt,
+    ];
   }
 
   /** The system prompt (and any files it names) for a single-pane Claude
@@ -1178,9 +1183,11 @@ class SessionManager {
     s: DenSession,
     from: { diff?: string; seed?: string } = {},
   ): string[] {
+    // A review pane's settings file carries the status line too.
     if (s.view === "review") return this.reviewArgs(s.groupId, s.branch, from.diff);
+    const settings = ["--settings", JSON.stringify(statusLineSettings(s.groupId))];
     if (s.view === "mypr") {
-      return ["--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch)];
+      return [...settings, "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch)];
     }
     if (s.look) {
       // A look pane from before den saved the ticket has no seed: say so in the
@@ -1190,11 +1197,12 @@ class SessionManager {
         `Ask the developer to paste it.\n`;
       const file = this.ensureNotepad(s.groupId, from.seed ?? fallback);
       return [
+        ...settings,
         "--add-dir", PROGRESS_DIR,
         "--append-system-prompt", lookInstruction(s.ticket, s.name, file),
       ];
     }
-    return [];
+    return settings;
   }
 
   /** A review pane's settings file, files, and system prompt. Pass `diff` on
@@ -1226,12 +1234,18 @@ class SessionManager {
   }
 
   /** What a Claude pane has spent: its conversation (from the transcript)
-   * plus den's idle handovers for it. Null for a shell or an unknown id. */
-  usage(id: string): { conversation: Usage; handovers: Usage; total: Usage } | null {
+   * plus den's idle handovers for it, and the plan's limits across all panes.
+   * Null for a shell or an unknown id. */
+  usage(id: string): { conversation: Usage; handovers: Usage; total: Usage; limits: PlanLimits | null } | null {
     const s = this.sessions.get(id);
     if (!s || s.shell) return null;
     const conversation = s.claudeSessionId ? sessionUsage(s.claudeSessionId) : { ...EMPTY_USAGE };
-    return { conversation, handovers: s.handoverUsage, total: addUsage(conversation, s.handoverUsage) };
+    return {
+      conversation,
+      handovers: s.handoverUsage,
+      total: addUsage(conversation, s.handoverUsage),
+      limits: readLimits(),
+    };
   }
 
   /** Turn a workspace's handover on or off. The idle refresh follows at once;
@@ -1326,6 +1340,7 @@ class SessionManager {
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
+      if (isValidGroupId(groupId)) removeLimits(groupId);
     } catch {
       // invalid id / already gone — nothing to clean up
     }
@@ -1371,10 +1386,10 @@ class SessionManager {
    * for `--settings`. */
   private ensureReviewPerms(groupId: string): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
-    const settings = buildReviewPermissions(
-      notepadPath(groupId),
-      reviewGuidePath(groupId),
-    );
+    const settings = {
+      ...buildReviewPermissions(notepadPath(groupId), reviewGuidePath(groupId)),
+      ...statusLineSettings(groupId),
+    };
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));
     return file;

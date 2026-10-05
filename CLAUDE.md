@@ -367,7 +367,19 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   written on exit, so it can't show a live session. `GET
   /api/sessions/:id/usage` adds the idle handovers' spend (`handoverUsage`,
   in memory, read from the fork's `--output-format json`). `SpendChip` shows
-  it in every Claude pane's header (30s poll, tooltip breakdown). Also:
+  it in every Claude pane's header (30s poll): **tokens** on the chip (all
+  kinds, cache reads included), and on hover the cost at API prices plus the
+  **plan's limits** (current session = 5-hour window, current week, % used +
+  reset time). Those limits reach nothing but a **status line command**
+  (`rate_limits` in its JSON stdin, only after a pane's first reply; not in
+  `claude -p --output-format json`, no file, no hook), so every Claude pane
+  gets a status line via `--settings` (`statusLineSettings` in
+  `server/limits.ts`; a review pane's settings file merges it in) that saves
+  its input to `~/.den/limits/<groupId>.json` (tmp + mv), then pipes it to
+  the developer's own `statusLine` from `~/.claude/settings.json` if one is
+  set, so theirs keeps working. `readLimits` takes the newest reading from
+  any pane (the limits are the account's); `remove()` deletes the file.
+  Panes started before this only get it on restart. Also:
   a per-workspace **handover switch** on the notepad (`handover` column,
   `POST /api/sessions/:id/handover`) — off stops the idle refresh at once
   and drops the notepad instruction from the pane's next start (the house
