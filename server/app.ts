@@ -750,7 +750,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       logWarn("github", err);
       reply.code(502);
-      return { error: "gh_failed", message: "GitHub request failed." };
+      const limited = /rate limit/i.test(err instanceof Error ? err.message : "");
+      return {
+        error: "gh_failed",
+        message: limited
+          ? "GitHub rate limit hit, trying again in a minute."
+          : "GitHub request failed.",
+      };
     }
   });
 

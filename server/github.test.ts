@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeChecks, reviewFrom, parseTicketHint, authoredAttention, reviewAttention, buildReviewBucket, isValidRepo, type PullRequest, reviewRequestBody, isValidNodeId } from "./github.ts";
+import { summarizeChecks, reviewFrom, parseTicketHint, authoredAttention, reviewAttention, buildReviewBucket, isValidRepo, type PullRequest, reviewRequestBody, isValidNodeId, splitByAuthor, type SearchNode } from "./github.ts";
 
 describe("summarizeChecks", () => {
   it("reports none when there are no checks", () => {
@@ -183,6 +183,28 @@ describe("buildReviewBucket (review-requested + already-reviewed)", () => {
       new Set(["o/r#1", "o/r#3"]),
     );
     expect(bucket.map((p) => p.number)).toEqual([2, 3, 1]);
+  });
+});
+
+describe("splitByAuthor", () => {
+  const node = (number: number, author: string): SearchNode => ({
+    number,
+    title: `pr ${number}`,
+    url: `https://github.com/o/r/pull/${number}`,
+    isDraft: false,
+    updatedAt: "2026-10-01T00:00:00Z",
+    author: { login: author },
+    repository: { nameWithOwner: "o/r" },
+  });
+
+  it("files PRs by author even when the author search comes back empty", () => {
+    const { authored, review } = splitByAuthor("Me", {
+      authored: [],
+      requested: [node(2, "pat")],
+      reviewed: [node(1, "me"), node(2, "pat"), node(3, "sam")],
+    });
+    expect(authored.map((n) => n.number)).toEqual([1]);
+    expect(review.map((n) => n.number)).toEqual([2, 3]);
   });
 });
 

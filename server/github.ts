@@ -85,26 +85,99 @@ async function ghAllowFail(args: string[]): Promise<{ stdout: string; stderr: st
   }
 }
 
-interface SearchRow {
+const SEARCH_LIMIT = 20;
+const SEARCH_ATTEMPTS = 3;
+const SEARCHES = {
+  authored: "is:pr is:open author:@me",
+  requested: "is:pr is:open review-requested:@me",
+  reviewed: "is:pr is:open reviewed-by:@me",
+} as const;
+type SearchName = keyof typeof SEARCHES;
+
+// One GraphQL request instead of three `gh search prs` calls plus a `gh pr view`
+// per PR, to stay under GitHub's secondary rate limit.
+const PR_SEARCH_QUERY =
+  `query{viewer{login} ` +
+  Object.entries(SEARCHES)
+    .map(
+      ([alias, q]) =>
+        `${alias}:search(type:ISSUE,first:${SEARCH_LIMIT},query:"${q}"){issueCount nodes{` +
+        `... on PullRequest{number title url isDraft updatedAt headRefName reviewDecision ` +
+        `author{login} repository{nameWithOwner}}}}`,
+    )
+    .join(" ") +
+  `}`;
+
+export interface SearchNode {
   number: number;
   title: string;
   url: string;
-  repository: { nameWithOwner: string };
   isDraft: boolean;
   updatedAt: string;
+  headRefName?: string | null;
+  reviewDecision?: string | null;
+  author?: { login: string } | null;
+  repository: { nameWithOwner: string };
 }
 
-async function search(filter: string): Promise<SearchRow[]> {
-  const out = await gh([
-    "search",
-    "prs",
-    filter,
-    "--state=open",
-    "--limit=20",
-    "--json",
-    "number,title,url,repository,isDraft,updatedAt",
-  ]);
-  return JSON.parse(out) as SearchRow[];
+type SearchHits = Record<SearchName, SearchNode[]>;
+
+const nodeKey = (n: SearchNode) => prKey({ repo: n.repository.nameWithOwner, number: n.number });
+
+/**
+ * Runs the searches, retrying while any comes back short. GitHub's search
+ * intermittently returns its `issueCount` with fewer nodes than that, often
+ * none (seen 2026-10-23 on the same query seconds apart), which emptied the
+ * review bucket. Nodes are unioned across attempts.
+ */
+async function searchPrs(): Promise<{ viewer: string; hits: SearchHits }> {
+  const names = Object.keys(SEARCHES) as SearchName[];
+  const found = Object.fromEntries(names.map((n) => [n, new Map<string, SearchNode>()])) as Record<
+    SearchName,
+    Map<string, SearchNode>
+  >;
+  let viewer: string;
+  for (let attempt = 1; ; attempt++) {
+    const out = await gh(["api", "graphql", "-f", `query=${PR_SEARCH_QUERY}`]);
+    const data = (JSON.parse(out) as {
+      data: { viewer: { login: string } } & Record<
+        SearchName,
+        { issueCount: number; nodes: (SearchNode | null)[] }
+      >;
+    }).data;
+    viewer = data.viewer.login;
+    const short = names.filter((name) => {
+      // A non-PR hit would come back as {}, hence the number check.
+      for (const n of data[name].nodes) if (n?.number) found[name].set(nodeKey(n), n);
+      return found[name].size < Math.min(data[name].issueCount, SEARCH_LIMIT);
+    });
+    if (!short.length) break;
+    if (attempt === SEARCH_ATTEMPTS) {
+      logWarn("github.search", `still short after ${attempt} tries: ${short.join(", ")}`);
+      break;
+    }
+  }
+  const hits = Object.fromEntries(names.map((n) => [n, [...found[n].values()]])) as SearchHits;
+  return { viewer, hits };
+}
+
+/**
+ * Files each PR by its author, not by which search found it: `reviewed-by`
+ * matches your own PRs once you comment on them, so when the `author` search
+ * comes back short your PRs would otherwise land in the review bucket.
+ */
+export function splitByAuthor(
+  viewer: string,
+  hits: SearchHits,
+): { authored: SearchNode[]; review: SearchNode[] } {
+  const mine = (n: SearchNode) => n.author?.login.toLowerCase() === viewer.toLowerCase();
+  const authored = new Map<string, SearchNode>();
+  const review = new Map<string, SearchNode>();
+  for (const n of hits.authored) if (mine(n)) authored.set(nodeKey(n), n);
+  for (const n of [...hits.requested, ...hits.reviewed]) {
+    (mine(n) ? authored : review).set(nodeKey(n), n);
+  }
+  return { authored: [...authored.values()], review: [...review.values()] };
 }
 
 /** One row of `gh pr checks --json bucket` (one check, latest run only). */
@@ -185,53 +258,27 @@ export function parseTicketHint(branch?: string | null): string | undefined {
   return m ? m[1].toLowerCase() : undefined;
 }
 
-async function enrich(row: SearchRow): Promise<PullRequest> {
-  const repo = row.repository.nameWithOwner;
-  let branch: string | undefined;
+async function toPullRequest(n: SearchNode): Promise<PullRequest> {
+  const repo = n.repository.nameWithOwner;
   let checks = summarizeChecks([]);
-  let review: ReviewState = "none";
-  // Two gh subcommands (see summarizeChecks for why CI can't come from the
-  // rollup); each may fail without costing the other.
-  const [meta, rows] = await Promise.allSettled([
-    gh([
-      "pr",
-      "view",
-      String(row.number),
-      "--repo",
-      repo,
-      "--json",
-      "headRefName,reviewDecision",
-    ]),
-    fetchChecks(repo, row.number),
-  ]);
-  if (meta.status === "fulfilled") {
-    try {
-      const j = JSON.parse(meta.value) as {
-        headRefName?: string;
-        reviewDecision?: string | null;
-      };
-      branch = j.headRefName;
-      review = reviewFrom(j.reviewDecision ?? null);
-    } catch (err) {
-      logWarn(`github.enrich parse pr#${row.number}`, err);
-    }
-  } else {
-    // Enrichment is best-effort; fall back to the search-level data.
-    logWarn(`github.enrich pr#${row.number}`, meta.reason);
+  // See summarizeChecks for why CI can't come from the search's rollup.
+  try {
+    checks = summarizeChecks(await fetchChecks(repo, n.number));
+  } catch (err) {
+    logWarn(`github.checks pr#${n.number}`, err);
   }
-  if (rows.status === "fulfilled") checks = summarizeChecks(rows.value);
-  else logWarn(`github.enrich checks pr#${row.number}`, rows.reason);
+  const branch = n.headRefName ?? undefined;
   return {
-    number: row.number,
-    title: row.title,
-    url: row.url,
+    number: n.number,
+    title: n.title,
+    url: n.url,
     repo,
     branch,
-    isDraft: row.isDraft,
-    updatedAt: row.updatedAt,
+    isDraft: n.isDraft,
+    updatedAt: n.updatedAt,
     checks: checks.state,
     checkCounts: checks.counts,
-    review,
+    review: reviewFrom(n.reviewDecision ?? null),
     ticketHint: parseTicketHint(branch),
     isMine: false,
     needsAttention: false, // set per-bucket in getMyPullRequests
@@ -240,7 +287,7 @@ async function enrich(row: SearchRow): Promise<PullRequest> {
   };
 }
 
-// Bounded-concurrency map so we don't fire 40 `gh pr view` calls at once.
+// Bounded-concurrency map so we don't fire 40 `gh pr checks` calls at once.
 async function mapLimit<T, R>(
   items: T[],
   limit: number,
@@ -329,34 +376,21 @@ export function buildReviewBucket(
 }
 
 export async function getMyPullRequests(): Promise<PrBuckets> {
-  const [authoredRows, requestedRows, reviewedRows] = await Promise.all([
-    search("--author=@me"),
-    search("--review-requested=@me"),
-    search("--reviewed-by=@me"),
-  ]);
-  const rowKey = (r: SearchRow) =>
-    prKey({ repo: r.repository.nameWithOwner, number: r.number });
-  const authoredKeys = new Set(authoredRows.map(rowKey));
-  const requestedKeys = new Set(requestedRows.map(rowKey));
-  const reviewedKeys = new Set(reviewedRows.map(rowKey));
-  // Dedupe *before* enriching: a PR you were asked to review and have since
-  // reviewed appears in both searches, and enrich() is two gh calls per PR.
-  // Your own PRs drop out — they belong in the authored bucket (you can end up
-  // in `reviewed-by` on your own PR by commenting on it).
-  const reviewRows = new Map<string, SearchRow>();
-  for (const r of [...requestedRows, ...reviewedRows]) {
-    const key = rowKey(r);
-    if (!authoredKeys.has(key)) reviewRows.set(key, r);
-  }
+  const { viewer, hits } = await searchPrs();
+  const { authored: authoredNodes, review: reviewNodes } = splitByAuthor(viewer, hits);
   const [authored, reviewPrs] = await Promise.all([
-    mapLimit(authoredRows, 6, enrich),
-    mapLimit([...reviewRows.values()], 6, enrich),
+    mapLimit(authoredNodes, 6, toPullRequest),
+    mapLimit(reviewNodes, 6, toPullRequest),
   ]);
   authored.forEach((p) => {
     p.isMine = true;
     Object.assign(p, authoredAttention(p));
   });
-  const reviewRequested = buildReviewBucket(reviewPrs, requestedKeys, reviewedKeys);
+  const reviewRequested = buildReviewBucket(
+    reviewPrs,
+    new Set(hits.requested.map(nodeKey)),
+    new Set(hits.reviewed.map(nodeKey)),
+  );
   return { authored, reviewRequested, fetchedAt: new Date().toISOString() };
 }
 

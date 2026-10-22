@@ -101,11 +101,19 @@ WebSocket; everything else is REST.
   `scrollback` column (every 5s while dirty + on exit) and restored in
   `hydrate()`, so a restart replays recent output instead of an empty pane.
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
-  review-requested → `isMine`); the review bucket merges **two** searches —
-  `--review-requested=@me` **and `--reviewed-by=@me`** — deduped before `enrich`
-  (two `gh` calls per PR) and with your own PRs dropped, so a PR you've reviewed
-  stays listed until it's merged or closed instead of vanishing the moment your
-  review clears GitHub's request (`buildReviewBucket`, `reviewRequestedFromMe` /
+  review-requested → `isMine`). The three searches (`author:@me`,
+  `review-requested:@me`, `reviewed-by:@me`) run as **one `gh api graphql`
+  request** (`searchPrs`) that also carries branch + review decision, so the
+  only per-PR call left is `gh pr checks` — three `gh search prs` calls plus a
+  `gh pr view` per PR hit GitHub's secondary rate limit ("GitHub request
+  failed", 2026-10-23). **GitHub search is flaky**: the same query seconds
+  apart can return its `issueCount` with no nodes, so `searchPrs` retries a
+  short result (up to 3 tries, nodes unioned), and **`splitByAuthor` buckets
+  by the PR's author, never by which search found it** (`reviewed-by` matches
+  your own PRs once you've commented, so a short `author` result put them in
+  the review list). The review bucket keeps a PR you've reviewed until it's
+  merged or closed instead of vanishing the moment your review clears
+  GitHub's request (`buildReviewBucket`, `reviewRequestedFromMe` /
   `reviewedByMe`); CI status from **`gh pr checks --json bucket`**
   (deduped to the latest run per check — *not* `statusCheckRollup`; see the CI
   gotcha below) summarized by `summarizeChecks`; `getPrDetail` (body + reviews + issue comments +
