@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRunnStatus, extractPort, literalIncludes } from "./apprun.ts";
+import { parseRunnStatus, extractPort, literalIncludes, parseDockerPs, runnPortProblem } from "./apprun.ts";
 
 describe("extractPort", () => {
   it("reads an explicit port from common flag styles", () => {
@@ -85,5 +85,22 @@ describe("parseRunnStatus containersUp", () => {
 
   it("is 0 for a stack that isn't up", () => {
     expect(parseRunnStatus("App: https://x\nNAME IMAGE\n").containersUp).toBe(0);
+  });
+});
+
+describe("runnPortProblem", () => {
+  const ps = [
+    "runn_a\trunn_a-edge-1\t80/tcp, 127.0.0.1:3104-3105->3104-3105/tcp, 127.0.0.1:5102->5102/tcp",
+    "runn_b\trunn_b-app-1\t",
+    "runn_c\trunn_c-edge-1\t80/tcp, 443/tcp, 2019/tcp",
+  ].join("\n");
+  const containers = parseDockerPs(ps);
+
+  it("flags another stack serving this checkout's port, and an edge with no ports", () => {
+    expect(containers[0].ports).toEqual([3104, 3105, 5102]);
+    expect(runnPortProblem("runn_a", 5102, containers)).toBeNull();
+    expect(runnPortProblem("runn_b", 5102, containers)).toContain("another stack (runn_a)");
+    expect(runnPortProblem("runn_c", 5103, containers)).toContain("publishes no ports");
+    expect(runnPortProblem("runn_a", 5101, containers)).toContain("names port 5101");
   });
 });

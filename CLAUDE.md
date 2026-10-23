@@ -217,6 +217,15 @@ WebSocket; everything else is REST.
   prompt init. `web/src/AppRunButton.tsx` renders "▶ run <name>" or, when it can
   tell the app is already up, "▶ open <name>" linking to the URL. Pure parts
   unit-tested in `server/apprun.test.ts`.
+- **Stack port check** (issue 34): for a runn stack with containers up,
+  `appRunnerStatus` also reads `docker ps` (`parseDockerPs`) and
+  `runnPortProblem` flags the three ways the app link lied in practice:
+  another stack's edge publishing this checkout's `RUNN_PORT_APP` (seen live:
+  the main checkout's 5102 was a worktree's), an edge with no published
+  ports (two stacks on one fixed port), and a `project.env` rewritten after
+  the stack started. Otherwise it asks `curl -k` whether the URL answers.
+  `AppRunButton` shows it as a pink `ports` chip; a set up / run finish
+  message to the pane includes it.
 - `web/src/App.tsx` — the UI's composition root: 3-column flex layout, topbar
   (fox + shortcuts popover), the center-pane switch (terminal / 3-pane claude
   workspace / look / PR review / my-PR), and the ticket/PR open-session flows +

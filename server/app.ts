@@ -602,10 +602,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       const done = parseFinish(out, label);
       if (!done) return;
       stop();
-      sessions.tell(
-        groupId,
-        `${what} finished with exit ${done.exit}. Its last lines:\n${done.before.slice(-12).join("\n")}`,
-      );
+      const report = `${what} finished with exit ${done.exit}. Its last lines:\n${done.before.slice(-12).join("\n")}`;
+      // A stack can come up "healthy" and still be unreachable (#34).
+      appRunnerStatus(dir)
+        .then((r) => r.problem)
+        .catch(() => undefined)
+        .then((problem) =>
+          sessions.tell(groupId, problem ? `${report}\nden's check of the app afterwards: ${problem}` : report),
+        );
     });
     return meta;
   };

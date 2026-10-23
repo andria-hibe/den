@@ -25,6 +25,8 @@ export interface AppRunner {
   stopCommand?: string;
   /** runn: how many of the stack's containers are up (0 = nothing to stop). */
   containersUp?: number;
+  /** runn: why the app link may not reach this checkout's app (#34). */
+  problem?: string;
   /** The repo root. */
   dir: string;
 }
@@ -41,17 +43,98 @@ function repoRoot(cwd: string): string {
   return cwd;
 }
 
+function readRunnEnv(dir: string): string {
+  try {
+    return readFileSync(join(dir, ".runn", "project.env"), "utf8");
+  } catch {
+    return ""; // no ports file: `runn status` supplies the URL instead
+  }
+}
+
+const envValue = (env: string, key: string) => env.match(new RegExp(`^${key}=(.+)$`, "m"))?.[1]?.trim();
+
 /** Build the runn app URL from the per-worktree ports file, if present. */
 function runnUrlFromEnv(dir: string): string | undefined {
-  try {
-    const env = readFileSync(join(dir, ".runn", "project.env"), "utf8");
-    const host = env.match(/^RUNN_PROJECT_HOSTNAME=(.+)$/m)?.[1]?.trim();
-    const port = env.match(/^RUNN_PORT_APP=(\d+)$/m)?.[1]?.trim();
-    if (host && port) return `https://${host}:${port}`;
-  } catch {
-    // no ports file: `runn status` supplies the URL instead
+  const env = readRunnEnv(dir);
+  const host = envValue(env, "RUNN_PROJECT_HOSTNAME");
+  const port = envValue(env, "RUNN_PORT_APP");
+  return host && port && /^\d+$/.test(port) ? `https://${host}:${port}` : undefined;
+}
+
+/** A running container and the host ports it publishes. */
+export interface PublishedContainer {
+  project: string;
+  name: string;
+  ports: number[];
+}
+
+export const DOCKER_PS_FORMAT = '{{.Label "com.docker.compose.project"}}\t{{.Names}}\t{{.Ports}}';
+
+/** Parse `docker ps --format DOCKER_PS_FORMAT`. Host ports come from
+ * `127.0.0.1:5102->5102/tcp` and ranges like `127.0.0.1:3104-3105->...`. */
+export function parseDockerPs(out: string): PublishedContainer[] {
+  return out
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((line) => {
+      const [project = "", name = "", portsCol = ""] = line.split("\t");
+      const ports: number[] = [];
+      for (const m of portsCol.matchAll(/:(\d+)(?:-(\d+))?->/g)) {
+        const from = Number(m[1]);
+        const to = m[2] ? Number(m[2]) : from;
+        for (let p = from; p <= to && p - from < 100; p++) ports.push(p);
+      }
+      return { project, name, ports: [...new Set(ports)] };
+    });
+}
+
+/** Why a runn stack's app link may not reach this checkout's app, or null.
+ * All three were hit in practice: an edge proxy with no published ports
+ * (two stacks on one fixed port), another stack's edge holding this
+ * checkout's port, and a ports file rewritten after the stack started. */
+export function runnPortProblem(
+  project: string,
+  appPort: number | undefined,
+  containers: PublishedContainer[],
+): string | null {
+  const own = containers.filter((c) => c.project === project);
+  if (!own.length || !appPort) return null;
+  const other = containers.find((c) => c.project !== project && c.ports.includes(appPort));
+  if (other) {
+    return (
+      `Port ${appPort} from .runn/project.env is served by another stack (${other.project}), ` +
+      `so the app link reaches that stack's proxy, not this checkout's app.`
+    );
   }
-  return undefined;
+  const edge = own.find((c) => /-edge-\d+$/.test(c.name));
+  if (!edge) return "The app's containers are up but its edge proxy isn't, so nothing serves the app's port.";
+  if (!edge.ports.length) {
+    return (
+      "The edge proxy publishes no ports, so the app can't be reached. Another stack " +
+      "probably holds one of its ports (often the tracing UI's); stop it, then restart this stack."
+    );
+  }
+  if (!edge.ports.includes(appPort)) {
+    return (
+      `.runn/project.env names port ${appPort}, but the running edge proxy publishes ` +
+      `${edge.ports.join(", ")}. The ports file changed after the stack started; restart the stack.`
+    );
+  }
+  return null;
+}
+
+/** Does the app answer HTTP? runn serves a locally trusted certificate that
+ * Node doesn't know, so this asks curl with -k. */
+async function answersHttp(url: string): Promise<boolean> {
+  try {
+    const { stdout } = await exec("curl", ["-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "3", url], {
+      timeout: 5000,
+    });
+    const code = Number(stdout.trim());
+    return code > 0 && code < 500;
+  } catch {
+    return false;
+  }
 }
 
 /** Parse `runn status` output for liveness + the app URL. */
@@ -162,6 +245,23 @@ export function detectAppRunner(cwd: string): AppRunner {
   return { name, kind: null, running: null, dir };
 }
 
+async function runnProblem(dir: string, url: string | undefined, running: boolean): Promise<string | null> {
+  const env = readRunnEnv(dir);
+  const project = envValue(env, "COMPOSE_PROJECT_NAME");
+  const appPort = Number(envValue(env, "RUNN_PORT_APP")) || undefined;
+  if (project) {
+    try {
+      const { stdout } = await exec("docker", ["ps", "--format", DOCKER_PS_FORMAT], { timeout: 8000 });
+      const problem = runnPortProblem(project, appPort, parseDockerPs(stdout));
+      if (problem) return problem;
+    } catch (e) {
+      logWarn("docker ps failed", e);
+    }
+  }
+  if (running && url && !(await answersHttp(url))) return `The stack is up but ${url} doesn't answer yet.`;
+  return null;
+}
+
 /** detectAppRunner plus liveness, so the UI offers "open" rather than
  * re-launching an app that's already up. */
 export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
@@ -173,7 +273,9 @@ export async function appRunnerStatus(cwd: string): Promise<AppRunner> {
         timeout: 8000,
       });
       const { running, url, containersUp } = parseRunnStatus(stdout);
-      return { ...base, running, url: url ?? base.url, containersUp };
+      const status: AppRunner = { ...base, running, url: url ?? base.url, containersUp };
+      if (containersUp > 0) status.problem = (await runnProblem(base.dir, status.url, running)) ?? undefined;
+      return status;
     } catch (e) {
       // Still offer to start it.
       logWarn("runn status failed", e);

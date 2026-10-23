@@ -13,6 +13,8 @@ export interface AppRunner {
   containersUp?: number;
   /** den has a live tab running this app (a script app stops through it). */
   appTab?: boolean;
+  /** runn: why the app link may not reach this checkout's app. */
+  problem?: string;
   dir: string;
 }
 
@@ -96,6 +98,11 @@ export function AppRunButton({
       {stopping ? "stopping…" : "■ stop"}
     </button>
   ) : null;
+  const warn = runner.problem ? (
+    <span className="app-run-warn" title={runner.problem}>
+      ⚠ ports
+    </span>
+  ) : null;
 
   if (runner.running && runner.url) {
     return (
@@ -109,6 +116,7 @@ export function AppRunButton({
       >
         ▶ open {runner.name}
       </a>
+      {warn}
       {stop}
       </>
     );
@@ -131,6 +139,7 @@ export function AppRunButton({
     >
       {busy ? "starting…" : `▶ run ${runner.name}`}
     </button>
+    {warn}
     {stop}
     </>
   );
