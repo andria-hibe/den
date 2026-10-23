@@ -944,9 +944,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     await app.register(fastifyStatic, { root: webDir });
   }
 
-  await app.listen({ port: opts.port ?? 4321, host });
-  const port = (app.server.address() as AddressInfo).port;
-
   // Stacked branches (#33): a fetch per repo and a few git calls per
   // workspace, once a minute.
   let stacking = false;
@@ -959,6 +956,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   }, 60_000);
   stackTimer.unref?.();
   app.addHook("onClose", async () => clearInterval(stackTimer));
+
+  await app.listen({ port: opts.port ?? 4321, host });
+  const port = (app.server.address() as AddressInfo).port;
+
   return {
     port,
     url: `http://${host}:${port}`,
