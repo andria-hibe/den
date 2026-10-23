@@ -36,3 +36,22 @@ export function restoreTicket(notepad: string, ticket: string): string | null {
   if (!ticket.trim() || squash(notepad).includes(squash(ticket))) return null;
   return `${notepad.trimEnd()}\n\n---\n\n${ticket.trim()}\n`;
 }
+
+/** The description in a ticket section (`ticketDetails` in web/src/prompts.ts
+ * writes it after the "## Ticket" heading). */
+export function ticketDescription(section: string): string | null {
+  const at = section.indexOf("\n## Ticket\n\n");
+  return at < 0 ? null : section.slice(at + "\n## Ticket\n\n".length).trim();
+}
+
+/** Lines removed ("- ") and added ("+ ") between two texts, ignoring order
+ * and blank lines: enough to show what a ticket edit changed (#38). */
+export function lineChanges(before: string, after: string, max = 40): string[] {
+  const a = before.split("\n").map((l) => l.trim()).filter(Boolean);
+  const b = after.split("\n").map((l) => l.trim()).filter(Boolean);
+  const out = [
+    ...a.filter((l) => !b.includes(l)).map((l) => `- ${l}`),
+    ...b.filter((l) => !a.includes(l)).map((l) => `+ ${l}`),
+  ];
+  return out.length > max ? [...out.slice(0, max), `(${out.length - max} more lines)`] : out;
+}

@@ -62,14 +62,19 @@ export function WorkLinkChips({
       {ticketId &&
         (issue ? (
           <a
-            className="link-chip issue"
+            className={`link-chip issue${s.ticketChanged ? " edited" : ""}`}
             href={issue.url}
             target="_blank"
             rel="noreferrer"
-            title={issue.title}
+            title={
+              s.ticketChanged
+                ? `${issue.title}: the description changed since this workspace opened; den told the session what changed`
+                : issue.title
+            }
             onClick={(e) => e.stopPropagation()}
           >
             {ticketId}
+            {s.ticketChanged && " · edited"}
           </a>
         ) : (
           <span className="link-chip issue" title="linked ticket">

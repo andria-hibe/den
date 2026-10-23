@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isAscii } from "../../shared/ascii.ts";
-import { restoreTicket } from "../../shared/handover.ts";
+import { lineChanges, restoreTicket, ticketDescription } from "../../shared/handover.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import {
   autoReviewPrompt,
@@ -154,5 +154,16 @@ describe("cleanupPrompt", () => {
     expect(text).toContain("squash-merged");
     expect(text).toContain("change nothing until I approve it");
     expect(text).toContain("Never use --force or --hard");
+  });
+});
+
+describe("ticket edits", () => {
+  it("finds the description in the ticket section and lists what changed", () => {
+    const section = ticketDetails({ ...ISSUE, description: "It breaks.\nOn Mondays." });
+    expect(ticketDescription(section)).toBe("It breaks.\nOn Mondays.");
+    expect(lineChanges("It breaks.\nOn Mondays.", "It breaks.\nOn Tuesdays.")).toEqual([
+      "- On Mondays.",
+      "+ On Tuesdays.",
+    ]);
   });
 });

@@ -24,6 +24,7 @@ import {
 import {
   getAssignedIssues,
   getIssueComments,
+  getSubIssues,
   validateKey,
   setKey,
   clearKey,
@@ -41,6 +42,7 @@ import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./ap
 import { finishMarker, parseFinish, type TabRunLabel } from "./tabRun.ts";
 import { ciFinishes, ciMessage } from "./ciWatch.ts";
 import { notePrs, refreshStacks } from "./stack.ts";
+import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -315,6 +317,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
           roots().workRepo, body.branch, body.env, baseBranchOverride(), body.base,
         );
         body.cwd = cwd;
+        if (body.notepadSeed) body.notepadSeed = await seedWithWhatExists(cwd, body.branch, body.ticket, body.notepadSeed);
       } catch (err) {
         if ((err as Error).message === "no_such_base") {
           reply.code(400);
@@ -580,6 +583,23 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
+  // A ticket's handover starts from what already exists for it (#35). Best
+  // effort and bounded, so a slow GitHub or Linear never holds up the session.
+  const seedWithWhatExists = async (cwd: string, branch: string, ticket: string | undefined, seed: string) => {
+    const repo = roots().workRepo;
+    const within = <T,>(p: Promise<T>, fallback: T) =>
+      Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 8000))]);
+    const [prs, subIssues] = await Promise.all([
+      within(prCache.get(false).then((b) => [...b.authored, ...b.reviewRequested]), []),
+      ticket ? within(getSubIssues(ticket), []) : Promise.resolve([]),
+    ]);
+    const lines = await within(
+      foundAtStart({ repo, cwd, branch, base: repoBaseName(repo, baseBranchOverride()), ticket, subIssues, prs }),
+      [],
+    );
+    return withFoundAtStart(seed, lines);
+  };
+
   // Type a command into a new shell tab of the workspace, and tell its Claude
   // pane when it starts and how it ends (#37), so the session waits for it
   // instead of starting a second copy.
@@ -844,7 +864,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- Linear (cached) ---
-  const linearCache = ttlCache<LinearData>(30_000, getAssignedIssues);
+  const linearCache = ttlCache<LinearData>(30_000, async () => {
+    const data = await getAssignedIssues();
+    sessions.ticketsUpdated(data.issues);
+    return data;
+  });
   app.get("/api/linear/status", async () => ({ connected: hasKey() }));
 
   app.post("/api/linear/key", async (req, reply) => {

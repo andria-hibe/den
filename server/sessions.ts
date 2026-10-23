@@ -7,7 +7,9 @@ import {
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
-import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, restoreTicket } from "../shared/handover.ts";
+import {
+  HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, lineChanges, restoreTicket, ticketDescription,
+} from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
@@ -646,6 +648,8 @@ export interface SessionMeta {
   handover: boolean;
   /** Where the branch stands against its parent and origin (#33). */
   stack: StackStatus | null;
+  /** The ticket's description changed since the workspace opened (#38). */
+  ticketChanged: boolean;
   /** A review pane the developer has taken on: it may commit, push, and post. */
   owned: boolean;
 }
@@ -690,6 +694,7 @@ class DenSession {
   handoverRunning = false;
   /** The notepad mtime keepTicket last checked. */
   ticketCheckedMtime = 0;
+  ticketChanged = false;
   /** Keep a handover (the notepad instruction and the idle refresh). */
   handover = true;
   /** A review pane working on the PR as the developer's own. */
@@ -926,6 +931,7 @@ class DenSession {
       handover: this.handover,
       owned: this.owned,
       stack: stackStatus(this.id),
+      ticketChanged: this.ticketChanged,
     };
   }
 
@@ -1534,6 +1540,38 @@ class SessionManager {
       writeFileSync(file, seed ?? `# Handover\n\n${HANDOVER_TEMPLATE}`);
     }
     return file;
+  }
+
+  /** When a workspace's ticket description no longer matches the copy den
+   * kept, tell the session what changed and swap the new text into the
+   * notepad and the copy, so keepTicket keeps the current one (#38). */
+  ticketsUpdated(issues: { identifier: string; description?: string }[]): void {
+    for (const s of this.sessions.values()) {
+      if (s.role !== "main" || s.shell || s.look || s.view || !s.ticket) continue;
+      const issue = issues.find((i) => i.identifier === s.ticket);
+      if (!issue) continue;
+      try {
+        const copyFile = ticketCopyPath(s.groupId);
+        if (!existsSync(copyFile)) continue;
+        const copy = readFileSync(copyFile, "utf8");
+        const before = ticketDescription(copy);
+        // ticketDetails writes this placeholder for an empty description.
+        const after = issue.description?.trim() || "_(no description)_";
+        if (before === null || before.replace(/\s+/g, " ") === after.replace(/\s+/g, " ")) continue;
+        const updated = copy.replace(before, () => after);
+        const notepad = this.readNotepad(s.groupId);
+        if (notepad.includes(copy.trim())) this.writeNotepad(s.groupId, notepad.replace(copy.trim(), () => updated.trim()));
+        writeFileSync(copyFile, updated);
+        s.ticketChanged = true;
+        this.tell(
+          s.groupId,
+          `The description of ${s.ticket} changed since this workspace opened; den updated the ticket in ` +
+            `your notepad. What changed:\n${lineChanges(before, after).join("\n")}`,
+        );
+      } catch (err) {
+        logWarn("ticketsUpdated", err);
+      }
+    }
   }
 
   /** Put a workspace's ticket back at the end of its notepad if a rewrite

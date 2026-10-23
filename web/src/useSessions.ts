@@ -70,6 +70,7 @@ export function useSessions({
                   color: s.color,
                   attention: s.attention,
                   stack: s.stack,
+                  ticketChanged: s.ticketChanged,
                 }
               : loc;
           }),

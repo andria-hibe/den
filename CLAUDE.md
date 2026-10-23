@@ -401,7 +401,15 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   A ticket's text sits **below** both (`ticketNotesSeed`), so the notepad
   opens on the status. den keeps a copy of that ticket section
   (`<groupId>.ticket.md`) and puts it back if a rewrite drops it
-  (`keepTicket`, pure `restoreTicket` in `shared/handover.ts`; issue 39). **Idle handover** (issue 23): when a workspace main
+  (`keepTicket`, pure `restoreTicket` in `shared/handover.ts`; issue 39). The
+  seed's session notes start with what den found for the branch
+  (`server/startContext.ts`, issue 35): commits the base lacks, PRs for the
+  ticket and its Linear sub-issues (`getSubIssues`), and handover files in
+  sibling worktrees or Claude Code plans naming the ticket. When the
+  ticket's description later changes (`sessions.ticketsUpdated`, on each
+  Linear fetch; issue 38), den swaps the new text into the notepad and the
+  copy, tells the session the changed lines, and the ticket chip reads
+  "edited". **Idle handover** (issue 23): when a workspace main
   pane has been worked in and then gone quiet for 30 minutes
   (`idleHandoverDue`: input since the last handover, no output for the
   window, notepad not written near the end of the work), den refreshes the

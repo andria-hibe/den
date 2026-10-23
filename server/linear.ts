@@ -195,6 +195,27 @@ interface RawComment {
 }
 
 /** Comments on a single issue (by identifier, e.g. "FAST-6115"), oldest first. */
+/** A ticket's sub-issues, for finding work already done under them. */
+export async function getSubIssues(
+  identifier: string,
+): Promise<{ identifier: string; branchName: string }[]> {
+  const key = getKey();
+  const m = identifier.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  if (!key || !m) return [];
+  const data = await graphql<{
+    issues: { nodes: { children: { nodes: { identifier: string; branchName: string }[] } }[] };
+  }>(
+    `query subIssues($number: Float!, $teamKey: String!) {
+      issues(filter: { number: { eq: $number }, team: { key: { eq: $teamKey } } }, first: 1) {
+        nodes { children(first: 50) { nodes { identifier branchName } } }
+      }
+    }`,
+    key,
+    { number: Number(m[2]), teamKey: m[1].toUpperCase() },
+  );
+  return data.issues.nodes[0]?.children.nodes ?? [];
+}
+
 export async function getIssueComments(
   identifier: string,
 ): Promise<LinearComment[]> {
