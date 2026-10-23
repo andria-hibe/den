@@ -12,6 +12,7 @@ import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
 import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
+import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
 import { denRepo } from "./fs.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
@@ -684,6 +685,7 @@ class DenSession {
   /** New output since the last scrollback flush to the store. */
   private scrollbackDirty = false;
   private listeners = new Set<Listener>();
+  private watchers = new Set<(data: string) => void>();
   /** Once the user renames, stop auto-updating the title from the terminal. */
   titleLocked = false;
   private oscCarry = "";
@@ -782,6 +784,14 @@ class DenSession {
     }
     this.maybeTitle(data);
     this.emit({ type: "output", data });
+    for (const w of this.watchers) w(data);
+  }
+
+  /** Follow this pane's output from den itself. Unlike attach(), it isn't a
+   * viewer, so the bell still raises attention. Returns the unsubscribe. */
+  watch(fn: (data: string) => void): () => void {
+    this.watchers.add(fn);
+    return () => this.watchers.delete(fn);
   }
 
   /** Use the latest OSC title (ESC ] 0|1|2 ; <title> BEL or ST) as the session
@@ -814,6 +824,12 @@ class DenSession {
 
   lockTitle() {
     this.titleLocked = true;
+  }
+
+  /** Flag the session on the rail, as a bell does, unless someone is
+   * watching it. */
+  nudge() {
+    if (this.listeners.size === 0) this.attention = true;
   }
 
   private emit(msg: ServerMessage) {
@@ -1240,7 +1256,7 @@ class SessionManager {
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [
-      "--settings", JSON.stringify(statusLineSettings(groupId)),
+      "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: inboxHooks(groupId) }),
       "--add-dir", PROGRESS_DIR,
       "--append-system-prompt", prompt,
     ];
@@ -1257,7 +1273,10 @@ class SessionManager {
     if (s.view === "review") return this.reviewArgs(s, from.diff);
     const settings = ["--settings", JSON.stringify(statusLineSettings(s.groupId))];
     if (s.view === "mypr") {
-      return [...settings, "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch)];
+      return [
+        "--settings", JSON.stringify({ ...statusLineSettings(s.groupId), hooks: inboxHooks(s.groupId) }),
+        "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
+      ];
     }
     if (s.look) {
       // A look pane from before den saved the ticket has no seed: say so in the
@@ -1432,7 +1451,10 @@ class SessionManager {
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
-      if (isValidGroupId(groupId)) removeLimits(groupId);
+      if (isValidGroupId(groupId)) {
+        removeLimits(groupId);
+        removeInbox(groupId);
+      }
     } catch {
       // invalid id / already gone — nothing to clean up
     }
@@ -1516,6 +1538,16 @@ class SessionManager {
     } catch {
       // no notepad yet
     }
+  }
+
+  /** Tell a workspace's Claude pane something on its next prompt or tool
+   * call (see inbox.ts), and nudge the developer if nobody is watching it.
+   * Only workspace main and my-PR panes have the hooks that deliver it. */
+  tell(groupId: string, message: string): void {
+    const main = [...this.sessions.values()].find((s) => s.groupId === groupId && s.role === "main");
+    if (!main || main.shell || main.look || main.view === "review") return;
+    tellPane(groupId, message);
+    main.nudge();
   }
 
   readNotepad(groupId: string): string {

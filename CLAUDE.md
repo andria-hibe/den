@@ -95,6 +95,20 @@ WebSocket; everything else is REST.
   (`paneInstructions.test.ts`, `progressInstruction.test.ts`,
   `reviewInstruction.test.ts`). A new pane kind gets its own builder here,
   not a bare `-n name`.
+- `server/inbox.ts` — **telling a running pane something** without typing
+  into it (a pane at a permission prompt looks idle, and a typed Enter would
+  answer it). `sessions.tell(groupId, msg)` queues the message in
+  `~/.den/inbox/<groupId>.<event>.json` and raises the rail nudge if nobody is
+  watching; `UserPromptSubmit` + `PostToolUse` hooks in the pane's
+  `--settings` (`inboxHooks`, workspace main and my-PR panes) hand it to
+  Claude as `additionalContext` on its next prompt or tool call, each event's
+  hook claiming the queue with `mv` and removing the other's copy. Verified
+  live: a pane asked afterwards reported what den had told it. Panes started
+  before this only get the hooks on restart. First user: **set up / run
+  feedback** (issue 37) - `runInTab` in `app.ts` types the command with a
+  `finishMarker` (`server/tabRun.ts`) and watches the tab (`DenSession.watch`,
+  not a viewer, so the bell still nudges) for the printed exit status, then
+  tells the pane it started and how it ended, with its last lines.
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot). Rows carry a **`pos`** rail sort key

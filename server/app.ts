@@ -37,6 +37,7 @@ import {
   type WorkEnv,
 } from "./git.ts";
 import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./apprun.ts";
+import { finishMarker, parseFinish, type TabRunLabel } from "./tabRun.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -576,6 +577,36 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
+  // Type a command into a new shell tab of the workspace, and tell its Claude
+  // pane when it starts and how it ends (#37), so the session waits for it
+  // instead of starting a second copy.
+  const runInTab = (groupId: string, label: TabRunLabel, dir: string, command: string) => {
+    const meta = sessions.addShell(groupId);
+    const shell = meta ? sessions.get(meta.id) : undefined;
+    if (!meta || !shell) return null;
+    // A fresh login shell eats keystrokes typed during zsh's prompt init.
+    setTimeout(() => shell.write(`cd ${shellQuote(dir)} && ${command}${finishMarker(label)}\r`), 400);
+    const what = label === "run" ? "the app" : "the worktree set up";
+    sessions.tell(
+      groupId,
+      `The developer started ${what} in a new shell tab: \`${command}\`. Don't run it ` +
+        `yourself meanwhile; den will tell you how it finished.`,
+    );
+    let out = "";
+    const stop = shell.watch((data) => {
+      out = (out + data).slice(-64_000);
+      if (!data.includes("finished with exit")) return;
+      const done = parseFinish(out, label);
+      if (!done) return;
+      stop();
+      sessions.tell(
+        groupId,
+        `${what} finished with exit ${done.exit}. Its last lines:\n${done.before.slice(-12).join("\n")}`,
+      );
+    });
+    return meta;
+  };
+
   // Typed into a new shell tab rather than run here, so the output is in front
   // of you and Ctrl-C works. Returns the tab's meta so the client can switch.
   app.post("/api/app/run", async (req, reply) => {
@@ -590,15 +621,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "not_runnable" };
     }
-    const meta = sessions.addShell(session.groupId);
+    const meta = runInTab(session.groupId, "run", runner.dir, runner.command);
     if (!meta) {
       reply.code(404);
       return { error: "not_found" };
     }
-    // A fresh login shell eats keystrokes typed during zsh's prompt init.
-    const shell = sessions.get(meta.id);
-    const cmd = `cd ${shellQuote(runner.dir)} && ${runner.command}\r`;
-    setTimeout(() => shell?.write(cmd), 400);
     // So stop can Ctrl-C a script app there (#28).
     appTabs.set(session.groupId, meta.id);
     reply.code(201);
@@ -696,14 +723,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "no_setup" };
     }
-    const meta = sessions.addShell(session.groupId);
+    const meta = runInTab(session.groupId, "set up", setup.dir, script);
     if (!meta) {
       reply.code(404);
       return { error: "not_found" };
     }
-    const shell = sessions.get(meta.id);
-    const cmd = `cd ${shellQuote(setup.dir)} && ${script}\r`;
-    setTimeout(() => shell?.write(cmd), 400);
     reply.code(201);
     return meta;
   });
