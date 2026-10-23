@@ -26,3 +26,13 @@ export const HANDOVER_TEMPLATE =
 export function isHandover(md: string): boolean {
   return md.includes(`## ${HANDOVER_HEADINGS[0]}`);
 }
+
+const squash = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/** The notepad with the ticket section put back at the end, or null when the
+ * ticket is still there. Whitespace is ignored when comparing, so a session
+ * that reflows the file doesn't get a second copy (#39). */
+export function restoreTicket(notepad: string, ticket: string): string | null {
+  if (!ticket.trim() || squash(notepad).includes(squash(ticket))) return null;
+  return `${notepad.trimEnd()}\n\n---\n\n${ticket.trim()}\n`;
+}

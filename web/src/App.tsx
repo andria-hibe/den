@@ -25,7 +25,7 @@ import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
-import { cleanupPrompt, denPrompt, ticketBrief, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
+import { cleanupPrompt, denPrompt, ticketBrief, ticketDetails, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
 import { WorktreeCleanupDialog, type StackToStop } from "./WorktreeCleanupDialog.tsx";
 import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
@@ -272,6 +272,7 @@ export function App() {
       base: base ?? undefined,
       name: issue.title,
       notepadSeed: ticketNotesSeed(issue),
+      notepadTicket: ticketDetails(issue),
       initialPrompt: ticketPrompt(issue),
     });
   };

@@ -107,7 +107,9 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
 }
 
 /** A ticket's details as markdown, without its title. */
-function ticketDetails(issue: LinearIssue): string {
+/** The ticket section of a workspace notepad. den keeps a copy and puts it
+ * back if a rewrite drops it (#39). */
+export function ticketDetails(issue: LinearIssue): string {
   const parts = [`**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`];
   if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
   parts.push(

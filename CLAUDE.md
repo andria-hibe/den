@@ -355,7 +355,9 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   restarted pane (no initial prompt) picks the thread back up — verified: a
   fresh `claude -p "Carry on."` finished half-done work from the notes alone.
   A ticket's text sits **below** both (`ticketNotesSeed`), so the notepad
-  opens on the status. **Idle handover** (issue 23): when a workspace main
+  opens on the status. den keeps a copy of that ticket section
+  (`<groupId>.ticket.md`) and puts it back if a rewrite drops it
+  (`keepTicket`, pure `restoreTicket` in `shared/handover.ts`; issue 39). **Idle handover** (issue 23): when a workspace main
   pane has been worked in and then gone quiet for 30 minutes
   (`idleHandoverDue`: input since the last handover, no output for the
   window, notepad not written near the end of the work), den refreshes the

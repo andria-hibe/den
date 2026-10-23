@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isAscii } from "../../shared/ascii.ts";
+import { restoreTicket } from "../../shared/handover.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import {
   autoReviewPrompt,
@@ -11,6 +12,7 @@ import {
   notePrompt,
   reviewPrompt,
   ticketBrief,
+  ticketDetails,
   ticketNotesSeed,
   ticketPrompt,
 } from "./prompts.ts";
@@ -124,6 +126,14 @@ describe("ticketNotesSeed", () => {
     expect(seed.indexOf("## Waiting on you")).toBeLessThan(seed.indexOf("## Session notes"));
     expect(seed.indexOf("## Session notes")).toBeLessThan(seed.indexOf("## Ticket"));
     expect(seed).toContain("It breaks.");
+  });
+
+  it("gets its ticket back after a rewrite drops it, and only then", () => {
+    const seed = ticketNotesSeed(ISSUE);
+    const ticket = ticketDetails(ISSUE);
+    expect(restoreTicket(seed.replace(/\n{2,}/g, "\n\n\n"), ticket)).toBeNull();
+    const dropped = seed.slice(0, seed.indexOf(ticket));
+    expect(restoreTicket(dropped, ticket)).toContain("It breaks.");
   });
 
   it("keeps the look pane's brief free of the handover", () => {

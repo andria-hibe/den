@@ -15,6 +15,7 @@ export interface AddSessionOpts {
   base?: string;
   name?: string;
   notepadSeed?: string;
+  notepadTicket?: string;
   view?: "review" | "mypr";
   pr?: number;
   prRepo?: string;

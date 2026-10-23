@@ -7,7 +7,7 @@ import {
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
-import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING } from "../shared/handover.ts";
+import { HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, restoreTicket } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
@@ -48,6 +48,12 @@ export function isValidGroupId(groupId: string): boolean {
 export const notepadPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(PROGRESS_DIR, `${groupId}.md`);
+};
+
+/** den's copy of a ticket workspace's ticket section (#39). */
+const ticketCopyPath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(PROGRESS_DIR, `${groupId}.ticket.md`);
 };
 
 // A review pane's diff, guide, and settings file; remove() deletes them.
@@ -649,6 +655,8 @@ class DenSession {
    * running now. */
   lastHandoverAt = 0;
   handoverRunning = false;
+  /** The notepad mtime keepTicket last checked. */
+  ticketCheckedMtime = 0;
   /** Keep a handover (the notepad instruction and the idle refresh). */
   handover = true;
   /** A review pane working on the PR as the developer's own. */
@@ -929,7 +937,10 @@ class SessionManager {
 
   constructor() {
     const timer = setInterval(() => {
-      for (const s of this.sessions.values()) s.persistScrollback();
+      for (const s of this.sessions.values()) {
+        s.persistScrollback();
+        this.keepTicket(s);
+      }
     }, SCROLLBACK_FLUSH_MS);
     // Don't keep the process alive just for this (CLI/tests exit cleanly).
     timer.unref?.();
@@ -1058,6 +1069,9 @@ class SessionManager {
     ticket?: string;
     look?: boolean;
     notepadSeed?: string;
+    /** The ticket section of `notepadSeed`, which den puts back if a rewrite
+     * drops it. */
+    notepadTicket?: string;
     view?: "review" | "mypr";
     pr?: number;
     prRepo?: string;
@@ -1113,6 +1127,7 @@ class SessionManager {
 
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
     this.ensureNotepad(groupId, opts.notepadSeed);
+    if (opts.notepadTicket) writeFileSync(ticketCopyPath(groupId), opts.notepadTicket);
 
     const main = new DenSession({
       id: randomUUID(), name, color, cwd, shell: false,
@@ -1173,6 +1188,8 @@ class SessionManager {
     const s = this.sessions.get(id);
     if (!s || s.status === "running") return null;
     s.spawnArgs = s.shell ? null : this.restartArgs(s);
+    // A restarted pane reads its ticket from the notepad.
+    this.keepTicket(s);
     s.clearBuffer();
     s.spawn();
     store.update(s.toRow());
@@ -1390,6 +1407,7 @@ class SessionManager {
     // Closing the workspace deletes its files; exit and restart keep them.
     try {
       rmSync(notepadPath(groupId), { force: true });
+      rmSync(ticketCopyPath(groupId), { force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
@@ -1456,6 +1474,27 @@ class SessionManager {
       writeFileSync(file, seed ?? `# Handover\n\n${HANDOVER_TEMPLATE}`);
     }
     return file;
+  }
+
+  /** Put a workspace's ticket back at the end of its notepad if a rewrite
+   * dropped it. Only looks again once the notepad has changed. */
+  private keepTicket(s: DenSession) {
+    if (s.shell || s.role !== "main" || s.look || s.view) return;
+    try {
+      const file = notepadPath(s.groupId);
+      const mtime = statSync(file).mtimeMs;
+      if (mtime === s.ticketCheckedMtime) return;
+      const copy = ticketCopyPath(s.groupId);
+      if (!existsSync(copy)) {
+        s.ticketCheckedMtime = mtime;
+        return;
+      }
+      const fixed = restoreTicket(readFileSync(file, "utf8"), readFileSync(copy, "utf8"));
+      if (fixed !== null) writeFileSync(file, fixed);
+      s.ticketCheckedMtime = statSync(file).mtimeMs;
+    } catch {
+      // no notepad yet
+    }
   }
 
   readNotepad(groupId: string): string {

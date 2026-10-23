@@ -263,6 +263,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       branch?: string;
       env?: WorkEnv;
       notepadSeed?: string;
+      notepadTicket?: string;
       view?: "review" | "mypr";
       pr?: number;
       prRepo?: string;
