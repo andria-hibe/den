@@ -37,7 +37,12 @@ export function WorkLinkChips({
   // closed, someone else's) — a chip without a link, so it's still correct.
   const ticketId = issue?.identifier ?? explicitTicket;
   const prNum = pr?.number ?? (s.pr && s.prRepo ? s.pr : null);
-  if (!ticketId && !prNum && s.view !== "review") return null;
+  // Behind the repo's base branch is normal and not worth a chip; behind a
+  // stacked parent or origin means work to pull in (#33).
+  const st = s.stack;
+  const behindParent = st?.stacked ? st.behindParent : 0;
+  const behindOrigin = st?.behindOrigin ?? 0;
+  if (!ticketId && !prNum && s.view !== "review" && !behindParent && !behindOrigin) return null;
 
   const check =
     pr?.checks === "passing"
@@ -88,6 +93,22 @@ export function WorkLinkChips({
             PR #{prNum}
           </span>
         ))}
+      {behindParent > 0 && (
+        <span
+          className="link-chip behind"
+          title={`${st!.parent} has ${behindParent} commit${behindParent === 1 ? "" : "s"} this branch doesn't`}
+        >
+          base +{behindParent}
+        </span>
+      )}
+      {behindOrigin > 0 && (
+        <span
+          className="link-chip behind"
+          title={`origin has ${behindOrigin} commit${behindOrigin === 1 ? "" : "s"} on this branch that this checkout doesn't`}
+        >
+          origin +{behindOrigin}
+        </span>
+      )}
     </>
   );
   return wrapClass ? <span className={wrapClass}>{chips}</span> : chips;

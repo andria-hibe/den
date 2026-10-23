@@ -38,7 +38,8 @@ function PrCard({
     pr.review === "approved" &&
     !pr.isDraft &&
     pr.checks !== "failing" &&
-    pr.checks !== "pending";
+    pr.checks !== "pending" &&
+    pr.mergeable !== "CONFLICTING";
   return (
     <div
       className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}${accent ? " session-linked" : ""}`}
@@ -70,6 +71,14 @@ function PrCard({
           {pr.repo.split("/")[1] ?? pr.repo} #{pr.number}
         </span>
         {pr.isDraft && <span className="pr-badge draft">draft</span>}
+        {pr.mergeable === "CONFLICTING" && (
+          <span
+            className="pr-badge conflicts"
+            title={`conflicts with ${pr.baseBranch ?? "its base"}, so CI won't start`}
+          >
+            conflicts
+          </span>
+        )}
         <a
           className="ticket-ext"
           href={pr.url}

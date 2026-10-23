@@ -13,6 +13,8 @@ import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
 import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
+import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
+import { repoBaseName } from "./git.ts";
 import { denRepo } from "./fs.ts";
 import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
@@ -642,6 +644,8 @@ export interface SessionMeta {
   pos: number;
   /** Keeps a handover: the notepad instruction and the idle refresh (#11). */
   handover: boolean;
+  /** Where the branch stands against its parent and origin (#33). */
+  stack: StackStatus | null;
   /** A review pane the developer has taken on: it may commit, push, and post. */
   owned: boolean;
 }
@@ -921,6 +925,7 @@ class DenSession {
       pos: this.pos,
       handover: this.handover,
       owned: this.owned,
+      stack: stackStatus(this.id),
     };
   }
 
@@ -1560,6 +1565,14 @@ class SessionManager {
     if (!main || main.shell || main.look || main.view === "review") return;
     tellPane(groupId, message);
     main.nudge();
+  }
+
+  /** The panes whose branches den follows for stacks: running workspaces and
+   * my-PR panes. */
+  stackTargets(baseOverride: string | null): StackTarget[] {
+    return [...this.sessions.values()]
+      .filter((s) => s.role === "main" && !s.shell && !s.look && s.view !== "review" && s.status === "running")
+      .map((s) => ({ id: s.id, groupId: s.groupId, cwd: s.cwd, base: repoBaseName(s.cwd, baseOverride) }));
   }
 
   /** Tell every session working on a PR: its my-PR or owned review pane, and

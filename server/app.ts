@@ -40,6 +40,7 @@ import {
 import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./apprun.ts";
 import { finishMarker, parseFinish, type TabRunLabel } from "./tabRun.ts";
 import { ciFinishes, ciMessage } from "./ciWatch.ts";
+import { notePrs, refreshStacks } from "./stack.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -783,6 +784,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const lastChecks = new Map<string, CheckState>();
   const prCache = ttlCache<PrBuckets>(30_000, async () => {
     const buckets = await getMyPullRequests();
+    notePrs([...buckets.authored, ...buckets.reviewRequested]);
     for (const done of ciFinishes(lastChecks, [...buckets.authored, ...buckets.reviewRequested])) {
       sessions.tellAboutPr(done.pr, ciMessage(done));
     }
@@ -940,6 +942,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   await app.listen({ port: opts.port ?? 4321, host });
   const port = (app.server.address() as AddressInfo).port;
+
+  // Stacked branches (#33): a fetch per repo and a few git calls per
+  // workspace, once a minute.
+  let stacking = false;
+  const stackTimer = setInterval(() => {
+    if (stacking) return;
+    stacking = true;
+    refreshStacks(sessions.stackTargets(baseBranchOverride()), (groupId, msg) => sessions.tell(groupId, msg))
+      .catch((err) => logWarn("stack.refresh", err))
+      .finally(() => (stacking = false));
+  }, 60_000);
+  stackTimer.unref?.();
+  app.addHook("onClose", async () => clearInterval(stackTimer));
   return {
     port,
     url: `http://${host}:${port}`,

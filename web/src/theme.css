@@ -1254,6 +1254,11 @@ body {
   color: #1f5a42;
   border-color: transparent;
 }
+.pr-badge.conflicts {
+  background: var(--pink);
+  color: #7a2a45;
+  border-color: transparent;
+}
 .pr-badge.review-changes_requested {
   background: var(--pink);
   color: #7a2a45;
@@ -2196,6 +2201,10 @@ body {
 .link-chip.pr.failing {
   border-color: var(--pink-deep);
   color: var(--pink-deep);
+}
+.link-chip.behind {
+  background: var(--peach);
+  color: #6b4a2a;
 }
 .link-chip.review {
   background: var(--peach);

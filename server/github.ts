@@ -29,6 +29,11 @@ export interface PullRequest {
   url: string;
   repo: string; // nameWithOwner, e.g. "owner/repo"
   branch?: string; // headRefName
+  /** The branch the PR merges into (baseRefName): another PR's branch when
+   * it's stacked. */
+  baseBranch?: string;
+  /** GitHub's merge check. CONFLICTING keeps CI from starting at all. */
+  mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
   isDraft: boolean;
   updatedAt: string;
   checks: CheckState;
@@ -102,7 +107,7 @@ const PR_SEARCH_QUERY =
     .map(
       ([alias, q]) =>
         `${alias}:search(type:ISSUE,first:${SEARCH_LIMIT},query:"${q}"){issueCount nodes{` +
-        `... on PullRequest{number title url isDraft updatedAt headRefName reviewDecision ` +
+        `... on PullRequest{number title url isDraft updatedAt headRefName baseRefName mergeable reviewDecision ` +
         `author{login} repository{nameWithOwner}}}}`,
     )
     .join(" ") +
@@ -115,6 +120,8 @@ export interface SearchNode {
   isDraft: boolean;
   updatedAt: string;
   headRefName?: string | null;
+  baseRefName?: string | null;
+  mergeable?: PullRequest["mergeable"] | null;
   reviewDecision?: string | null;
   author?: { login: string } | null;
   repository: { nameWithOwner: string };
@@ -274,6 +281,8 @@ async function toPullRequest(n: SearchNode): Promise<PullRequest> {
     url: n.url,
     repo,
     branch,
+    baseBranch: n.baseRefName ?? undefined,
+    mergeable: n.mergeable ?? undefined,
     isDraft: n.isDraft,
     updatedAt: n.updatedAt,
     checks: checks.state,
@@ -307,16 +316,18 @@ async function mapLimit<T, R>(
 
 /**
  * Does one of your own PRs need your action? When a colleague requested
- * changes, or CI is failing (drafts included: failing checks on your WIP are
- * still yours to fix).
+ * changes, CI is failing (drafts included: failing checks on your WIP are
+ * still yours to fix), or it conflicts with its base, which keeps CI from
+ * running at all.
  */
-export function authoredAttention(p: Pick<PullRequest, "review" | "checks">): {
+export function authoredAttention(p: Pick<PullRequest, "review" | "checks" | "mergeable">): {
   needsAttention: boolean;
   attentionReason?: string;
 } {
   const reasons: string[] = [];
   if (p.review === "changes_requested") reasons.push("changes requested");
   if (p.checks === "failing") reasons.push("checks failing");
+  if (p.mergeable === "CONFLICTING") reasons.push("merge conflicts with its base");
   return reasons.length
     ? { needsAttention: true, attentionReason: reasons.join(" · ") }
     : { needsAttention: false };

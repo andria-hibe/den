@@ -115,6 +115,16 @@ WebSocket; everything else is REST.
   pane and any workspace whose checkout is on that branch. Panes are told
   this (`denWatchRule`) so they stop keeping a `gh pr checks --watch` alive.
   It only runs while the UI polls the PR list (every 60s).
+  Third: **stacked branches** (issue 33) - `server/stack.ts`, on a 60s timer
+  in `startServer`: one `git fetch` per repo, then per workspace/my-PR pane
+  the parent (its PR's `baseRefName`, which `searchPrs` now fetches with
+  `mergeable`, else the repo base) and how far HEAD is behind it and behind
+  `origin/<branch>`. That's `meta().stack`; `WorkLinkChips` shows `base +N`
+  only for a **stacked** parent (behind the repo base is normal) and
+  `origin +N`. When a stacked parent's tip moves and the branch is behind,
+  the pane is told (`parentMovedMessage`). A PR that conflicts with its base
+  gets a `conflicts` badge and counts toward your PR's attention, since
+  GitHub won't start CI on it.
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot). Rows carry a **`pos`** rail sort key

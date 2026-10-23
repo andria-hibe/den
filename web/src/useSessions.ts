@@ -69,6 +69,7 @@ export function useSessions({
                   status: s.status,
                   color: s.color,
                   attention: s.attention,
+                  stack: s.stack,
                 }
               : loc;
           }),
