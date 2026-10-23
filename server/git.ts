@@ -142,6 +142,21 @@ function branchExists(repo: string, branch: string): boolean {
   }
 }
 
+/** Fetch `branch` from origin; true when origin has it. Only a successful
+ * fetch counts, so a stale `origin/<branch>` left by a deleted remote branch
+ * is never built on. */
+function fetchRemoteBranch(repo: string, branch: string): boolean {
+  try {
+    execFileSync("git", ["-C", repo, "fetch", "origin", branch, "--quiet"], {
+      timeout: 30000,
+      stdio: "ignore",
+    });
+    return hasRef(repo, `refs/remotes/origin/${branch}`);
+  } catch {
+    return false; // not on origin, offline, or no origin
+  }
+}
+
 /** Branch names to try as the base for a new branch, most trusted first. The
  * override (see `baseBranchOverride` in fs.ts) exists because the branch a
  * team works off is not always the one GitHub calls the default. Invalid
@@ -242,7 +257,8 @@ export type WorkEnv = "local" | "worktree";
  * if needed, and return the directory to open Claude in. `stackOn` starts a
  * new branch from another ticket's branch (#26), using the local ref because
  * that ticket usually has unpushed commits. An existing branch is reused
- * as it is. */
+ * as it is, and one that exists only on origin is continued from there
+ * (#31), since a fresh branch under the same name would collide on push. */
 export function prepareWork(
   repo: string,
   branch: string,
@@ -264,6 +280,10 @@ export function prepareWork(
     return stackOn;
   };
 
+  const onOrigin = !exists && fetchRemoteBranch(repo, branch);
+  const newBranch = () =>
+    onOrigin ? ["-b", branch, "--track", `origin/${branch}`] : ["-b", branch, base()];
+
   if (env === "worktree") {
     const leaf = branch.replace(/[/\\]/g, "-");
     const dir = join(repo, DEN_WORKTREE_DIR, leaf);
@@ -271,7 +291,7 @@ export function prepareWork(
     if (exists) {
       git(repo, ["worktree", "add", dir, branch]);
     } else {
-      git(repo, ["worktree", "add", dir, "-b", branch, base()]);
+      git(repo, ["worktree", "add", dir, ...newBranch()]);
     }
     return { cwd: dir };
   }
@@ -279,7 +299,7 @@ export function prepareWork(
   if (exists) {
     git(repo, ["checkout", branch]);
   } else {
-    git(repo, ["checkout", "-b", branch, base()]);
+    git(repo, ["checkout", ...newBranch()]);
   }
   return { cwd: repo };
 }
