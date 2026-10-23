@@ -64,7 +64,9 @@ WebSocket; everything else is REST.
 - `server/sessions.ts` — `SessionManager` + `DenSession`: owns long-lived PTYs
   (independent of any WS), 256KB scrollback ring (replays on attach), OSC
   title capture, attention (bell) flag, **workspace grouping** (groupId/role),
-  and ticket/PR/look/view metadata. Spawns `claude -n <name> [flags] [prompt]`.
+  and ticket/PR/look/view metadata. Every pane gets a short per-workspace
+  `AGENT_BROWSER_SOCKET_DIR` (`socketDir`, `/tmp/den-<id>`, removed with the
+  workspace; issue 40), since a socket under a worktree path is too long. Spawns `claude -n <name> [flags] [prompt]`.
   `reviewInstruction` asks a review pane for **two** deliverables: the reading
   guide (`~/.den/review/<groupId>.guide.md`, grouped by purpose) and the review
   (the notepad, filed per file). **Every Claude pane gets a system prompt from

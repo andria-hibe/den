@@ -50,6 +50,15 @@ export const notepadPath = (groupId: string) => {
   return join(PROGRESS_DIR, `${groupId}.md`);
 };
 
+/** A short per-workspace directory for Unix sockets. A worktree path is too
+ * long to hold one: a socket path is capped at 104 bytes on macOS, and
+ * agent-browser's daemon failed under it with "socket path would be 136
+ * bytes" (#40). */
+export const socketDir = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join("/tmp", `den-${groupId.slice(0, 8)}`);
+};
+
 /** den's copy of a ticket workspace's ticket section (#39). */
 const ticketCopyPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
@@ -727,7 +736,11 @@ class DenSession {
         cols: 80,
         rows: 24,
         cwd: this.cwd || os.homedir(),
-        env: { ...process.env, TERM: "xterm-256color" },
+        env: {
+          ...process.env,
+          TERM: "xterm-256color",
+          AGENT_BROWSER_SOCKET_DIR: process.env.AGENT_BROWSER_SOCKET_DIR ?? socketDir(this.groupId),
+        },
       });
     } catch (err) {
       // A missing binary or a bad cwd: show the pane as exited rather than
@@ -1408,6 +1421,7 @@ class SessionManager {
     try {
       rmSync(notepadPath(groupId), { force: true });
       rmSync(ticketCopyPath(groupId), { force: true });
+      rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
