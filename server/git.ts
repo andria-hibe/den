@@ -284,7 +284,39 @@ export function prepareWork(
   return { cwd: repo };
 }
 
-/** Check out a PR with `gh pr checkout`, which handles forks. */
+function ghPrCheckout(dir: string, ghRepo: string, number: number): void {
+  execFileSync("gh", ["pr", "checkout", String(number), "--repo", ghRepo], {
+    cwd: dir,
+    timeout: 60000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+/** The PR's head commit on GitHub, or null when gh can't say. */
+function prHeadOid(ghRepo: string, number: number): string | null {
+  try {
+    const oid = execFileSync(
+      "gh",
+      ["pr", "view", String(number), "--repo", ghRepo, "--json", "headRefOid", "--jq", ".headRefOid"],
+      { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "pipe"] },
+    ).trim();
+    return /^[0-9a-f]{40}$/.test(oid) ? oid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Thrown when a checkout doesn't hold the PR's head commit, so a session
+ * never opens on code that isn't the PR (#30). */
+export class NotAtPrHeadError extends Error {
+  constructor(readonly cwd: string) {
+    super("not_at_pr_head");
+  }
+}
+
+/** Check out a PR with `gh pr checkout`, which handles forks, and confirm the
+ * checkout holds the PR's head commit. Ahead of it is fine: your own PR's
+ * worktree can carry commits you haven't pushed. */
 export function checkoutPr(
   repoDir: string,
   ghRepo: string,
@@ -295,26 +327,35 @@ export function checkoutPr(
   // A non-integer PR number would flow into the worktree path (`pr-${number}`)
   // and the `gh` positional — reject it before either.
   if (!Number.isInteger(number) || number <= 0) throw new Error("invalid_pr");
-  if (branch) {
-    const existingWt = worktreeForBranch(repoDir, branch);
-    if (existingWt) return { cwd: existingWt };
-  }
-  if (env === "worktree") {
-    const dir = join(repoDir, DEN_WORKTREE_DIR, `pr-${number}`);
-    if (!existsSync(dir)) {
-      git(repoDir, ["worktree", "add", "--detach", dir]);
+  let cwd: string;
+  const existingWt = branch ? worktreeForBranch(repoDir, branch) : null;
+  if (existingWt) {
+    cwd = existingWt;
+    try {
+      // Brings a reused checkout up to the PR's latest push. It fails on a
+      // branch that has diverged, which the head check below then reports.
+      ghPrCheckout(cwd, ghRepo, number);
+    } catch (err) {
+      logWarn("git.checkoutPr(reuse)", err);
     }
-    execFileSync("gh", ["pr", "checkout", String(number), "--repo", ghRepo], {
-      cwd: dir,
-      timeout: 60000,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { cwd: dir };
+  } else if (env === "worktree") {
+    cwd = join(repoDir, DEN_WORKTREE_DIR, `pr-${number}`);
+    if (!existsSync(cwd)) {
+      git(repoDir, ["worktree", "add", "--detach", cwd]);
+    }
+    ghPrCheckout(cwd, ghRepo, number);
+  } else {
+    cwd = repoDir;
+    ghPrCheckout(cwd, ghRepo, number);
   }
-  execFileSync("gh", ["pr", "checkout", String(number), "--repo", ghRepo], {
-    cwd: repoDir,
-    timeout: 60000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  return { cwd: repoDir };
+  const head = prHeadOid(ghRepo, number);
+  if (head) {
+    try {
+      // Also fails when the commit was never fetched.
+      git(cwd, ["merge-base", "--is-ancestor", head, "HEAD"]);
+    } catch {
+      throw new NotAtPrHeadError(cwd);
+    }
+  }
+  return { cwd };
 }

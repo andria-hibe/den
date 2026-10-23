@@ -32,7 +32,7 @@ import {
 import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
 import { listPastSessions } from "./discover.ts";
 import {
-  prepareWork, checkoutPr, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
+  prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
   repoBaseName, isValidBranch,
   type WorkEnv,
 } from "./git.ts";
@@ -298,7 +298,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         );
       if (existing) return existing;
     }
-    if (body.branch && body.env) {
+    // A PR session's branch is the PR's head, which only checkoutPr can check
+    // out: prepareWork would create it fresh off the base branch (#30).
+    if (body.branch && body.env && !body.pr) {
       try {
         if (body.base && !isValidBranch(body.base)) {
           reply.code(400);
@@ -331,8 +333,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         body.cwd = cwd;
       } catch (err) {
         logWarn("checkoutPr", err);
+        if (err instanceof NotAtPrHeadError) {
+          reply.code(409);
+          return {
+            error: "not_at_pr_head",
+            message: `${err.cwd} doesn't have the PR's latest commit. Update or remove that checkout, then try again.`,
+          };
+        }
+        // gh's last stderr line says why ("Not possible to fast-forward").
+        const why = String((err as { stderr?: unknown }).stderr ?? "").trim().split("\n").pop();
         reply.code(500);
-        return { error: "git_failed", message: "Could not check out the PR." };
+        return { error: "git_failed", message: why ? `Could not check out the PR: ${why}` : "Could not check out the PR." };
       }
       // So the whole change is in front of the session without a `gh pr diff`
       // round-trip of its own.

@@ -138,7 +138,10 @@ WebSocket; everything else is REST.
   branch, then `master`/`main`, preferring `origin/<name>` over a stale local
   branch; pure `baseCandidates`/`pickBaseRef` are unit-tested. runn is based on
   **`development`**, so this matters: den used to branch runn tickets off
-  `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local),
+  `origin/master`), `checkoutPr` (`gh pr checkout` into a worktree or local; then it checks
+  the checkout holds the PR's `headRefOid` and refuses with
+  `NotAtPrHeadError` if not, issue 30 - a PR session never goes through
+  `prepareWork`, which would create the PR's branch fresh off the base),
   `worktreeForBranch` (reuse an existing worktree instead of erroring), and
   `listWorktrees` / pure `parseWorktrees` (every checkout of the work repo, its
   own working copy first — behind `GET /api/git/worktrees`, which the New
