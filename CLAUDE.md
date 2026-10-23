@@ -78,7 +78,10 @@ WebSocket; everything else is REST.
   replies here rather than posting) for a my-PR pane, `lookInstruction` for a
   look pane. **`houseRules()`** is appended to every pane that can commit or
   open a PR: plain ASCII in anything that leaves the machine, and **every PR
-  opens as a draft** (`gh pr create --draft`, never `gh pr ready`). There is
+  opens as a draft** (`gh pr create --draft`, never `gh pr ready`). A commit
+  that fails to sign is retried with the sandbox off, then after asking the
+  developer to unlock the signer, never handed over as a script (issue 32:
+  runn's sandbox settings block 1Password's `op-ssh-sign`). There is
   no deny backstop for the draft rule — permission patterns are prefix
   matches, so `Bash(gh pr create:*)` can't say "only with `--draft`" — so
   the instruction carries it alone. **`denIssueRule()`** goes on **every**

@@ -185,7 +185,9 @@ export function progressInstruction(file: string): string {
 /** Rules for anything a session writes that leaves this machine, for every
  * pane that can commit or open a PR. The draft rule (#24) has no deny
  * backstop: permission patterns are prefix matches, so `Bash(gh pr create:*)`
- * can't say "only with --draft". */
+ * can't say "only with --draft". The signing rule (#32) is there because a
+ * work repo's sandbox settings can block 1Password's signer, and sessions
+ * took the failure to mean only the developer's terminal can sign. */
 export function houseRules(): string {
   return (
     `House rules for anything you write that leaves this machine (commit ` +
@@ -196,7 +198,12 @@ export function houseRules(): string {
     `an emoji.\n` +
     `2. Open every pull request as a draft: always pass --draft to ` +
     `\`gh pr create\`. Never run \`gh pr ready\` or mark a PR ready for review ` +
-    `any other way. The developer decides when reviewers are notified.`
+    `any other way. The developer decides when reviewers are notified.\n` +
+    `3. If a commit fails with a signing error (such as "1Password: failed to ` +
+    `fill whole buffer"), the Bash sandbox may be blocking the signing agent: ` +
+    `run the same commit again with the sandbox disabled. If that fails too, ` +
+    `ask the developer to unlock or approve the signing agent, then retry the ` +
+    `commit yourself. Don't hand them a script to run instead.`
   );
 }
 
