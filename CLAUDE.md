@@ -109,6 +109,12 @@ WebSocket; everything else is REST.
   `finishMarker` (`server/tabRun.ts`) and watches the tab (`DenSession.watch`,
   not a viewer, so the bell still nudges) for the printed exit status, then
   tells the pane it started and how it ended, with its last lines.
+  Second: **CI watch** (issue 36) - the PR list's fetch (`prCache` in
+  `app.ts`) runs `ciFinishes` (`server/ciWatch.ts`) and, for each PR whose
+  checks went pending -> pass/fail, `sessions.tellAboutPr` tells its my-PR
+  pane and any workspace whose checkout is on that branch. Panes are told
+  this (`denWatchRule`) so they stop keeping a `gh pr checks --watch` alive.
+  It only runs while the UI polls the PR list (every 60s).
 - `server/store.ts` — `better-sqlite3` at `~/.den/den.db` (sessions + a settings
   table for the Linear key). Session rows are for the rail; live PTYs don't
   survive a restart (marked exited on boot). Rows carry a **`pos`** rail sort key

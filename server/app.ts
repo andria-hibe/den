@@ -19,6 +19,7 @@ import {
   type ReviewComment,
   type ReviewEvent,
   type PrBuckets,
+  type CheckState,
 } from "./github.ts";
 import {
   getAssignedIssues,
@@ -38,6 +39,7 @@ import {
 } from "./git.ts";
 import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./apprun.ts";
 import { finishMarker, parseFinish, type TabRunLabel } from "./tabRun.ts";
+import { ciFinishes, ciMessage } from "./ciWatch.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -778,7 +780,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- GitHub PRs (cached) ---
-  const prCache = ttlCache<PrBuckets>(30_000, getMyPullRequests);
+  const lastChecks = new Map<string, CheckState>();
+  const prCache = ttlCache<PrBuckets>(30_000, async () => {
+    const buckets = await getMyPullRequests();
+    for (const done of ciFinishes(lastChecks, [...buckets.authored, ...buckets.reviewRequested])) {
+      sessions.tellAboutPr(done.pr, ciMessage(done));
+    }
+    return buckets;
+  });
   app.get("/api/github/prs", async (req, reply) => {
     const fresh = (req.query as { refresh?: string })?.refresh === "1";
     try {

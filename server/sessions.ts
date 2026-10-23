@@ -292,8 +292,20 @@ export function commentRules(): string {
 }
 
 /** The system prompt for a Claude workspace's main pane. */
+/** What den watches for a pane and tells it about (see inbox.ts), so the
+ * session doesn't keep its own background watch alive. */
+export function denWatchRule(): string {
+  return (
+    `den watches CI on the pull request for your branch and tells you when ` +
+    `the checks finish, as "Messages from den" on your next prompt or tool ` +
+    `call. Don't start a background \`gh pr checks --watch\` for that. If ` +
+    `you're only waiting on CI, end your turn: den nudges the developer when ` +
+    `it finishes.`
+  );
+}
+
 export function workspaceInstruction(notepad: string): string {
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${denIssueRule()}`;
 }
 
 /** The system prompt for a my-PR pane (#5). No notepad: the layout has
@@ -314,7 +326,7 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${denIssueRule()}`
   );
 }
 
@@ -1252,7 +1264,7 @@ class SessionManager {
     // the notepad instruction (the notepad stays for the developer's own use).
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
-      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denIssueRule()}`;
+      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${denIssueRule()}`;
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [
@@ -1548,6 +1560,17 @@ class SessionManager {
     if (!main || main.shell || main.look || main.view === "review") return;
     tellPane(groupId, message);
     main.nudge();
+  }
+
+  /** Tell every session working on a PR: its my-PR or owned review pane, and
+   * any workspace whose checkout is on the PR's branch. */
+  tellAboutPr(pr: { repo: string; number: number; branch?: string }, message: string): void {
+    for (const s of this.sessions.values()) {
+      if (s.role !== "main" || s.shell || s.status !== "running") continue;
+      const onPr = s.pr === pr.number && s.prRepo === pr.repo;
+      const onBranch = !s.look && !s.view && !!pr.branch && gitBranch(s.cwd) === pr.branch;
+      if (onPr || onBranch) this.tell(s.groupId, message);
+    }
   }
 
   readNotepad(groupId: string): string {
