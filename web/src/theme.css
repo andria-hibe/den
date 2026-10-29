@@ -2118,6 +2118,12 @@ body {
   display: inline-flex;
   align-items: center;
 }
+.fox-dot.icon-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
 
 /* A session pinned to stay up through Clock out. */
 .restart-btn.pinned {

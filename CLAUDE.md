@@ -284,7 +284,7 @@ WebSocket; everything else is REST.
   continues its paragraph or `<li>`** instead of starting a new block, because
   the review and its guide are hard-wrapped prose — `NEW_BLOCK` keeps a numbered
   list from being swallowed; `markdown.test.ts`), `theme.css`. `shared/colors.ts` holds the
-  9-pastel palette both the server (auto-assign) and the picker import.
+  13-colour palette both the server (auto-assign) and the picker import.
   - `DiffView.tsx` exports `classify(line)` (diff-line CSS class), `DiffHunk`
     (renders one `diff_hunk`, marks the anchored last line), `lineNumbers(lines)`
     (old/new file line numbers walked from each `@@ -a,b +c,d @@` header — only
@@ -623,6 +623,12 @@ developer's day across the other sessions instead of them being the glue.
   GitHub split into Review requested / My open PRs (`den.prTab`); a tab
   shows "!" when something in it needs you. Fox is drawn with `PixelFox`
   in place of a colour dot (rail, header, title chip): there's only one.
+  In Burrow every session writing code is drawn as a kit whose scarf is the
+  session's colour, and a review session as Owl (`sessionIcon` in App,
+  `Critter bust` crops to head and scarf so the colour reads at 2x in the
+  rail); shells and look panes keep the dot. The palette is andria's 13
+  colours in `shared/colors.ts`; `RETIRED_COLORS` maps the old 9 to their
+  nearest, and `store.ts` recolours old rows on every boot (idempotent).
 - **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
   Linear notifications (`getInboxNotifications`, a query of its own so a
   schema surprise can't break the ticket list; newest first) and GitHub

@@ -247,3 +247,11 @@ export const CREW: CrewMember[] = [
   { kind: "wolf", name: "Wolf", job: "Checks security: auth gaps, leaked secrets, injection, using the repo's own security review", model: "Opus", built: true },
   { kind: "owl", name: "Owl", job: "Reviews code (colleagues' PRs, and a kit's own PR before you look) and advises kits and Fox on hard problems", model: "Opus, or Fable for the hardest when the week has room", built: true },
 ];
+
+/** Head-and-shoulders crops for small places (the rail, headers), where a
+ * whole 18x19 sprite at 1x is too small to tell a kit's scarf colour:
+ * [first row, end row, first col, end col]. */
+export const BUSTS: Partial<Record<CritterKind, [number, number, number, number]>> = {
+  kit: [3, 14, 1, 16],
+  owl: [0, 11, 0, 16],
+};

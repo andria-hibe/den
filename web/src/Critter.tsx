@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { rasterize } from "./Fox.tsx";
-import { CRITTERS, CRITTER_PALETTE, type CritterKind } from "./critterSprites.ts";
+import { BUSTS, CRITTERS, CRITTER_PALETTE, type CritterKind } from "./critterSprites.ts";
 
 /** `a` moved `t` of the way to `b`; both "#rrggbb". */
 function mix(a: string, b: string, t: number): string {
@@ -13,16 +13,23 @@ function mix(a: string, b: string, t: number): string {
   );
 }
 
+function crop(grid: string[], [r0, r1, c0, c1]: [number, number, number, number]): string[] {
+  return grid.slice(r0, r1).map((row) => row.slice(c0, c1));
+}
+
 /** One of Burrow's worker animals, drawn like the Fox: a native-res canvas
  * scaled by a whole number with image-rendering:pixelated, so it stays crisp. */
 export function Critter({
   kind,
   size = 38,
   tint,
+  bust = false,
   className,
 }: {
   kind: CritterKind;
   size?: number;
+  /** Draw only the head and shoulders (BUSTS), for small places. */
+  bust?: boolean;
   /** A kit's scarf colour: its session's colour. */
   tint?: string;
   className?: string;
@@ -30,10 +37,10 @@ export function Critter({
   const { src, cols, rows } = useMemo(
     () =>
       rasterize(
-        CRITTERS[kind],
+        bust && BUSTS[kind] ? crop(CRITTERS[kind], BUSTS[kind]) : CRITTERS[kind],
         tint ? { ...CRITTER_PALETTE, X: tint, Y: mix(tint, CRITTER_PALETTE.D, 0.4) } : CRITTER_PALETTE,
       ),
-    [kind, tint],
+    [kind, tint, bust],
   );
   const scale = Math.max(1, Math.round(size / rows));
   return (

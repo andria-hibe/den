@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react";
-import { PixelFox } from "./PixelFox.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
 
@@ -22,6 +21,7 @@ export function SessionRail({
   onCleanup,
   onReorder,
   renderLinks,
+  renderIcon,
 }: {
   rail: SessionMeta[];
   activeId: string | null;
@@ -43,6 +43,8 @@ export function SessionRail({
   onReorder: (groupIds: string[]) => void;
   /** The ticket/PR chips for a row (App owns the issue/PR data they match). */
   renderLinks: (s: SessionMeta) => ReactNode;
+  /** A sprite in place of the colour dot (Fox, and Burrow's kits and Owl), or null. */
+  renderIcon: (s: SessionMeta) => ReactNode;
 }) {
   // Drag state is view-local: the index being dragged and the row it's over.
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -108,10 +110,9 @@ export function SessionRail({
             }}
             title="drag to reorder (or alt+up/down)"
           >
-            {s.view === "manager" ? (
-              // There's only ever one Fox, so it's drawn rather than coloured.
+            {renderIcon(s) ? (
               <span className="fox-dot" style={{ opacity: s.status === "exited" ? 0.4 : 1 }}>
-                <PixelFox size={15} />
+                {renderIcon(s)}
               </span>
             ) : (
               <span

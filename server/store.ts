@@ -3,6 +3,7 @@ import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { sqliteBinding } from "./nativeBinding.ts";
 import { DATA_DIR } from "./edition.ts";
+import { RETIRED_COLORS } from "../shared/colors.ts";
 
 // Session metadata and scrollback, so the rail and recent output survive a
 // server restart. Live PTYs don't.
@@ -116,6 +117,9 @@ for (const col of [
 // that adds the column — a dragged row legitimately holds pos 0, so re-running
 // this would throw the saved order away every restart.
 if (added.has("pos")) db.exec(`UPDATE sessions SET pos = createdAt`);
+// Sessions from before the palette change take its nearest new colour.
+const recolour = db.prepare(`UPDATE sessions SET color = ? WHERE lower(color) = ?`);
+for (const [old, now] of Object.entries(RETIRED_COLORS)) recolour.run(now, old);
 
 const stmts = {
   insert: db.prepare(

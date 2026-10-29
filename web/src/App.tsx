@@ -368,20 +368,38 @@ export function App() {
     }
   };
 
+  // A sprite in place of a session's colour dot: Fox (there's only one), and
+  // in Burrow a kit for each session writing code, its scarf in the
+  // session's colour, and Owl for a review.
+  const sessionIcon = (s: SessionMeta, size: number) => {
+    if (s.view === "manager") return <PixelFox size={15} />;
+    if (!burrow || s.shell || s.look) return null;
+    if (s.view === "review") return <Critter kind="owl" size={size} bust />;
+    return <Critter kind="kit" size={size} tint={s.color} bust />;
+  };
+
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       {s.view === "manager" ? (
-        <span className="fox-dot">
-          <PixelFox size={15} />
-        </span>
+        <span className="fox-dot">{sessionIcon(s, 15)}</span>
       ) : (
         <span className="color-picker">
-          <button
-            className="dot dot-btn"
-            style={{ background: s.color }}
-            title="recolour"
-            onClick={() => setColorPickerOpen((o) => !o)}
-          />
+          {sessionIcon(s, 22) ? (
+            <button
+              className="fox-dot icon-btn"
+              title="recolour (the scarf)"
+              onClick={() => setColorPickerOpen((o) => !o)}
+            >
+              {sessionIcon(s, 22)}
+            </button>
+          ) : (
+            <button
+              className="dot dot-btn"
+              style={{ background: s.color }}
+              title="recolour"
+              onClick={() => setColorPickerOpen((o) => !o)}
+            />
+          )}
           {colorPickerOpen && (
             <span className="swatches">
               {COLORS.map((c) => (
@@ -612,10 +630,8 @@ export function App() {
         </span>
         {active && (
           <span className="topbar-title" title={active.name}>
-            {active.view === "manager" ? (
-              <span className="fox-dot">
-                <PixelFox size={15} />
-              </span>
+            {sessionIcon(active, 22) ? (
+              <span className="fox-dot">{sessionIcon(active, 22)}</span>
             ) : (
               <span className="dot" style={{ background: active.color }} />
             )}
@@ -696,6 +712,7 @@ export function App() {
       {/* Left: sessions */}
       <SessionRail
         rail={rail}
+        renderIcon={(s) => sessionIcon(s, 22)}
         activeId={activeId}
         width={railW}
         editingId={editingId}
