@@ -22,9 +22,11 @@ npm run smoke          # end-to-end: real server + UI in headless Electron (node
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
 > typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
 > staged copy into `/Applications/Den.app` → reopen) for when they say so. They
-> control when the running app is replaced. (Swap the bundle in with a staged
-> copy + `mv`, not `ditto` over the running app: the running process keeps its
-> old files.)
+> control when the running app is replaced. **Only replace the bundle while
+> den is quit.** A running den execs node-pty's `spawn-helper` by its path in
+> the bundle on every new terminal, so moving or deleting the bundle under it
+> (as a staged swap did, 2026-10-30) leaves existing panes running but makes
+> every new session and restart exit at once with no output.
 
 **Native modules: no more switching** (issue 20). `node_modules` is always
 built for **Node**, so `npm run dev`, `npm test`, and `npm run smoke` work at
