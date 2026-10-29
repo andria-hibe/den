@@ -24,6 +24,7 @@ import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
+import { DATA_DIR, MANAGER_ENABLED } from "./edition.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 
@@ -44,7 +45,7 @@ function gitBranch(cwd: string): string | null {
 const SCROLLBACK_CAP = 256 * 1024; // characters of terminal output kept per session
 
 // Outside any repo, so a notepad never ends up in a commit.
-const PROGRESS_DIR = join(os.homedir(), ".den", "progress");
+const PROGRESS_DIR = join(DATA_DIR, "progress");
 
 // groupIds are randomUUIDs. Validate before building a path so a crafted id
 // (e.g. "../../etc/foo") can't escape PROGRESS_DIR into arbitrary file read/write.
@@ -73,7 +74,7 @@ const ticketCopyPath = (groupId: string) => {
 };
 
 // A review pane's diff, guide, and settings file; remove() deletes them.
-const REVIEW_DIR = join(os.homedir(), ".den", "review");
+const REVIEW_DIR = join(DATA_DIR, "review");
 const reviewDiffPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.diff`);
@@ -91,7 +92,7 @@ export const reviewGuidePath = (groupId: string) => {
 
 // The Manager pane's day (#46): den's digest, and the Today list it writes.
 // One Manager at a time, so these aren't per group.
-export const MANAGER_DIR = join(os.homedir(), ".den", "manager");
+export const MANAGER_DIR = join(DATA_DIR, "manager");
 /** The Manager pane's name, which is how other sessions see it (ListAgents). */
 export const MANAGER_NAME = "Fox";
 export const TODAY_PATH = join(MANAGER_DIR, "today.md");
@@ -126,7 +127,7 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string) {
         `Edit(${root(todayAbs)})`,
         `Write(${root(todayAbs)})`,
         `Edit(${root(notepadAbs)})`,
-        `Read(${root(join(os.homedir(), ".den"))}/**)`,
+        `Read(${root(DATA_DIR)}/**)`,
         "Bash(gh pr view:*)",
         "Bash(gh pr checks:*)",
         "Bash(git log:*)",
@@ -360,8 +361,10 @@ export function denWatchRule(): string {
   );
 }
 
-export function workspaceInstruction(notepad: string): string {
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${managerRelayRule()}\n${denIssueRule()}`;
+/** `manager`: the app has a Manager pane whose relayed answers count. */
+export function workspaceInstruction(notepad: string, manager = MANAGER_ENABLED): string {
+  const relay = manager ? `\n${managerRelayRule()}` : "";
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`;
 }
 
 /** How a workspace treats the Manager's relayed approvals (#46): the
@@ -391,7 +394,9 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `handover, the developer's pull requests and reviews with CI and review ` +
     `state, their Linear tickets and unread inbox count, and the week's token ` +
     `use. Read it first. The digest's session names are the names ` +
-    `ListAgents shows. Read a session's full handover in ` +
+    `ListAgents shows. ListAgents can also list sessions from other apps, ` +
+    `such as the developer's original den: work only with the sessions in ` +
+    `the digest. Read a session's full handover in ` +
     `${PROGRESS_DIR} only when the digest isn't enough. Prefer the digest to ` +
     `calling gh: GitHub rate-limits den.\n` +
     `Then write the day's list to ${today}, replacing yesterday's, in exactly ` +
@@ -432,7 +437,9 @@ export function myPrInstruction(
   pr: number | null,
   repo: string | null,
   branch: string | null,
+  manager = MANAGER_ENABLED,
 ): string {
+  const relay = manager ? `\n${managerRelayRule()}` : "";
   const which = `pull request${pr ? ` #${pr}` : ""}${repo ? ` (${repo})` : ""}`;
   const where = branch ? `, checked out on branch ${branch}` : "";
   return (
@@ -443,7 +450,7 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${managerRelayRule()}\n${denIssueRule()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`
   );
 }
 

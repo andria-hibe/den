@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { startServer, type RunningServer } from "../server/app.ts";
 import { store } from "../server/store.ts";
 import { MIN_SIZE, parseWindowState, restoreBounds } from "./windowState.ts";
+import { EDITION } from "../server/edition.ts";
+import { EDITION_NAME } from "../shared/edition.ts";
+
+// Burrow runs from the same package as Den in dev (`npm run app:burrow`), so
+// name it here too: the name picks its own userData (window state, storage).
+if (EDITION === "burrow") app.setName("Burrow");
 
 // Bundled to dist/electron/main.cjs (esbuild), so __dirname is dist/electron.
 let server: RunningServer | null = null;
@@ -106,7 +112,7 @@ async function openWindow() {
     minWidth: MIN_SIZE.width,
     minHeight: MIN_SIZE.height,
     backgroundColor: "#fdf6fb",
-    title: "den",
+    title: EDITION_NAME[EDITION],
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
 

@@ -4,11 +4,11 @@
 // handover). Instead den leaves the message in an inbox file, and hooks in
 // the pane's --settings hand it to Claude as context on its next prompt or
 // tool call.
-import os from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { DATA_DIR } from "./edition.ts";
 
-const INBOX_DIR = join(os.homedir(), ".den", "inbox");
+const INBOX_DIR = join(DATA_DIR, "inbox");
 
 const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 

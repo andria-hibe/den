@@ -44,6 +44,26 @@ rebuild) fails with a message naming the command to run (`openDb` in
 `store.ts`). `npm run rebuild:node` remains only as a repair. The installed
 `/Applications/Den.app` is self-contained either way.
 
+## Two apps: Den and Burrow
+
+One codebase builds two apps that install side by side (andria, 2026-10-29):
+**Den** (`npm run pack`, the original) and **Burrow** (`npm run pack:burrow`,
+den v2: the Manager pane, Fox, and its Today list). `server/edition.ts` holds
+`EDITION`, from `process.env.DEN_EDITION` - which `build:electron:burrow`
+bakes in with esbuild's `--define`, so the packaged app needs no env - and
+`DATA_DIR`: `~/.den` for Den, **`~/.burrow`** for Burrow, so Burrow never
+touches the sessions a running Den owns (its db, notepads, review files,
+inbox, limits, manager files all live there). The plan's limits are the
+account's, so `readLimits` reads both apps' dirs (`ALL_DATA_DIRS`).
+`MANAGER_ENABLED` gates the manager routes and the relay rule in pane
+prompts; the UI asks `GET /api/edition` (wordmark, title, Start my day).
+Burrow's builder config is `electron-builder.burrow.yml` (extends the base:
+app id `io.den.burrow`, `release-burrow/`, icon `build/burrow.icns` from
+`ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil`), and
+`main.ts` calls `app.setName("Burrow")` so dev runs (`npm run app:burrow`,
+or `DEN_EDITION=burrow npm run dev`) get their own userData too. A new
+Burrow has no Linear key (it lives in the db): paste it once.
+
 ## Architecture
 
 Node/TypeScript backend runs **inside** Electron's main process (also runnable
@@ -521,7 +541,7 @@ window's start (reset minus 7 days): `early` for the first 10% of the week,
 rate so far if that's before the reset. The hover lists the panes with the
 largest context, the first to start fresh.
 
-**The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
+**The Manager, Fox** (issue 46, den v2, **Burrow only**; plan in the issue). One Claude pane,
 `view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
 developer's day across the other sessions instead of them being the glue.
 - **Start my day** (topbar button while Fox isn't running, and in the Today

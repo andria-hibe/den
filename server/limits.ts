@@ -7,8 +7,9 @@
 import os from "node:os";
 import { join } from "node:path";
 import { readFileSync, readdirSync, statSync, rmSync } from "node:fs";
+import { ALL_DATA_DIRS, DATA_DIR } from "./edition.ts";
 
-const LIMITS_DIR = join(os.homedir(), ".den", "limits");
+const LIMITS_DIR = join(DATA_DIR, "limits");
 
 const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 
@@ -85,17 +86,19 @@ export function parseLimits(json: string, at: number): PlanLimits | null {
   }
 }
 
-/** The newest reading any pane has saved. */
+/** The newest reading any pane has saved, in Den or Burrow: the limits are
+ * the account's, so a pane in either app reports them for both. */
 export function readLimits(): PlanLimits | null {
-  let names: string[];
-  try {
-    names = readdirSync(LIMITS_DIR).filter((n) => n.endsWith(".json"));
-  } catch {
-    return null;
+  const paths: string[] = [];
+  for (const dir of ALL_DATA_DIRS.map((d) => join(d, "limits"))) {
+    try {
+      for (const n of readdirSync(dir)) if (n.endsWith(".json")) paths.push(join(dir, n));
+    } catch {
+      // that app hasn't saved a reading
+    }
   }
-  const files = names
-    .map((n) => {
-      const path = join(LIMITS_DIR, n);
+  const files = paths
+    .map((path) => {
       try {
         return { path, mtime: statSync(path).mtimeMs };
       } catch {

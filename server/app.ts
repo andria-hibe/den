@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
 import { buildDigest } from "./digest.ts";
+import { EDITION, MANAGER_ENABLED } from "./edition.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
 import { managerStartPrompt } from "./manager.ts";
@@ -884,7 +885,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Start my day: write what den knows to the digest, bring up the Manager,
   // and ask it to build the Today list. GitHub and Linear are best effort and
   // bounded, like seedWithWhatExists, so a slow API never holds up the day.
+  // Which app this is (den or Burrow), so the UI shows Burrow's Manager.
+  app.get("/api/edition", async () => ({ edition: EDITION }));
+
   app.post("/api/manager/start", async (_req, reply) => {
+    if (!MANAGER_ENABLED) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
     const [prs, linear] = await Promise.all([

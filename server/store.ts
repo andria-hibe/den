@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
-import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { sqliteBinding } from "./nativeBinding.ts";
+import { DATA_DIR } from "./edition.ts";
 
 // Session metadata and scrollback, so the rail and recent output survive a
 // server restart. Live PTYs don't.
@@ -44,7 +44,7 @@ export interface SessionRow {
 }
 
 // Same location for the CLI and the packaged app; DEN_DB overrides it.
-const DB_PATH = process.env.DEN_DB ?? join(homedir(), ".den", "den.db");
+const DB_PATH = process.env.DEN_DB ?? join(DATA_DIR, "den.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 /** Open the db, turning the native-module mismatch (whose own message names

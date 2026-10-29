@@ -34,6 +34,7 @@ import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 import { canStartFresh } from "../../shared/handover.ts";
+import { EDITION_NAME, type Edition } from "../../shared/edition.ts";
 
 // Modifier shown in the shortcuts hint.
 const MOD =
@@ -104,6 +105,17 @@ export function App() {
   };
 
   const work = useWorkData();
+  // Den or Burrow (den v2): only Burrow has the Manager and its Today list.
+  const [edition, setEdition] = useState<Edition>("den");
+  useEffect(() => {
+    api<{ edition: Edition }>("/api/edition")
+      .then((d) => {
+        setEdition(d.edition);
+        document.title = EDITION_NAME[d.edition];
+      })
+      .catch(() => {});
+  }, []);
+  const burrow = edition === "burrow";
   const prs = work.flatPrs;
   const issues = work.issues;
   // A PR I'm only reviewing that fails CI doesn't count: the server clears its
@@ -508,7 +520,7 @@ export function App() {
           <PixelFox size={30} />
         )}
         <span className="wordmark" tabIndex={0}>
-          den
+          {EDITION_NAME[edition]}
           <div className="shortcuts-pop" role="tooltip">
             <div className="shortcuts-title">keyboard shortcuts</div>
             <ul>
@@ -545,7 +557,7 @@ export function App() {
           </span>
         )}
         <span className="topbar-spacer" />
-        {manager?.status !== "running" && (
+        {burrow && manager?.status !== "running" && (
           <button className="btn topbar-day" onClick={startDay} title="Fox reads every session, your PRs, and Linear, and makes today's list">
             ☀ start my day
           </button>

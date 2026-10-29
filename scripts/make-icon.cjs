@@ -1,11 +1,17 @@
 // Renders the den app icon (our pixel-art fox on a pastel gradient) with
 // Electron so Chromium rasterises it crisply, and writes build/icon.png.
 // Run via: npx electron scripts/make-icon.cjs  (then rebuild icon.icns).
+// ICON_EDITION=burrow writes build/burrow.png on Burrow's mint-to-lilac
+// background instead, so the two apps differ in the dock.
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const SIZE = 1024;
+const BURROW = process.env.ICON_EDITION === "burrow";
+const BACKGROUND = BURROW
+  ? "linear-gradient(135deg,#b8e6d4 0%,#b4d8f6 50%,#cdb4f6 100%)"
+  : "linear-gradient(135deg,#ffc2de 0%,#cdb4f6 55%,#b4d8f6 100%)";
 
 // Keep this fox in sync with web/src/PixelFox.tsx.
 const GRID = [
@@ -66,7 +72,7 @@ app.whenReady().then(async () => {
     .icon{
       width:${SIZE}px;height:${SIZE}px;box-sizing:border-box;
       display:flex;align-items:center;justify-content:center;
-      background:linear-gradient(135deg,#ffc2de 0%,#cdb4f6 55%,#b4d8f6 100%);
+      background:${BACKGROUND};
       border-radius:${Math.round(SIZE * 0.225)}px;
       box-shadow:inset 0 -60px 120px rgba(255,255,255,.30), inset 0 40px 90px rgba(255,255,255,.35);
     }
@@ -76,7 +82,7 @@ app.whenReady().then(async () => {
   await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
   await new Promise((r) => setTimeout(r, 500));
   const img = await win.webContents.capturePage();
-  const out = path.join(__dirname, "..", "build", "icon.png");
+  const out = path.join(__dirname, "..", "build", BURROW ? "burrow.png" : "icon.png");
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, img.toPNG());
   console.log("ICON_WRITTEN " + out);

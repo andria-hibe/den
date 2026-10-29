@@ -118,7 +118,8 @@ describe("managerInstruction", () => {
     const form = 'The developer said in Today at HH:MM: <their words>';
     expect(text).toContain(form);
     expect(managerRelayRule()).toContain(form);
-    expect(workspaceInstruction(NOTEPAD)).toContain(managerRelayRule());
+    expect(workspaceInstruction(NOTEPAD, true)).toContain(managerRelayRule());
+    expect(workspaceInstruction(NOTEPAD, false)).not.toContain(managerRelayRule());
   });
 
   it("is denied the writes it must never make", () => {
