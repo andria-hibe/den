@@ -576,19 +576,15 @@ developer's day across the other sessions instead of them being the glue.
   start prompt's Enter would answer it.
 - Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
   its handover, end, fresh tomorrow, keep-alive pin), then the workers.
-- **The workers are forest animals** (andria, 2026-10-29), so keep any new
-  one in theme: Fox (Manager, Opus), Tanuki (Linear inbox + GitHub
-  notifications, Sonnet), Raccoon (CI failures across PRs, Haiku),
-  Hedgehog (handover refresh at clock out, the session's own model for its
-  cache), Field mouse (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
-  rare escalation, only with room in the week and the developer's OK).
-  Their pixel art is `critterSprites.ts` (18x19 like the fox's SIT, same
-  outline and eyes; `CREW` holds name, job, model, built), drawn by
-  `Critter.tsx` with the fox's `rasterize`. Burrow shows them as the crew
-  strip in the Today header (resting until built, or while Fox is stopped)
-  and the field mouse on the pace chip. In reserve for future workers
-  (andria likes them): a fluffier squirrel (drawn; its grid is in the crew
-  gallery artifact) and a badger (not drawn yet). Den keeps only the fox.
+- **The crew are forest animals** (andria, 2026-10-29), so keep any new
+  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (Fable, rare escalation). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. In reserve: a fluffier squirrel.
+  Pixel art: `critterSprites.ts` (18x19 like the fox's SIT, same outline
+  and eyes; `CREW` holds name, job, model, built), drawn by `Critter.tsx`
+  with the fox's `rasterize` (`tint` recolours a kit's scarf). Burrow shows
+  the crew strip in the Today header (resting until built, or while Fox is
+  stopped) and the field mouse on the pace chip; Den keeps only the fox.
+  Gallery: https://claude.ai/artifact/5Dn81Siu4mP7Qbu6Jg7RBA - update it
+  with any sprite or name change.
 
 ## Features (all built + committed on `master`)
 

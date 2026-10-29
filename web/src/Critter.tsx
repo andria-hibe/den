@@ -7,13 +7,19 @@ import { CRITTERS, CRITTER_PALETTE, type CritterKind } from "./critterSprites.ts
 export function Critter({
   kind,
   size = 38,
+  tint,
   className,
 }: {
   kind: CritterKind;
   size?: number;
+  /** A kit's scarf colour: its session's colour. */
+  tint?: string;
   className?: string;
 }) {
-  const { src, cols, rows } = useMemo(() => rasterize(CRITTERS[kind], CRITTER_PALETTE), [kind]);
+  const { src, cols, rows } = useMemo(
+    () => rasterize(CRITTERS[kind], tint ? { ...CRITTER_PALETTE, X: tint } : CRITTER_PALETTE),
+    [kind, tint],
+  );
   const scale = Math.max(1, Math.round(size / rows));
   return (
     <img

@@ -19,10 +19,19 @@ export const CRITTER_PALETTE: Record<string, string> = {
   M: "#cdb39c", // field mouse
   L: "#bba6e6", // owl
   l: "#9784c8",
-  y: "#ffd27a", // owl beak and feet
+  y: "#ffd27a", // owl beak and feet, wolf eyes
+  O: "#f2a25c", // kit (the fox's orange)
+  G: "#a49cb0", // badger
+  g: "#7d7489",
+  K: "#4a4152", // badger stripes
+  A: "#a98468", // hare
+  a: "#86654f",
+  W: "#9ea3ba", // wolf
+  V: "#757a93",
+  X: "#ffb7d5", // kit's scarf: the session's colour in the app (Critter tint)
 };
 
-export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl";
+export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "kit";
 
 export const CRITTERS: Record<CritterKind, string[]> = {
   tanuki: [
@@ -130,6 +139,90 @@ export const CRITTERS: Record<CritterKind, string[]> = {
     "...DyyD..DyyD.....",
     "...DDDD..DDDD.....",
   ],
+  badger: [
+    "..................",
+    "..DD.........DD...",
+    ".DwKD.......DKwD..",
+    ".DKKKDDDDDDDKKKD..",
+    "..DwKKKwwwKKKwD...",
+    ".DwwKKKwwwKKKwwD..",
+    ".DwwKKKwwwKKKwwD..",
+    ".DwwKwKwwwKwKwwD..",
+    ".DwwKKKwwwKKKwwD..",
+    ".DwwwKKwwwKKwwwD..",
+    "..DwwwKwwwKwwwD...",
+    "..DwwwwwKwwwwwD...",
+    ".DGGGGGGGGGGGGGD..",
+    ".DGgGGGGGGGGGgGD..",
+    "DGGGgGGGGGGGgGGGD.",
+    "DGGGGGGGGGGGGGGGD.",
+    ".DGGGGGGGGGGGGGD..",
+    ".DKKKD.....DKKKD..",
+    ".DDDDD.....DDDDD..",
+  ],
+  hare: [
+    "..DD.......DD.....",
+    ".DAAD.....DAAD....",
+    ".DApD.....DApD....",
+    ".DApD.....DApD....",
+    ".DApAD...DApAD....",
+    "..DAADDDDDAAD.....",
+    "..DAAAAAAAAAD.....",
+    ".DAAAAAAAAAAAD....",
+    ".DAAeeAAAAeeAD....",
+    ".DAAeeAAAAeeAD....",
+    ".DAAAAwwwwAAAD....",
+    "..DAwwwpwwwAD.....",
+    "...DAwwwwwAD......",
+    "..DAAAAAAAAAD.....",
+    ".DAAwwwwwwwAAD.DD.",
+    ".DAwwwwwwwwwADDwwD",
+    ".DAAwwwwwwwAADwwwD",
+    "..DAaAD.DAaADDDDD.",
+    "..DDDD..DDDD......",
+  ],
+  wolf: [
+    "..DD.........DD...",
+    "..DWD.......DWD...",
+    "..DWVD.....DVWD...",
+    "..DWWWDDDDDWWWD...",
+    "..DWWWWVVVWWWWD...",
+    ".DWWWWWWVWWWWWWD..",
+    ".DWWyyWWWWWyyWWD..",
+    ".DWWeeWWWWWeeWWD..",
+    "DWWWWWwwwwwWWWWWD.",
+    "DwWWWwwwDwwwWWWwD.",
+    ".DwDWwwwwwwwWDwD..",
+    "..DWWWwwwwWWWD.DD.",
+    ".DWWwwwwwwwwWWDWWD",
+    ".DWwwwwwwwwwwWDWWD",
+    ".DWwwwwwwwwwwWDWVD",
+    ".DWWwwwwwwwwWWDVD.",
+    "..DWWWWWWWWWWWDD..",
+    "..DWVWD...DWVWD...",
+    "..DDDD....DDDD....",
+  ],
+  kit: [
+    "..................",
+    "..................",
+    "..................",
+    "...DD.......DD....",
+    "..DOOD.....DOOD...",
+    "..DOpODDDDDOpOD...",
+    "..DOOOOOOOOOOOD...",
+    ".DOOOOOOOOOOOOOD..",
+    ".DOOeeOOOOOeeOOD..",
+    ".DOOeeOOOOOeeOOD..",
+    ".DOpOwwwpwwwOpOD..",
+    "..DOOwwwwwwwOOD...",
+    "..DXXXXXXXXXXXD...",
+    "...DXOwwwwwOOD.DD.",
+    "...DOwwwwwwwOD.DOD",
+    "...DOwwwwwwwODDOwD",
+    "...DOOOOOOOOODDwD.",
+    "...DOwOD.DOwOD.D..",
+    "...DDDD..DDDD.....",
+  ],
 };
 
 export interface CrewMember {
@@ -148,5 +241,8 @@ export const CREW: CrewMember[] = [
   { kind: "raccoon", name: "Raccoon", job: "Digs through failing CI and spots the same failure on other PRs", model: "Haiku", built: false },
   { kind: "hedgehog", name: "Hedgehog", job: "Tucks sessions in at clock out by refreshing each handover", model: "each session's own", built: false },
   { kind: "mouse", name: "Field mouse", job: "Rations the week's tokens: the pace chip in the top bar", model: "no model, den's own code", built: true },
+  { kind: "badger", name: "Badger", job: "QA: runs the tests, checks the change in the browser with screenshots, and tries to break it", model: "Sonnet", built: false },
+  { kind: "hare", name: "Hare", job: "Checks performance: slow queries, wasted renders, heavy loops, with a quick measurement where it can", model: "Sonnet", built: false },
+  { kind: "wolf", name: "Wolf", job: "Checks security: auth gaps, leaked secrets, injection, using the repo's own security review", model: "Opus", built: false },
   { kind: "owl", name: "Owl", job: "Called in for the hardest problems, only with your OK", model: "Fable", built: false },
 ];
