@@ -575,8 +575,13 @@ developer's day across the other sessions instead of them being the glue.
   untrusted folder on a trust prompt whose default is "No, exit", and the
   start prompt's Enter would answer it.
 - Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
-  its handover, end, fresh tomorrow, keep-alive pin), then Scout (Linear
-  inbox + GitHub notifications) and Watcher (CI across PRs).
+  its handover, end, fresh tomorrow, keep-alive pin), then the workers.
+- **The workers are forest animals** (andria, 2026-10-29), so keep any new
+  one in theme: Fox (Manager, Opus), Jay (Linear inbox + GitHub
+  notifications, Sonnet), Woodpecker (CI failures across PRs, Haiku),
+  Hedgehog (handover refresh at clock out, the session's own model for its
+  cache), Squirrel (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
+  rare escalation, only with room in the week and the developer's OK).
 
 ## Features (all built + committed on `master`)
 
