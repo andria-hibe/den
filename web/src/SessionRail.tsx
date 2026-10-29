@@ -43,7 +43,7 @@ export function SessionRail({
   onReorder: (groupIds: string[]) => void;
   /** The ticket/PR chips for a row (App owns the issue/PR data they match). */
   renderLinks: (s: SessionMeta) => ReactNode;
-  /** A sprite in place of the colour dot (Fox, and Burrow's kits and Owl), or null. */
+  /** A sprite in place of the colour dot (Fox, the kits, and Owl), or null. */
   renderIcon: (s: SessionMeta) => ReactNode;
 }) {
   // Drag state is view-local: the index being dragged and the row it's over.

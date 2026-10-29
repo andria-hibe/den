@@ -7,7 +7,7 @@
 import os from "node:os";
 import { join } from "node:path";
 import { readFileSync, readdirSync, statSync, rmSync } from "node:fs";
-import { ALL_DATA_DIRS, DATA_DIR } from "./edition.ts";
+import { DATA_DIR } from "./dataDir.ts";
 
 const LIMITS_DIR = join(DATA_DIR, "limits");
 
@@ -86,16 +86,13 @@ export function parseLimits(json: string, at: number): PlanLimits | null {
   }
 }
 
-/** The newest reading any pane has saved, in Den or Burrow: the limits are
- * the account's, so a pane in either app reports them for both. */
+/** The newest reading any pane has saved. */
 export function readLimits(): PlanLimits | null {
   const paths: string[] = [];
-  for (const dir of ALL_DATA_DIRS.map((d) => join(d, "limits"))) {
-    try {
-      for (const n of readdirSync(dir)) if (n.endsWith(".json")) paths.push(join(dir, n));
-    } catch {
-      // that app hasn't saved a reading
-    }
+  try {
+    for (const n of readdirSync(LIMITS_DIR)) if (n.endsWith(".json")) paths.push(join(LIMITS_DIR, n));
+  } catch {
+    // no pane has saved a reading
   }
   const files = paths
     .map((path) => {

@@ -8,8 +8,6 @@ import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
 import { buildDigest } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
-import { denImportStatus, importFromDen } from "./importDen.ts";
-import { EDITION, MANAGER_ENABLED } from "./edition.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
 import { managerStartPrompt } from "./manager.ts";
@@ -898,7 +896,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // --- The Manager pane (#46) ---
   // A fresh Claude pane can drop a paste, or its Enter, while it is still
-  // starting up: the installed Burrow's first Manager never got its start
+  // starting up: the first installed Manager never got its start
   // prompt. Claude Code writes the transcript at the first message, so that's
   // the receipt. Without one, press Enter (the text may be sitting in the
   // input box), then paste again once.
@@ -921,14 +919,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Start my day: write what den knows to the digest, bring up the Manager,
   // and ask it to build the Today list. GitHub and Linear are best effort and
   // bounded, like seedWithWhatExists, so a slow API never holds up the day.
-  // Which app this is (den or Burrow), so the UI shows Burrow's Manager.
-  app.get("/api/edition", async () => ({ edition: EDITION }));
-
   app.post("/api/manager/start", async (_req, reply) => {
-    if (!MANAGER_ENABLED) {
-      reply.code(404);
-      return { error: "not_found" };
-    }
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
     const [prs, linear, linearInbox, githubInbox] = await Promise.all([
@@ -964,11 +955,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // Clock out: which panes are safe to end tonight, then Hedgehog's round
   // for the ones the developer confirms.
-  app.get("/api/manager/clockout", async (_req, reply) => {
-    if (!MANAGER_ENABLED) {
-      reply.code(404);
-      return { error: "not_found" };
-    }
+  app.get("/api/manager/clockout", async () => {
     const prs = await Promise.race([
       prCache.get(false).catch(() => null),
       new Promise<null>((r) => setTimeout(() => r(null), 10_000)),
@@ -981,37 +968,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.post("/api/manager/clockout", async (req, reply) => {
     const { ids } = (req.body ?? {}) as { ids?: unknown };
-    if (!MANAGER_ENABLED || !Array.isArray(ids) || !ids.every((x) => typeof x === "string")) {
+    if (!Array.isArray(ids) || !ids.every((x) => typeof x === "string")) {
       reply.code(400);
       return { error: "ids_required" };
     }
     // Forks can take minutes; the rail shows each pane go quiet as it ends.
     void sessions.clockOut(ids as string[]);
     return { started: ids.length };
-  });
-
-  // Moving from Den: whether there's anything to bring over, and doing it.
-  app.get("/api/import/den", async () =>
-    MANAGER_ENABLED ? denImportStatus() : { available: false, denRunning: false, sessions: 0 },
-  );
-  app.post("/api/import/den", async (_req, reply) => {
-    if (!MANAGER_ENABLED) {
-      reply.code(404);
-      return { error: "not_found" };
-    }
-    try {
-      const { rows, files } = importFromDen();
-      sessions.adopt(rows);
-      return { sessions: rows.filter((r) => r.role === "main").length, files };
-    } catch (err) {
-      if ((err as Error).message === "den_running") {
-        reply.code(409);
-        return { error: "Quit Den first, then import." };
-      }
-      logWarn("import from den", err);
-      reply.code(500);
-      return { error: "Import failed." };
-    }
   });
 
   // The Manager's Today list, for the Today view.

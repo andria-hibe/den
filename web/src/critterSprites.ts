@@ -1,4 +1,4 @@
-// Burrow's worker crew (#46): forest animals drawn to sit beside den's fox
+// den's worker crew (#46): forest animals drawn to sit beside den's fox
 // (foxSprites.ts SIT) at the same 18x19 size, outline, and eye colours.
 // Verified visually with a scratch render, like scripts/pixel-preview.cjs.
 

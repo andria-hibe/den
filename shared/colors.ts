@@ -1,6 +1,6 @@
 // The session colours, andria's palette (2026-10-29). The one copy: the server
 // cycles through it when auto-assigning a colour to a new session, the web app
-// renders it as the recolour swatch picker, and in Burrow it's the colour of
+// renders it as the recolour swatch picker, and it's the colour of
 // each kit's scarf.
 export const COLORS = [
   "#67d0d5", // aqua

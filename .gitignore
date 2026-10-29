@@ -14,5 +14,3 @@ build/pixel-preview.png
 # QA renders (keep only the app icon)
 build/*.png
 !build/icon.png
-!build/burrow.png
-release-burrow/

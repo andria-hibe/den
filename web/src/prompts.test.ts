@@ -54,7 +54,6 @@ describe("paste prompts", () => {
     ticketNotesSeed: ticketNotesSeed(ISSUE),
     ticketPrompt: ticketPrompt(ISSUE),
     denPrompt: denPrompt(),
-    burrowDenPrompt: denPrompt("burrow"),
     cleanupWithSkill: cleanupPrompt("runn-cleanup"),
     cleanupGeneric: cleanupPrompt(null),
     notePrompt: notePrompt(42, {

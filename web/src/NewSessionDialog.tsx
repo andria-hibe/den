@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { useAppName } from "./appName.ts";
 import { api } from "./api.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { relTimeAgo } from "./format.ts";
@@ -47,7 +46,6 @@ export function NewSessionDialog({
   onResume: (cwd: string, resumeId: string) => void;
   onClose: () => void;
 }) {
-  const app = useAppName();
   const [roots, setRoots] = useState<Roots | null>(null);
   const [past, setPast] = useState<PastSession[] | null>(null);
   const [mode, setMode] = useState<Mode | null>(null);
@@ -325,7 +323,7 @@ export function NewSessionDialog({
                   {removing === "all" ? (
                     <>
                       <span>
-                        Remove {batch.length} unused {app} worktree{batch.length === 1 ? "" : "s"}?
+                        Remove {batch.length} unused den worktree{batch.length === 1 ? "" : "s"}?
                         Nothing uncommitted, and their branches stay.
                       </span>
                       <button className="btn btn-primary" onClick={() => removeTrees(batch, false)}>
@@ -337,7 +335,7 @@ export function NewSessionDialog({
                     </>
                   ) : (
                     <button className="btn" onClick={() => setRemoving("all")}>
-                      🧹 clean up {batch.length} unused {app} worktree{batch.length === 1 ? "" : "s"}
+                      🧹 clean up {batch.length} unused den worktree{batch.length === 1 ? "" : "s"}
                     </button>
                   )}
                 </div>

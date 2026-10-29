@@ -1,4 +1,4 @@
-// Burrow's reviewers and advisor (#46), handed to Claude panes as Claude Code
+// den's reviewers and advisor (#46), handed to Claude panes as Claude Code
 // subagents (`--agents`), each on the model that fits its job. The art and
 // names live in web/src/critterSprites.ts (CREW); keep the two in step.
 import { readLimits } from "./limits.ts";

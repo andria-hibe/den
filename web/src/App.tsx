@@ -7,7 +7,6 @@ import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
-import { DenImportBanner } from "./DenImportBanner.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -37,8 +36,6 @@ import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 import { canStartFresh } from "../../shared/handover.ts";
-import { EDITION_NAME, type Edition } from "../../shared/edition.ts";
-import { setAppName } from "./appName.ts";
 
 // Modifier shown in the shortcuts hint.
 const MOD =
@@ -110,18 +107,6 @@ export function App() {
   };
 
   const work = useWorkData();
-  // Den or Burrow (den v2): only Burrow has the Manager and its Today list.
-  const [edition, setEdition] = useState<Edition>("den");
-  useEffect(() => {
-    api<{ edition: Edition }>("/api/edition")
-      .then((d) => {
-        setEdition(d.edition);
-        setAppName(EDITION_NAME[d.edition]);
-        document.title = EDITION_NAME[d.edition];
-      })
-      .catch(() => {});
-  }, []);
-  const burrow = edition === "burrow";
   const [clockingOut, setClockingOut] = useState(false);
   const closeClockOut = useCallback(() => setClockingOut(false), []);
   const prs = work.flatPrs;
@@ -318,7 +303,7 @@ export function App() {
 
   const openDenEditor = () => {
     if (!denRoot) {
-      setErrMsg(`couldn't locate the ${EDITION_NAME[edition]} source repo`);
+      setErrMsg("couldn't locate the den source repo");
       return;
     }
     const existing = sessions.find(
@@ -331,9 +316,9 @@ export function App() {
     addSession({
       cwd: denRoot,
       ticket: DEN_TICKET,
-      name: `🦊 edit ${EDITION_NAME[edition]}`,
+      name: "🦊 edit den",
       // No seed: the empty handover every workspace gets, plus the initial prompt.
-      initialPrompt: denPrompt(EDITION_NAME[edition]),
+      initialPrompt: denPrompt(),
     });
   };
 
@@ -361,7 +346,7 @@ export function App() {
   const [todaySessions, setTodaySessions] = useState<string[]>([]);
   const foxUp = manager?.status === "running";
   useEffect(() => {
-    if (!burrow || !foxUp) {
+    if (!foxUp) {
       setTodaySessions([]);
       return;
     }
@@ -376,7 +361,7 @@ export function App() {
       stop = true;
       clearInterval(t);
     };
-  }, [burrow, foxUp]);
+  }, [foxUp]);
 
   // Going through the Today list one item at a time (#46): on to the next
   // open item's session, or back to Today after the last.
@@ -394,11 +379,11 @@ export function App() {
   };
 
   // A sprite in place of a session's colour dot: Fox (there's only one), and
-  // in Burrow a kit for each ticket or PR session (a ticket look included),
+  // a kit for each ticket or PR session (a ticket look included),
   // its scarf in the session's colour, and Owl for a review.
   const sessionIcon = (s: SessionMeta, size: number) => {
     if (s.view === "manager") return <PixelFox size={30} />;
-    if (!burrow || s.shell) return null;
+    if (s.shell) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;
   };
@@ -487,12 +472,12 @@ export function App() {
             href="http://localhost:5173"
             target="_blank"
             rel="noreferrer"
-            title={`open ${EDITION_NAME[edition]}'s latest iteration (the dev server) — needs \`npm run dev\` running on :5173`}
+            title="open den's latest iteration (the dev server) — needs `npm run dev` running on :5173"
           >
             ▶ dev
           </a>
         )}
-        {burrow && s.view !== "manager" && todaySessions.includes(s.name) && (
+        {s.view !== "manager" && todaySessions.includes(s.name) && (
           <button
             className="btn btn-ghost-outline restart-btn"
             onClick={() => goNextItem(s.name)}
@@ -504,7 +489,7 @@ export function App() {
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
         )}
-        {burrow && canStartFresh(s) && (
+        {canStartFresh(s) && (
           <button
             className={`btn btn-ghost-outline restart-btn${s.keepAlive ? " pinned" : ""}`}
             onClick={() => setKeepAlive(s.id, !s.keepAlive)}
@@ -598,18 +583,16 @@ export function App() {
           <button
             className="brand-fox"
             onClick={openDenEditor}
-            title={`edit ${EDITION_NAME[edition]} — open a Claude session to change this app`}
-            aria-label={`edit ${EDITION_NAME[edition]}`}
+            title="edit den — open a Claude session to change this app"
+            aria-label="edit den"
           >
-            {burrow ? <Critter kind="kit" size={38} /> : <PixelFox size={30} />}
+            <Critter kind="kit" size={38} />
           </button>
-        ) : burrow ? (
-          <Critter kind="kit" size={38} />
         ) : (
-          <PixelFox size={30} />
+          <Critter kind="kit" size={38} />
         )}
         <span className="wordmark" tabIndex={0}>
-          {EDITION_NAME[edition]}
+          den
           <div className="shortcuts-pop" role="tooltip">
             <div className="shortcuts-title">keyboard shortcuts</div>
             <ul>
@@ -652,8 +635,7 @@ export function App() {
         )}
         <span className="topbar-spacer" />
         {/* One slot for the day: start it until Fox is up, then clock out. */}
-        {burrow &&
-          (manager?.status !== "running" ? (
+        {manager?.status !== "running" ? (
             <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
               ☀ start
             </button>
@@ -661,8 +643,8 @@ export function App() {
             <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Clock out: Hedgehog updates each session's handover and ends its chat for the night">
               ☾ clock out
             </button>
-          ))}
-        <LedgerChip mouse={burrow} />
+          )}
+        <LedgerChip mouse />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
             className="status-fox"
@@ -674,8 +656,8 @@ export function App() {
             <Fox pose={statusPose} size={38} />
           </button>
           {foxPopOpen && (
-            <div className="fox-pop" role="dialog" aria-label={`${EDITION_NAME[edition]}'s foxes`}>
-              <div className="fox-pop-title">{EDITION_NAME[edition]}&apos;s foxes</div>
+            <div className="fox-pop" role="dialog" aria-label="den's foxes">
+              <div className="fox-pop-title">den&apos;s foxes</div>
               <div className="fox-pop-grid">
                 {FOX_POSES.map(({ pose, label, note }) => (
                   <div
@@ -709,9 +691,9 @@ export function App() {
                 href="/architecture.svg"
                 target="_blank"
                 rel="noreferrer"
-                title={`how ${EDITION_NAME[edition]} fits together — renderer, server, PTYs, and everything they touch`}
+                title="how den fits together — renderer, server, PTYs, and everything they touch"
               >
-                🗺 {EDITION_NAME[edition]}&apos;s architecture ↗
+                🗺 den&apos;s architecture ↗
               </a>
             </div>
           )}
@@ -761,7 +743,7 @@ export function App() {
               <span className="zzz z2">z</span>
               <span className="zzz z3">z</span>
             </div>
-            <div className="placeholder">the {EDITION_NAME[edition]} is quiet — start a session 🌙</div>
+            <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
         ) : active.view === "manager" ? (
           <TodayView
@@ -1022,7 +1004,6 @@ export function App() {
         />
       )}
       {clockingOut && <ClockOutDialog onDone={closeClockOut} onError={setErrMsg} />}
-      {burrow && <DenImportBanner onImported={() => window.location.reload()} />}
       {errMsg && (
         <div className="toast" onClick={() => setErrMsg(null)}>
           <span>⚠️ {errMsg}</span>

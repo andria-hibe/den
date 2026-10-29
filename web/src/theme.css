@@ -2135,28 +2135,6 @@ body {
   color: var(--pink-deep);
 }
 
-/* Burrow's offer to bring Den's sessions over (DenImportBanner). */
-.den-import {
-  position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg-panel);
-  border: 2px solid var(--pink-deep);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  font-size: 13px;
-  font-weight: 700;
-}
-.den-import-error {
-  color: var(--danger-ink);
-}
-
 /* Clock out (ClockOutDialog). */
 .clockout-title {
   display: flex;

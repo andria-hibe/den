@@ -12,7 +12,6 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "release/**",
-      "release-burrow/**",
       "build/**",
       "node_modules/**",
       "scripts/**",

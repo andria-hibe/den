@@ -1,5 +1,4 @@
 import type { PullRequest } from "../../server/github.ts";
-import { useAppName } from "./appName.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 
@@ -17,7 +16,6 @@ export function WorkLinkChips({
   /** When set, the chips are wrapped in a span with this class (rail rows). */
   wrapClass?: string;
 }) {
-  const app = useAppName();
   const hint = s.ticketHint;
   // A real Linear identifier looks like ABC-123 (skips sentinels like
   // "den:self-edit").
@@ -76,7 +74,7 @@ export function WorkLinkChips({
             rel="noreferrer"
             title={
               s.ticketChanged
-                ? `${issue.title}: the description changed since this workspace opened; ${app} told the session what changed`
+                ? `${issue.title}: the description changed since this workspace opened; den told the session what changed`
                 : issue.title
             }
             onClick={(e) => e.stopPropagation()}

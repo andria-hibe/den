@@ -10,8 +10,8 @@ juggling terminal tabs. This file orients the next agent — read it first.
 ```bash
 npm install            # postinstall: scripts/fix-pty.mjs restores node-pty's +x bit
 npm run dev            # browser dev: server :4321 + Vite :5173 (open :5173)  ← fast loop
-npm run app            # launch Burrow as an Electron app (builds native/ for Electron first, once)
-npm run pack           # build release-burrow/mac-arm64/Burrow.app (unsigned, local); Den: pack:den
+npm run app            # launch as an Electron app (builds native/ for Electron first, once)
+npm run pack           # build release/mac-arm64/Den.app (unsigned, local)
 npm run typecheck
 npm run lint           # eslint (flat config; non-type-checked)
 npm test               # vitest (server + web pure logic)
@@ -21,7 +21,7 @@ npm run smoke          # end-to-end: real server + UI in headless Electron (node
 
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
 > typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
-> staged copy into `/Applications/Burrow.app` → reopen) for when they say so. They
+> staged copy into `/Applications/Den.app` → reopen) for when they say so. They
 > control when the running app is replaced. (Swap the bundle in with a staged
 > copy + `mv`, not `ditto` over the running app: the running process keeps its
 > old files.)
@@ -44,40 +44,20 @@ rebuild) fails with a message naming the command to run (`openDb` in
 `store.ts`). `npm run rebuild:node` remains only as a repair. The installed
 `/Applications/Den.app` is self-contained either way.
 
-## Two apps: Den and Burrow
+## den v2, and the Burrow detour
 
-One codebase builds two apps (andria, 2026-10-29): **Burrow** (`npm run
-pack` / `app` / `dist`, den v2: the Manager pane, Fox, and its Today list)
-and **Den** (`npm run pack:den` / `app:den` / `dist:den`, the original).
-**andria moved to Burrow full-time on 2026-10-29**: Den.app is retired from
-/Applications, and the Den edition stays in the code, unused. Burrow's
-banner offers a one-time import of Den's sessions (`server/importDen.ts`:
-sessions, notepads, review and inbox files, settings except the window's
-place; refuses while a `Den` process runs; a session already open in Burrow
-for the same ticket, PR, or checkout is kept and takes Den's handover if
-its own is still empty; `DEN_IMPORT_FROM` points it at a copy for tests,
-which skips the running check). Imported rows come back exited and reopen
-on their own conversations (`sessions.adopt`). `server/edition.ts` holds
-`EDITION`, from `process.env.DEN_EDITION` - which `build:electron:burrow`
-bakes in with esbuild's `--define`, so the packaged app needs no env - and
-`DATA_DIR`: `~/.den` for Den, **`~/.burrow`** for Burrow, so Burrow never
-touches the sessions a running Den owns (its db, notepads, review files,
-inbox, limits, manager files all live there). The plan's limits are the
-account's, so `readLimits` reads both apps' dirs (`ALL_DATA_DIRS`).
-`MANAGER_ENABLED` gates the manager routes and the relay rule in pane
-prompts; the UI asks `GET /api/edition` (wordmark, title, Start my day).
-The app's own name in copy follows the edition: the UI's `useAppName()`
-(`web/src/appName.ts`, set from `/api/edition`) and the server's `APP_NAME`
-(what sessions are told the tool is called, and the inbox's "Messages from
-..."). The den repo itself (issues, `denIssueRule`) stays "den".
-Burrow's builder config is `electron-builder.burrow.yml` (extends the base:
-app id `io.den.burrow`, `release-burrow/`, icon `build/burrow.icns` from
-`ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil` - a
-kit, copied from `critterSprites.ts`, on a mint-to-lilac ground; the topbar
-logo is the kit too), and
-`main.ts` calls `app.setName("Burrow")` so dev runs (`npm run app`,
-or `DEN_EDITION=burrow npm run dev`) get their own userData too. A new
-Burrow has no Linear key (it lives in the db): paste it once.
+den v2 (Fox, the crew, Today, clock out) was first built on 2026-10-29 as a
+second app, **Burrow**, beside den v1, with its data in `~/.burrow`; andria
+moved to it the same day, then asked for the den name back once v1 was gone.
+The edition split is removed: there is one app, den, with v2 always on, its
+data in `~/.den` (`server/dataDir.ts`; `DEN_DATA_DIR` overrides it for test
+servers), and the kit as its icon (`scripts/make-icon.cjs` + `iconutil`) and
+topbar logo. `electron/adoptBurrow.ts`, imported **first** in `main.ts` so it
+runs before the store opens a file, moves `~/.burrow` to `~/.den` on the
+packaged app's first start and keeps v1's data as `~/.den-v1`; while a
+`Burrow` process runs it does nothing and `boot()` asks for Burrow to be quit.
+**Never run that move from server code**: a test run that imported an
+earlier version of it renamed the real data dirs under a running Burrow.
 
 ## Architecture
 
@@ -556,7 +536,7 @@ window's start (reset minus 7 days): `early` for the first 10% of the week,
 rate so far if that's before the reset. The hover lists the panes with the
 largest context, the first to start fresh.
 
-**The Manager, Fox** (issue 46, den v2, **Burrow only**; plan in the issue). One Claude pane,
+**The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
 `view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
 developer's day across the other sessions instead of them being the glue.
 - **Start my day** (topbar button while Fox isn't running, and in the Today
@@ -595,12 +575,12 @@ developer's day across the other sessions instead of them being the glue.
   one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. In reserve: a fluffier squirrel.
   Pixel art: `critterSprites.ts` (18x19 like the fox's SIT, same outline
   and eyes; `CREW` holds name, job, model, built), drawn by `Critter.tsx`
-  with the fox's `rasterize` (`tint` recolours a kit's scarf). Burrow shows
+  with the fox's `rasterize` (`tint` recolours a kit's scarf). den shows
   the crew strip in the Today header (resting until built, or while Fox is
-  stopped) and the field mouse on the pace chip; Den keeps only the fox.
+  stopped) and the field mouse on the pace chip.
   Gallery: https://claude.ai/artifact/5Dn81Siu4mP7Qbu6Jg7RBA - update it
   with any sprite or name change.
-- **The reviewers and advisor are real subagents** (Burrow only):
+- **The reviewers and advisor are real subagents**:
   `server/crew.ts` builds Claude Code `--agents` JSON - `kitAgents` for every
   workspace pane (owl, badger, hare, wolf, each with its model and a
   report-only prompt) and `managerAgents` (owl) for Fox - and `crewRule`
@@ -609,7 +589,7 @@ developer's day across the other sessions instead of them being the glue.
   even pace), else Opus; full model ids work in `--agents` (verified: a
   subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
   their crew up at spawn, so existing ones need a restart.
-- **Clock out** (Burrow): the topbar's "clock out" opens `ClockOutDialog`,
+- **Clock out**: the topbar's "clock out" opens `ClockOutDialog`,
   fed by `GET /api/manager/clockout` (`sessions.clockOutVerdicts`: every
   running workspace main plus Fox, with pure `clockOutBlockers` - busy
   (output in the last 20s), a merge or rebase in progress or staged changes
@@ -617,14 +597,14 @@ developer's day across the other sessions instead of them being the glue.
   `POST /api/manager/clockout` -> `clockOut`: Hedgehog's round is the idle
   handover fork (`runIdleHandover`, now awaitable; skipped when the notepad
   is newer than the pane's last output), then `stopPane`, and the id goes
-  in `~/.burrow/manager/clocked-out.json`. Start my day calls
+  in `~/.den/manager/clocked-out.json`. Start my day calls
   `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
   `startManager` handles). Attention (the bell) is deliberately not a
   blocker: Claude rings it at the end of every turn. A **keep-alive pin**
   (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's
-  "pin" in Burrow) keeps a pane out of it every night - it shows as "pinned
+  "pin") keeps a pane out of it every night - it shows as "pinned
   to stay running" and keeps its conversation.
-- **Going through the day** (Burrow): a rail row and the header show a
+- **Going through the day**: a rail row and the header show a
   pink "needs you" chip while the session's handover lists anything under
   "Waiting on you" (`waitingItems` in `shared/handover.ts`, tested; served as
   `meta().waiting`, re-read only when the notepad's mtime changes). Session
@@ -636,19 +616,19 @@ developer's day across the other sessions instead of them being the glue.
   pin "📌", and there's no "claude · running" text. The topbar holds one day
   button (☀ start until Fox is up, then ☾ clock out) and a compact pace
   chip (mouse, %, bar; words only when "ahead"), and the title chip has no
-  kind badge. In both apps the
+  kind badge. The
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
   button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
   GitHub split into Review requested / My open PRs (`den.prTab`); a tab
   shows "!" when something in it needs you. Fox is drawn with `PixelFox`
   in place of a colour dot (rail, header, title chip): there's only one.
-  In Burrow every session writing code is drawn as a kit whose scarf is the
+  Every session writing code is drawn as a kit whose scarf is the
   session's colour, and a review session as Owl (`sessionIcon` in App,
   `Critter bust` crops to head and scarf so the colour reads at 2x in the
   rail); only shells keep the dot. The palette is andria's 13
   colours in `shared/colors.ts`; `RETIRED_COLORS` maps the old 9 to their
   nearest, and `store.ts` recolours old rows on every boot (idempotent).
-- **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
+- **Tanuki and Raccoon**: the digest gains `## Inbox` - unread
   Linear notifications (`getInboxNotifications`, a query of its own so a
   schema surprise can't break the ticket list; newest first) and GitHub
   threads the developer takes part in from the last 24h (`getNotifications`,
@@ -796,12 +776,12 @@ developer's day across the other sessions instead of them being the glue.
   **plan first and change nothing until approved** is in den's prompt, not
   left to the skill. Verified live: the session invoked the skill, ran its
   audit, returned a three-group plan, and stopped.
-- **Edit den itself**: the far-left topbar pixel fox is a button (`openDenEditor`)
+- **Edit den itself**: the far-left topbar kit is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
   Claude primed to read CLAUDE.md. Race-safe reuse via the sentinel ticket
-  `"den:self-edit"` (one editor at a time). The app/dock icon is the same pixel
-  fox (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
+  `"den:self-edit"` (one editor at a time). The app/dock icon is the same
+  kit (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and
   on rail cards (matched via the `fast-NNNN` branch hint + explicit ids).
@@ -1028,8 +1008,8 @@ the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
 panes). Beyond that, verification is scripted + visual:
 - Run an **isolated** server: `DEN_DATA_DIR=<tmp dir> DEN_DB=<tmp>/den.db PORT=4399 npm run start`
   (node ABI). `DEN_DB` alone isolates only the database: notepads, review
-  files, and Burrow's `manager/` files are still the installed app's, and a
-  test once overwrote a running Burrow's Fox settings and digest that way.
+  files, and the `manager/` files are still the installed app's, and a
+  test once overwrote the running app's Fox settings and digest that way.
 - Screenshot the UI by loading the URL in a headless Electron window and calling
   `webContents.capturePage()` (see `scripts/shot.cjs`): `SHOT_URL=... SHOT_OUT=x.png
   npx electron scripts/shot.cjs`, then **read the PNG back to eyeball it**. Keep

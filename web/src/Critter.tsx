@@ -17,7 +17,7 @@ function crop(grid: string[], [r0, r1, c0, c1]: [number, number, number, number]
   return grid.slice(r0, r1).map((row) => row.slice(c0, c1));
 }
 
-/** One of Burrow's worker animals, drawn like the Fox: a native-res canvas
+/** One of den's worker animals, drawn like the Fox: a native-res canvas
  * scaled by a whole number with image-rendering:pixelated, so it stays crisp. */
 export function Critter({
   kind,

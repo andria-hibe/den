@@ -24,7 +24,7 @@ import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
-import { APP_NAME, DATA_DIR, MANAGER_ENABLED } from "./edition.ts";
+import { DATA_DIR } from "./dataDir.ts";
 import { crewRule, fableHasRoom, kitAgents, managerAgents } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
@@ -258,7 +258,7 @@ export function scratchBranch(branch: string | null | undefined): string {
 export function progressInstruction(file: string): string {
   const [stands, done, next, waiting] = HANDOVER_HEADINGS;
   return (
-    `You're working in a project inside a tool called "${APP_NAME}". Keep a handover ` +
+    `You're working in a project inside a tool called "den". Keep a handover ` +
     `at the absolute path ${file}. It has two readers: the developer, who ` +
     `wants to see where the work stands in one glance, and the next session ` +
     `that picks this work up (which may be you, after a restart, with no ` +
@@ -344,15 +344,15 @@ export function denIssueRepo(): string {
 export function denIssueRule(): string {
   const repo = denIssueRepo();
   return (
-    `${APP_NAME} itself: if you hit a bug or a rough edge in ${APP_NAME} (the tool ` +
-    `this session runs in${APP_NAME === "den" ? "" : ", built from the den repo"}), or ` +
+    `den itself: if you hit a bug or a rough edge in den (the tool ` +
+    `this session runs in), or ` +
     `think of a way to improve it, file it as an issue with ` +
     `\`gh issue create --repo ${repo}\`. First check ` +
     `\`gh issue list --repo ${repo} --search "<words>"\` and don't file a ` +
-    `duplicate. ${repo} is public: describe ${APP_NAME}'s behaviour only, and keep out ` +
+    `duplicate. ${repo} is public: describe den's behaviour only, and keep out ` +
     `anything from the work you're doing (code, file names, branch, ticket, or ` +
     `PR names, people, company details). Write it in plain ASCII, then tell the ` +
-    `developer you filed it, with the link. This is for ${APP_NAME} only, not for the ` +
+    `developer you filed it, with the link. This is for den only, not for the ` +
     `project you're working in.`
   );
 }
@@ -408,8 +408,8 @@ export function commentRules(): string {
  * session doesn't keep its own background watch alive. */
 export function denWatchRule(): string {
   return (
-    `${APP_NAME} watches CI on the pull request for your branch and tells you when ` +
-    `the checks finish, as "Messages from ${APP_NAME}" on your next prompt or tool ` +
+    `den watches CI on the pull request for your branch and tells you when ` +
+    `the checks finish, as "Messages from den" on your next prompt or tool ` +
     `call. Don't start a background \`gh pr checks --watch\` for that. If ` +
     `you're only waiting on CI, end your turn: den nudges the developer when ` +
     `it finishes.`
@@ -417,7 +417,7 @@ export function denWatchRule(): string {
 }
 
 /** `manager`: the app has a Manager pane whose relayed answers count. */
-export function workspaceInstruction(notepad: string, manager = MANAGER_ENABLED): string {
+export function workspaceInstruction(notepad: string, manager = true): string {
   const relay = manager ? `\n${managerRelayRule()}\n${crewRule()}` : "";
   return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`;
 }
@@ -440,7 +440,7 @@ export function managerRelayRule(): string {
 export function managerInstruction(notepad: string, today: string, digest: string): string {
   return (
     `You are ${MANAGER_NAME}, the developer's manager session inside a tool ` +
-    `called "${APP_NAME}". The developer runs one Claude session per ticket or pull ` +
+    `called "den". The developer runs one Claude session per ticket or pull ` +
     `request in den. Your job is to run their day across those sessions: work ` +
     `out what needs them, go through it with them one item at a time, and ` +
     `pass their answers to the sessions. You don't do ticket work yourself.\n` +
@@ -497,14 +497,14 @@ export function myPrInstruction(
   pr: number | null,
   repo: string | null,
   branch: string | null,
-  manager = MANAGER_ENABLED,
+  manager = true,
 ): string {
   const relay = manager ? `\n${managerRelayRule()}` : "";
   const which = `pull request${pr ? ` #${pr}` : ""}${repo ? ` (${repo})` : ""}`;
   const where = branch ? `, checked out on branch ${branch}` : "";
   return (
     `You're working on the developer's own ${which}${where}, inside a tool ` +
-    `called "${APP_NAME}". ${APP_NAME} shows the PR's description, reviews, and comments beside ` +
+    `called "den". den shows the PR's description, reviews, and comments beside ` +
     `you, and the developer pastes individual comments into this session for ` +
     `you to action. For each one, make the change it asks for (or explain why ` +
     `not), run the checks that cover it, and say briefly what you changed. ` +
@@ -524,7 +524,7 @@ export function lookInstruction(
 ): string {
   const which = ticket ? `${ticket}: ${title}` : title;
   return (
-    `You're inside a tool called "${APP_NAME}". The developer is reading the Linear ` +
+    `You're inside a tool called "den". The developer is reading the Linear ` +
     `ticket ${which} in a pane beside you, and will ask you about it. The ` +
     `ticket's description is saved at the absolute path ${ticketFile}; read it ` +
     `before you answer anything about the ticket. That file is for reference, ` +
@@ -551,7 +551,7 @@ export function reviewInstruction(
 ): string {
   const scratch = scratchBranch(branch);
   const rules = owned
-    ? `You're working on a GitHub pull request inside a tool called "${APP_NAME}". ` +
+    ? `You're working on a GitHub pull request inside a tool called "den". ` +
       `Someone else opened it, but the developer has taken it on: treat it as ` +
       `the developer's own PR. You have a full shell, and you may edit the code ` +
       `on the PR's branch` + (branch ? ` (${branch})` : "") + `, commit, push ` +
@@ -563,7 +563,7 @@ export function reviewInstruction(
       `The PR's full unified diff, as it was when den opened this PR, is saved ` +
       `at ${diffFile}; once you push, use git or \`gh pr diff\` for the current ` +
       `change. Read the changed files in your working directory for context. `
-    : `You're reviewing a GitHub pull request inside a tool called "${APP_NAME}". It's ` +
+    : `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
       `someone else's work and your job is to review it, not to change it. You have ` +
       `a full shell and can run anything you need to understand the change: the ` +
       `tests, a build, git history, gh reads. But these rules are absolute:\n` +
@@ -572,7 +572,7 @@ export function reviewInstruction(
       `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
       `review goes in the notepad file named below and nowhere else; the developer ` +
       `decides what, if anything, reaches GitHub. The one exception is an issue ` +
-      `about ${APP_NAME} itself, as described at the end.\n` +
+      `about den itself, as described at the end.\n` +
       `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
       `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
       `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +
@@ -1558,7 +1558,7 @@ class SessionManager {
     return [
       "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: inboxHooks(groupId) }),
       "--add-dir", PROGRESS_DIR,
-      ...(MANAGER_ENABLED ? ["--agents", JSON.stringify(kitAgents(fableHasRoom()))] : []),
+      "--agents", JSON.stringify(kitAgents(fableHasRoom())),
       "--append-system-prompt", prompt,
     ];
   }
