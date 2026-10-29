@@ -56,7 +56,8 @@ export function lineChanges(before: string, after: string, max = 40): string[] {
   return out.length > max ? [...out.slice(0, max), `(${out.length - max} more lines)`] : out;
 }
 
-/** Only a workspace main pane keeping a handover has one to start fresh from. */
+/** Only a workspace main pane keeping a handover, or the Manager (which
+ * always keeps one), has a handover to start fresh from. */
 export function canStartFresh(s: {
   shell: boolean;
   role: string;
@@ -64,5 +65,6 @@ export function canStartFresh(s: {
   view: unknown;
   handover: boolean;
 }): boolean {
-  return !s.shell && s.role === "main" && !s.look && !s.view && s.handover;
+  if (s.shell || s.role !== "main") return false;
+  return s.view === "manager" || (!s.look && !s.view && s.handover);
 }

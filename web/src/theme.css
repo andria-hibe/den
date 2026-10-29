@@ -2049,9 +2049,54 @@ body {
   background: rgba(255, 255, 255, 0.4);
   transform: translateY(-1px);
 }
+/* The Manager's Today list (TodayView). */
+.today-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+.today-head .pr-info-title {
+  margin-bottom: 0;
+}
+.today-open {
+  font-size: 11px;
+  font-weight: 800;
+  color: #4a3a52;
+  background: var(--pink);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.today-when {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.today-start {
+  margin-left: auto;
+}
+.today-empty {
+  padding: 16px 12px;
+}
+.today-session {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--lilac) 30%, transparent);
+  border: 1.5px solid var(--lilac);
+  border-radius: 8px;
+  padding: 0 7px;
+  margin-left: 4px;
+  cursor: pointer;
+}
+.today-list ul {
+  list-style: none;
+  padding-left: 4px;
+}
+
 /* The week's token pace (LedgerChip), on the topbar's tinted background. */
 .ledger-chip {
-  margin-left: auto;
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -2097,12 +2142,20 @@ body {
 .ledger-chip.early .ledger-label {
   color: rgba(74, 58, 82, 0.6);
 }
-.ledger-chip + .status-fox-wrap {
-  margin-left: 0;
+/* Pushes the topbar's right-hand group (start my day, pace, fox) to the edge. */
+.topbar-spacer {
+  flex: 1;
+}
+.topbar-day {
+  flex: none;
+  font-size: 12px;
+  padding: 4px 12px;
+  color: #4a3a52;
+  background: rgba(255, 255, 255, 0.72);
+  border: 2px solid rgba(74, 58, 82, 0.25);
 }
 
 .status-fox-wrap {
-  margin-left: auto;
   position: relative;
   display: flex;
   align-items: center;

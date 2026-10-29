@@ -97,6 +97,18 @@ export function useSessions({
     }
   };
 
+  // Start my day (#46): den may create the Manager pane, so refetch the list.
+  const startDay = async () => {
+    try {
+      const meta = await api<SessionMeta>("/api/manager/start", { method: "POST" });
+      const d = await api<{ sessions: SessionMeta[] }>("/api/sessions");
+      setSessions(d.sessions);
+      setActiveId(meta.id);
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   const patch = async (id: string, body: { name?: string; color?: string }) => {
     const meta = await api<SessionMeta>(`/api/sessions/${id}`, {
       method: "PATCH",
@@ -288,6 +300,7 @@ export function useSessions({
     shellTab,
     setShellTab,
     addSession,
+    startDay,
     patch,
     restartSession,
     restartFresh,

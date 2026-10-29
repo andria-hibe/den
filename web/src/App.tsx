@@ -4,6 +4,7 @@ import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
+import { TodayView } from "./TodayView.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -54,6 +55,7 @@ export function App() {
     shellTab,
     setShellTab,
     addSession,
+    startDay,
     patch,
     restartSession,
     restartFresh,
@@ -194,7 +196,11 @@ export function App() {
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
   // One rail row per workspace.
-  const rail = sessions.filter((s) => s.role === "main");
+  // The Manager's Today row stays at the top of the rail (#46).
+  const rail = sessions
+    .filter((s) => s.role === "main")
+    .sort((a, b) => Number(b.view === "manager") - Number(a.view === "manager"));
+  const manager = rail.find((s) => s.view === "manager");
   // The workspace's active shell tab, else its first when unset or closed.
   const groupShells =
     active && !active.shell
@@ -538,6 +544,12 @@ export function App() {
             </span>
           </span>
         )}
+        <span className="topbar-spacer" />
+        {manager?.status !== "running" && (
+          <button className="btn topbar-day" onClick={startDay} title="Fox reads every session, your PRs, and Linear, and makes today's list">
+            ☀ start my day
+          </button>
+        )}
         <LedgerChip />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
@@ -638,6 +650,24 @@ export function App() {
             </div>
             <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
+        ) : active.view === "manager" ? (
+          <TodayView
+            key={active.id}
+            onStartDay={startDay}
+            onOpenSession={(name) => {
+              const target = rail.find((r) => r.name === name);
+              if (target) selectSession(target.id);
+            }}
+            header={renderHeader(active)}
+            terminal={
+              <TerminalView
+                key={`${active.id}:${active.status}`}
+                session={active}
+                onExit={() => markExited(active.id)}
+                onTitle={(name) => applyTitle(active.id, name)}
+              />
+            }
+          />
         ) : active.view === "review" && active.pr && active.prRepo ? (
           <PrReviewView
             key={active.id}

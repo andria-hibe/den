@@ -3,9 +3,13 @@ import { promisify } from "node:util";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId } from "./sessions.ts";
+import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
+import { buildDigest } from "./digest.ts";
+import { readLimits } from "./limits.ts";
+import { weekPace } from "../shared/pace.ts";
+import { managerStartPrompt } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
@@ -536,6 +540,21 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   //
   // A submit also waits for the pane to be ready first (`waitUntilIdle`): a
   // freshly spawned Claude drops input while it's still drawing.
+  const paste = async (
+    session: NonNullable<ReturnType<typeof sessions.get>>,
+    text: string,
+    submit: boolean,
+  ): Promise<boolean | undefined> => {
+    let ready: boolean | undefined;
+    if (submit) ready = await session.waitUntilIdle();
+    session.write(`\x1b[200~${sanitizePaste(text)}\x1b[201~`);
+    if (submit) {
+      await new Promise((r) => setTimeout(r, PASTE_SUBMIT_DELAY_MS));
+      session.write("\r");
+    }
+    return ready;
+  };
+
   app.post("/api/sessions/:id/paste", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { text, submit } = (req.body ?? {}) as {
@@ -551,13 +570,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "text_required" };
     }
-    let ready: boolean | undefined;
-    if (submit) ready = await session.waitUntilIdle();
-    session.write(`\x1b[200~${sanitizePaste(text)}\x1b[201~`);
-    if (submit) {
-      await new Promise((r) => setTimeout(r, PASTE_SUBMIT_DELAY_MS));
-      session.write("\r");
-    }
+    const ready = await paste(session, text, !!submit);
     return { ok: true, submitted: !!submit, ready };
   });
 
@@ -864,6 +877,49 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       logWarn("github", err);
       reply.code(502);
       return { error: "gh_failed", message: "GitHub request failed." };
+    }
+  });
+
+  // --- The Manager pane (#46) ---
+  // Start my day: write what den knows to the digest, bring up the Manager,
+  // and ask it to build the Today list. GitHub and Linear are best effort and
+  // bounded, like seedWithWhatExists, so a slow API never holds up the day.
+  app.post("/api/manager/start", async (_req, reply) => {
+    const bounded = <T,>(p: Promise<T>, fallback: T) =>
+      Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
+    const [prs, linear] = await Promise.all([
+      bounded(prCache.get(false), null),
+      hasKey() ? bounded(linearCache.get(false), null) : Promise.resolve(null),
+    ]);
+    const limits = readLimits();
+    const week = limits?.week;
+    mkdirSync(MANAGER_DIR, { recursive: true });
+    writeFileSync(
+      DIGEST_PATH,
+      buildDigest({
+        now: Date.now(),
+        sessions: sessions.digestSessions(),
+        prs,
+        linear,
+        week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
+      }),
+    );
+    const manager = await sessions.startManager();
+    if (!manager || manager.status !== "running") {
+      reply.code(500);
+      return { error: "manager_not_started" };
+    }
+    // Answered before the paste, which waits for the pane to finish drawing.
+    void paste(manager, managerStartPrompt(new Date()), true);
+    return manager.meta();
+  });
+
+  // The Manager's Today list, for the Today view.
+  app.get("/api/manager/today", async () => {
+    try {
+      return { content: readFileSync(TODAY_PATH, "utf8"), writtenAt: statSync(TODAY_PATH).mtimeMs };
+    } catch {
+      return { content: "", writtenAt: 0 };
     }
   });
 

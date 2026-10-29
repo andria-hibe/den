@@ -458,7 +458,8 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   handover like any workspace; its opener lives in the initial prompt.)
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
-  `review` (others' PR), `mypr` (your PR), or a ticket-look. They also carry
+  `review` (others' PR), `mypr` (your PR), `manager` (Fox, see above), or a
+  ticket-look. They also carry
   `ticket` / `pr` / `prRepo` / `branch` for linking. A **look** pane saves the
   ticket (`ticketBrief`, sent as `notepadSeed`) to the group's notepad path so
   `lookInstruction` can point the session at it — the same file on restart,
@@ -519,6 +520,43 @@ window's start (reset minus 7 days): `early` for the first 10% of the week,
 `ahead` past the even line + 3 points, and when the limit runs out at the
 rate so far if that's before the reset. The hover lists the panes with the
 largest context, the first to start fresh.
+
+**The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
+`view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
+developer's day across the other sessions instead of them being the glue.
+- **Start my day** (topbar button while Fox isn't running, and in the Today
+  header): `POST /api/manager/start` writes `~/.den/manager/digest.md`
+  (`server/digest.ts` `buildDigest`: every Claude pane with the developer's
+  part of its handover via `digestSessions`/`developerSections`, PRs from
+  `prCache`, Linear from `linearCache`, the week's `weekPace`; GitHub and
+  Linear bounded at 10s), then `startManager` (create, or `restartFresh` if
+  exited) and pastes + submits `managerStartPrompt` (`server/manager.ts`).
+  den's code gathers the facts so Fox never re-polls GitHub.
+- Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /
+  FYI, `- [ ]` items with `(session: <name>)`); `TodayView` renders it above
+  the Fox pane (review-view layout, one splitter), polls
+  `GET /api/manager/today`, and turns `(session: X)` into a button that opens
+  that rail session (`linkSessions`). Fox is pinned to the top of the rail.
+- Fox talks to sessions with Claude Code's own `SendMessage` (den panes show
+  in `ListAgents` by pane name). It may relay the developer's answers as
+  "The developer said in Today at HH:MM: ...", and `managerRelayRule` (in
+  workspace and my-PR prompts) tells sessions that form, and only it, counts
+  as the developer's words - a test pins the two strings together.
+- `managerInstruction` + `buildManagerPermissions` (deny backstop: commit,
+  push, merge, rebase, reset, the writing `gh pr` subcommands, `gh api`;
+  allow: Today, its handover, reads under `~/.den`). Runs `--model opus`.
+  It inherits the developer's permission mode (auto, for the maintainer), so
+  the deny list is the hard line: verified live, Fox in auto mode went
+  straight to filing a den issue (`gh issue create` is allowed by
+  `denIssueRule`) when a test server's empty digest disagreed with
+  `ListAgents`. **Don't test Fox on an isolated server against real
+  sessions**: `ListAgents` and `~/.den/progress` are the real ones.
+- Its cwd is the **work repo**, not `~/.den/manager`: Claude Code opens an
+  untrusted folder on a trust prompt whose default is "No, exit", and the
+  start prompt's Enter would answer it.
+- Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
+  its handover, end, fresh tomorrow, keep-alive pin), then Scout (Linear
+  inbox + GitHub notifications) and Watcher (CI across PRs).
 
 ## Features (all built + committed on `master`)
 

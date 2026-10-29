@@ -9,6 +9,9 @@ import {
   testingRules,
   commentRules,
   workspaceInstruction,
+  managerInstruction,
+  managerRelayRule,
+  buildManagerPermissions,
 } from "./sessions.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
@@ -98,5 +101,30 @@ describe("denIssueRule", () => {
       lookInstruction("T-1", "t", "/n.md"),
       reviewInstruction("/n.md", "/d.diff", "b", "/g.md"),
     ]) expect(text).toContain(rule);
+  });
+});
+
+describe("managerInstruction", () => {
+  const text = managerInstruction(NOTEPAD, "/Users/x/.den/manager/today.md", "/Users/x/.den/manager/digest.md");
+
+  it("is ASCII and points at the digest, the Today list, and its handover", () => {
+    expect(isAscii(text)).toBe(true);
+    expect(text).toContain("/Users/x/.den/manager/digest.md");
+    expect(text).toContain("/Users/x/.den/manager/today.md");
+    expect(text).toContain(NOTEPAD);
+  });
+
+  it("relays approvals in the form the sessions are told to accept", () => {
+    const form = 'The developer said in Today at HH:MM: <their words>';
+    expect(text).toContain(form);
+    expect(managerRelayRule()).toContain(form);
+    expect(workspaceInstruction(NOTEPAD)).toContain(managerRelayRule());
+  });
+
+  it("is denied the writes it must never make", () => {
+    const { deny } = buildManagerPermissions("/t.md", NOTEPAD).permissions;
+    for (const rule of ["Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr merge:*)", "Bash(gh api:*)"]) {
+      expect(deny).toContain(rule);
+    }
   });
 });
