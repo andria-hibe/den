@@ -374,7 +374,7 @@ export function App() {
   // in Burrow a kit for each session writing code, its scarf in the
   // session's colour, and Owl for a review.
   const sessionIcon = (s: SessionMeta, size: number) => {
-    if (s.view === "manager") return <PixelFox size={15} />;
+    if (s.view === "manager") return <PixelFox size={30} />;
     if (!burrow || s.shell || s.look) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;
@@ -383,7 +383,7 @@ export function App() {
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       {s.view === "manager" ? (
-        <span className="fox-dot">{sessionIcon(s, 15)}</span>
+        <span className="fox-dot">{sessionIcon(s, 22)}</span>
       ) : (
         <span className="color-picker">
           {sessionIcon(s, 22) ? (
