@@ -103,6 +103,7 @@ function parse(fp: string): {
 
   let base = summary || firstUser || "(untitled session)";
   if (!summary && firstUser?.includes(DEN_SELF_EDIT)) base = "Editing den itself";
+  if (!summary && firstUser?.includes("working on burrow itself")) base = "Editing burrow itself";
   return { cwd, title: tidyTitle(base), skip: headless || empty };
 }
 

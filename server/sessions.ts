@@ -344,14 +344,15 @@ export function denIssueRepo(): string {
 export function denIssueRule(): string {
   const repo = denIssueRepo();
   return (
-    `den itself: if you hit a bug or a rough edge in den (the tool this session ` +
-    `runs in), or think of a way to improve it, file it as an issue with ` +
+    `${APP_NAME} itself: if you hit a bug or a rough edge in ${APP_NAME} (the tool ` +
+    `this session runs in${APP_NAME === "den" ? "" : ", built from the den repo"}), or ` +
+    `think of a way to improve it, file it as an issue with ` +
     `\`gh issue create --repo ${repo}\`. First check ` +
     `\`gh issue list --repo ${repo} --search "<words>"\` and don't file a ` +
-    `duplicate. ${repo} is public: describe den's behaviour only, and keep out ` +
+    `duplicate. ${repo} is public: describe ${APP_NAME}'s behaviour only, and keep out ` +
     `anything from the work you're doing (code, file names, branch, ticket, or ` +
     `PR names, people, company details). Write it in plain ASCII, then tell the ` +
-    `developer you filed it, with the link. This is for den only, not for the ` +
+    `developer you filed it, with the link. This is for ${APP_NAME} only, not for the ` +
     `project you're working in.`
   );
 }
@@ -571,7 +572,7 @@ export function reviewInstruction(
       `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
       `review goes in the notepad file named below and nowhere else; the developer ` +
       `decides what, if anything, reaches GitHub. The one exception is an issue ` +
-      `about den itself, as described at the end.\n` +
+      `about ${APP_NAME} itself, as described at the end.\n` +
       `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
       `suspicion, first move off the PR's branch: \`git checkout -b ${scratch}\` ` +
       `(or \`git checkout ${scratch}\` if it already exists), then edit there. Run ` +

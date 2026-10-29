@@ -42,7 +42,7 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
   if (!data?.limits || !week || week.resetsAt <= Date.now()) return null;
   const pace = weekPace(week.usedPercentage, week.resetsAt, data.limits.at);
   const lines = [
-    `This week: ${Math.round(pace.used)}% used; an even pace would be ${Math.round(pace.expected)}%. Resets ${when(week.resetsAt, true)}.`,
+    `This week: ${Math.round(pace.used)}% used (${LABEL[pace.status]}); an even pace would be ${Math.round(pace.expected)}%. Resets ${when(week.resetsAt, true)}.`,
   ];
   if (pace.runsOutAt) lines.push(`At this week's rate it runs out ${when(pace.runsOutAt, true)}.`);
   const session = data.limits.session;
@@ -58,12 +58,13 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
   return (
     <span className={`ledger-chip ${pace.status}`} title={lines.join("\n")}>
       {mouse && <Critter kind="mouse" size={19} className="ledger-mouse" />}
-      week {Math.round(pace.used)}%
+      {Math.round(pace.used)}%
       <span className="ledger-bar" aria-hidden>
         <span className="ledger-fill" style={{ width: `${Math.min(pace.used, 100)}%` }} />
         <span className="ledger-tick" style={{ left: `${pace.expected}%` }} />
       </span>
-      <span className="ledger-label">{LABEL[pace.status]}</span>
+      {/* Only a warning earns words on the chip; the rest is on hover. */}
+      {pace.status === "ahead" && <span className="ledger-label">ahead</span>}
     </span>
   );
 }

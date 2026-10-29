@@ -4,7 +4,7 @@ import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
-import { TodayView, nextItemSession } from "./TodayView.tsx";
+import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { DenImportBanner } from "./DenImportBanner.tsx";
@@ -356,8 +356,30 @@ export function App() {
     }
   };
 
-  // Going through the Today list one item at a time (#46): from a session,
-  // back to Today or on to the next open item's session.
+  // The sessions Fox's open Today items name, so a session header offers
+  // "next" only while it's on the list.
+  const [todaySessions, setTodaySessions] = useState<string[]>([]);
+  const foxUp = manager?.status === "running";
+  useEffect(() => {
+    if (!burrow || !foxUp) {
+      setTodaySessions([]);
+      return;
+    }
+    let stop = false;
+    const load = () =>
+      api<{ content: string }>("/api/manager/today")
+        .then((d) => !stop && setTodaySessions(openItemSessions(d.content)))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 20_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [burrow, foxUp]);
+
+  // Going through the Today list one item at a time (#46): on to the next
+  // open item's session, or back to Today after the last.
   const goToday = () => manager && selectSession(manager.id);
   const goNextItem = async (current: string) => {
     try {
@@ -433,14 +455,7 @@ export function App() {
         </span>
       )}
       <WorkLinkChips s={s} issues={issues} prs={prs} />
-      <span
-        style={{
-          marginLeft: "auto",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
+      <span className="term-actions">
         {!s.shell && <SpendChip sessionId={s.id} />}
         {s.view === "review" && (
           <OwnPrToggle
@@ -474,22 +489,17 @@ export function App() {
             rel="noreferrer"
             title={`open ${EDITION_NAME[edition]}'s latest iteration (the dev server) — needs \`npm run dev\` running on :5173`}
           >
-            ▶ open {EDITION_NAME[edition]} in browser
+            ▶ dev
           </a>
         )}
-        {burrow && manager && s.view !== "manager" && (
-          <span className="today-nav">
-            <button className="btn btn-ghost-outline restart-btn" onClick={goToday} title="back to the Today list">
-              ‹ Today
-            </button>
-            <button
-              className="btn btn-ghost-outline restart-btn"
-              onClick={() => goNextItem(s.name)}
-              title="the next open item's session on the Today list"
-            >
-              next ›
-            </button>
-          </span>
+        {burrow && s.view !== "manager" && todaySessions.includes(s.name) && (
+          <button
+            className="btn btn-ghost-outline restart-btn"
+            onClick={() => goNextItem(s.name)}
+            title="On to the next session on Fox's Today list (back to Today after the last)"
+          >
+            next ›
+          </button>
         )}
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
@@ -516,7 +526,6 @@ export function App() {
             ↻ restart
           </button>
         )}
-        {s.shell ? "shell" : "claude"} · {s.status}
       </span>
     </div>
   );
@@ -639,22 +648,20 @@ export function App() {
               <span className="dot" style={{ background: active.color }} />
             )}
             <span className="topbar-name">{active.name}</span>
-            <span className="topbar-kind">
-              {active.shell ? "shell" : "claude"}
-            </span>
           </span>
         )}
         <span className="topbar-spacer" />
-        {burrow && manager?.status !== "running" && (
-          <button className="btn topbar-day" onClick={startDay} title="Fox reads every session, your PRs, and Linear, and makes today's list">
-            ☀ start my day
-          </button>
-        )}
-        {burrow && rail.some((r) => r.status === "running" && !r.shell && (!r.view || r.view === "manager") && !r.look) && (
-          <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Hedgehog updates each session's handover and ends its chat for the night">
-            ☾ clock out
-          </button>
-        )}
+        {/* One slot for the day: start it until Fox is up, then clock out. */}
+        {burrow &&
+          (manager?.status !== "running" ? (
+            <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
+              ☀ start
+            </button>
+          ) : (
+            <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Clock out: Hedgehog updates each session's handover and ends its chat for the night">
+              ☾ clock out
+            </button>
+          ))}
         <LedgerChip mouse={burrow} />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button

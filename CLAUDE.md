@@ -249,7 +249,7 @@ WebSocket; everything else is REST.
   `cd <repo> && <command>` into it rather than running the command itself, so
   the output is in front of you and Ctrl-C works. The command is written **400ms
   after** the tab opens — a fresh login shell eats keystrokes typed during zsh's
-  prompt init. `web/src/AppRunButton.tsx` renders "▶ run <name>" or, when it can
+  prompt init. `web/src/AppRunButton.tsx` renders "▶ run" (the name and command in its title, so a long worktree name can't push the header's buttons off screen) or, when it can
   tell the app is already up, "▶ open <name>" linking to the URL. Pure parts
   unit-tested in `server/apprun.test.ts`.
 - **Stack port check** (issue 34): for a runn stack with containers up,
@@ -629,8 +629,14 @@ developer's day across the other sessions instead of them being the glue.
   "Waiting on you" (`waitingItems` in `shared/handover.ts`, tested; served as
   `meta().waiting`, re-read only when the notepad's mtime changes). Session
   headers get "‹ Today" (back to Fox) and "next ›" (`nextItemSession`: the
-  next open item's session on the Today list). Header buttons are compact
-  for a 13-inch screen (fresh is "✦", the pin is "📌"). In both apps the
+  next open item's session on the Today list, back to Today after the last;
+  shown only while this session is on the open list, from a 20s poll of
+  today.md). The header keeps its buttons in `.term-actions` (never
+  squeezed) and lets the path and branch give way first; fresh is "✦", the
+  pin "📌", and there's no "claude · running" text. The topbar holds one day
+  button (☀ start until Fox is up, then ☾ clock out) and a compact pace
+  chip (mouse, %, bar; words only when "ahead"), and the title chip has no
+  kind badge. In both apps the
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
   button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
   GitHub split into Review requested / My open PRs (`den.prTab`); a tab

@@ -673,10 +673,19 @@ body {
   font-size: 12px;
   color: var(--ink-soft);
 }
+/* The header's buttons: never squeezed, so the path and branch give way. */
+.term-actions {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .term-name {
-  /* As long as its content, but shrink with an ellipsis if the row overflows. */
+  /* As long as its content, but shrink with an ellipsis if the row overflows;
+     the path and branch give way first, since the name is what you read. */
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: min(14ch, 40%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2399,6 +2408,8 @@ body {
 }
 
 .term-cwd {
+  flex-shrink: 4;
+  min-width: 0;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 11px;
   color: var(--ink-soft);
@@ -2411,6 +2422,8 @@ body {
   white-space: nowrap;
 }
 .term-branch {
+  flex-shrink: 3;
+  min-width: 0;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 11px;
   color: var(--ink-soft);

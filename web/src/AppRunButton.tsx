@@ -116,7 +116,7 @@ export function AppRunButton({
         rel="noreferrer"
         title={`open ${runner.name} — running at ${runner.url}`}
       >
-        ▶ open {runner.name}
+        ▶ open
       </a>
       {warn}
       {stop}
@@ -139,7 +139,7 @@ export function AppRunButton({
         }
       }}
     >
-      {busy ? "starting…" : `▶ run ${runner.name}`}
+      {busy ? "starting…" : "▶ run"}
     </button>
     {warn}
     {stop}
