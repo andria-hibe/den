@@ -68,3 +68,18 @@ export function canStartFresh(s: {
   if (s.shell || s.role !== "main") return false;
   return s.view === "manager" || (!s.look && !s.view && s.handover);
 }
+
+/** The items under a handover's "Waiting on you", one per bullet or line;
+ * empty when the section says "Nothing." or is missing. */
+export function waitingItems(md: string): string[] {
+  const head = `## ${HANDOVER_HEADINGS[3]}`;
+  const at = md.indexOf(head);
+  if (at < 0) return [];
+  const rest = md.slice(at + head.length);
+  const end = rest.search(/\n(## |---)/);
+  const lines = (end < 0 ? rest : rest.slice(0, end))
+    .split("\n")
+    .map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s+/, "").trim())
+    .filter(Boolean);
+  return lines.length === 1 && /^nothing\.?$/i.test(lines[0]) ? [] : lines;
+}

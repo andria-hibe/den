@@ -23,6 +23,24 @@ export function linkSessions(html: string): string {
   );
 }
 
+/** The sessions the open items name, in list order, each once. */
+export function openItemSessions(md: string): string[] {
+  const out: string[] = [];
+  for (const line of md.split("\n")) {
+    if (!/^\s*- \[ \] /.test(line)) continue;
+    const m = line.match(/\(session: ([^)]+)\)/);
+    if (m && !out.includes(m[1].trim())) out.push(m[1].trim());
+  }
+  return out;
+}
+
+/** The session after `current` in the open items, or null at the end. */
+export function nextItemSession(md: string, current: string): string | null {
+  const list = openItemSessions(md);
+  const at = list.indexOf(current);
+  return list[at + 1] ?? null;
+}
+
 /** How many items are still open in a Today list. */
 export function openItems(md: string): number {
   return (md.match(/^\s*- \[ \] /gm) ?? []).length;

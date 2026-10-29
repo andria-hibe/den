@@ -13,6 +13,7 @@ export interface ShortcutState {
   onNewShell: () => void;
   onClose: (id: string) => void;
   onSelect: (id: string) => void;
+  onToggleWork: () => void;
 }
 
 export function useKeyboardShortcuts(state: ShortcutState) {
@@ -34,6 +35,9 @@ export function useKeyboardShortcuts(state: ShortcutState) {
         if (!s.activeId) return;
         e.preventDefault();
         s.onClose(s.activeId);
+      } else if (k === "\\") {
+        e.preventDefault();
+        s.onToggleWork();
       } else if (k >= "1" && k <= "9") {
         const target = s.rail[Number(k) - 1];
         if (target) {

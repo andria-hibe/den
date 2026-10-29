@@ -42,7 +42,8 @@ export function WorkLinkChips({
   const st = s.stack;
   const behindParent = st?.stacked ? st.behindParent : 0;
   const behindOrigin = st?.behindOrigin ?? 0;
-  if (!ticketId && !prNum && s.view !== "review" && !behindParent && !behindOrigin) return null;
+  const waiting = s.waiting ?? [];
+  if (!ticketId && !prNum && s.view !== "review" && !behindParent && !behindOrigin && !waiting.length) return null;
 
   const check =
     pr?.checks === "passing"
@@ -54,6 +55,11 @@ export function WorkLinkChips({
           : "";
   const chips = (
     <>
+      {waiting.length > 0 && (
+        <span className="link-chip needs-you" title={`Waiting on you:\n${waiting.map((w) => `- ${w}`).join("\n")}`}>
+          needs you
+        </span>
+      )}
       {s.view === "review" && (
         <span className="link-chip review" title="reviewing this PR — read-only toward GitHub">
           review

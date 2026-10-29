@@ -4,7 +4,7 @@ import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
-import { TodayView } from "./TodayView.tsx";
+import { TodayView, nextItemSession } from "./TodayView.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
@@ -14,7 +14,7 @@ import { FreshStartButton } from "./FreshStartButton.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
-import { usePersistentNumber } from "./usePersistent.ts";
+import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
 import { AppRunButton, SetupButton, type AppRunner } from "./AppRunButton.tsx";
@@ -160,6 +160,9 @@ export function App() {
 
   const [railW, setRailW] = usePersistentNumber("den.railW", 240);
   const [workW, setWorkW] = usePersistentNumber("den.workW", 300);
+  // The work panel folds to a strip of counts, for a small screen.
+  const [workFold, setWorkFold] = usePersistentString("den.workFold", "open", ["open", "folded"] as const);
+  const toggleWork = () => setWorkFold((f) => (f === "open" ? "folded" : "open"));
   const [mainFrac, setMainFrac] = usePersistentNumber("den.wsMainFrac", 0.6);
   const [shellFrac, setShellFrac] = usePersistentNumber("den.wsShellFrac", 0.5);
   const wsRef = useRef<HTMLDivElement>(null);
@@ -243,6 +246,7 @@ export function App() {
     onNewShell: () => addSession({ shell: true }),
     onClose: closeAndOfferCleanup,
     onSelect: selectSession,
+    onToggleWork: toggleWork,
   });
 
   // --- Linear ticket → look / work ---
@@ -348,6 +352,21 @@ export function App() {
     }
   };
 
+  // Going through the Today list one item at a time (#46): from a session,
+  // back to Today or on to the next open item's session.
+  const goToday = () => manager && selectSession(manager.id);
+  const goNextItem = async (current: string) => {
+    try {
+      const { content } = await api<{ content: string }>("/api/manager/today");
+      const next = nextItemSession(content, current);
+      const target = next ? rail.find((r) => r.name === next) : undefined;
+      if (target) selectSession(target.id);
+      else goToday();
+    } catch {
+      goToday();
+    }
+  };
+
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
       <span className="color-picker">
@@ -430,6 +449,20 @@ export function App() {
             ▶ open den in browser
           </a>
         )}
+        {burrow && manager && s.view !== "manager" && (
+          <span className="today-nav">
+            <button className="btn btn-ghost-outline restart-btn" onClick={goToday} title="back to the Today list">
+              ‹ Today
+            </button>
+            <button
+              className="btn btn-ghost-outline restart-btn"
+              onClick={() => goNextItem(s.name)}
+              title="the next open item's session on the Today list"
+            >
+              next ›
+            </button>
+          </span>
+        )}
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
         )}
@@ -443,7 +476,7 @@ export function App() {
                 : "Pin to keep this session running through Clock out, in the same conversation"
             }
           >
-            {s.keepAlive ? "📌 pinned" : "📌 pin"}
+            {s.keepAlive ? "📌 pinned" : "📌"}
           </button>
         )}
         {s.status === "exited" && (
@@ -556,6 +589,10 @@ export function App() {
               <li>
                 <span className="keys"><kbd>{MOD}</kbd><kbd>W</kbd></span>
                 <span>close session</span>
+              </li>
+              <li>
+                <span className="keys"><kbd>{MOD}</kbd><kbd>\\</kbd></span>
+                <span>fold the work panel</span>
               </li>
               <li>
                 <span className="keys"><kbd>alt</kbd><kbd>↑</kbd>/<kbd>↓</kbd></span>
@@ -859,17 +896,39 @@ export function App() {
         )}
       </main>
 
-      <Splitter dir="x" onDrag={(d) => setWorkW((w) => clamp(w - d, 220, 560))} />
+      {workFold === "folded" ? (
+        <button
+          className="panel work-strip"
+          onClick={toggleWork}
+          title={`Show the work panel (${MOD}+\\)`}
+          aria-label="show the work panel"
+        >
+          <span className="work-strip-label">WORK</span>
+          <span className="work-strip-count" title="PRs that need you">
+            ⌥ {prs.filter((p) => p.needsAttention).length}
+          </span>
+          <span className="work-strip-count" title="unread in Linear">
+            ◆ {work.linearNotifs}
+          </span>
+        </button>
+      ) : (
+        <>
+          <Splitter dir="x" onDrag={(d) => setWorkW((w) => clamp(w - d, 220, 560))} />
 
-      {/* Right: work — live GitHub PRs + Linear tickets */}
-      <div className="work-col" style={{ width: workW }}>
-        <WorkPanel
-          onOpenTicket={openTicket}
-          onOpenPr={openPr}
-          ticketColor={ticketColor}
-          prColor={prColor}
-        />
-      </div>
+          {/* Right: work — live GitHub PRs + Linear tickets */}
+          <div className="work-col" style={{ width: workW }}>
+            <button className="work-fold" onClick={toggleWork} title={`Fold the work panel (${MOD}+\\)`} aria-label="fold the work panel">
+              »
+            </button>
+            <WorkPanel
+              onOpenTicket={openTicket}
+              onOpenPr={openPr}
+              ticketColor={ticketColor}
+              prColor={prColor}
+            />
+          </div>
+        </>
+      )}
       </div>
 
       {showNew && (

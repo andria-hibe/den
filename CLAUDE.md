@@ -609,6 +609,15 @@ developer's day across the other sessions instead of them being the glue.
   (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's
   "pin" in Burrow) keeps a pane out of it every night - it shows as "pinned
   to stay running" and keeps its conversation.
+- **Going through the day** (Burrow): a rail row and the header show a
+  pink "needs you" chip while the session's handover lists anything under
+  "Waiting on you" (`waitingItems` in `shared/handover.ts`, tested; served as
+  `meta().waiting`, re-read only when the notepad's mtime changes). Session
+  headers get "‹ Today" (back to Fox) and "next ›" (`nextItemSession`: the
+  next open item's session on the Today list). Header buttons are compact
+  for a 13-inch screen (fresh is "✦", the pin is "📌"). In both apps the
+  work panel folds to a 46px strip of counts (`den.workFold`, the "»"
+  button, or Cmd+\\).
 - **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
   Linear notifications (`getInboxNotifications`, a query of its own so a
   schema surprise can't break the ticket list; newest first) and GitHub

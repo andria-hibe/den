@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import {
   HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, canStartFresh, lineChanges, restoreTicket,
-  ticketDescription,
+  ticketDescription, waitingItems,
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
@@ -114,6 +114,24 @@ function readClockedOut(): string[] {
 function writeClockedOut(ids: string[]): void {
   mkdirSync(MANAGER_DIR, { recursive: true });
   writeFileSync(clockedOutPath, JSON.stringify(ids));
+}
+
+// The rail polls every few seconds, so a notepad is re-read only when it changes.
+const waitingCache = new Map<string, { mtime: number; items: string[] }>();
+
+/** A workspace notepad's "Waiting on you" items. */
+function handoverWaiting(groupId: string): string[] {
+  try {
+    const file = notepadPath(groupId);
+    const mtime = statSync(file).mtimeMs;
+    const hit = waitingCache.get(groupId);
+    if (hit?.mtime === mtime) return hit.items;
+    const items = waitingItems(readFileSync(file, "utf8"));
+    waitingCache.set(groupId, { mtime, items });
+    return items;
+  } catch {
+    return [];
+  }
 }
 
 /** Whether a checkout is mid-merge or mid-rebase, or has staged changes. */
@@ -836,6 +854,8 @@ export interface SessionMeta {
   owned: boolean;
   /** Clock out leaves this pane running, every night (#46). */
   keepAlive: boolean;
+  /** Its handover's "Waiting on you" items, for the rail. */
+  waiting: string[];
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -1116,6 +1136,7 @@ class DenSession {
       handover: this.handover,
       owned: this.owned,
       keepAlive: this.keepAlive,
+      waiting: this.shell || this.role !== "main" || this.look || this.view ? [] : handoverWaiting(this.groupId),
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
     };

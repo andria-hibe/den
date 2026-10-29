@@ -41,9 +41,10 @@ export function FreshStartButton({
       className="btn btn-ghost-outline restart-btn"
       disabled={busy}
       onClick={() => (running ? setConfirming(true) : run())}
-      title="Start a new conversation that picks up from the handover, instead of reloading this whole chat. Check the handover is up to date first. The old conversation stays in Resume."
+      aria-label="start fresh from the handover"
+      title="Start fresh: a new conversation that picks up from the handover, instead of reloading this whole chat. Check the handover is up to date first. The old conversation stays in Resume."
     >
-      ✦ fresh
+      ✦
     </button>
   );
 }

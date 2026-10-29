@@ -79,6 +79,47 @@ body {
 .work-col .work {
   flex: 1;
 }
+.work-col {
+  position: relative;
+}
+/* Folds the work panel to .work-strip. */
+.work-fold {
+  position: absolute;
+  top: 14px;
+  right: 46px;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.work-strip {
+  flex: none;
+  width: 46px;
+  margin-left: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+.work-strip-label {
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--ink-soft);
+}
+.work-strip-count {
+  font-size: 11px;
+  font-weight: 800;
+  writing-mode: vertical-rl;
+}
 
 /* Draggable dividers between panels. */
 .splitter {
@@ -2049,6 +2090,18 @@ body {
   background: rgba(255, 255, 255, 0.4);
   transform: translateY(-1px);
 }
+.today-nav {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* A handover with something in "Waiting on you". */
+.link-chip.needs-you {
+  background: var(--pink);
+  border-color: var(--pink-deep);
+  color: #4a3a52;
+}
+
 /* A session pinned to stay up through Clock out. */
 .restart-btn.pinned {
   border-color: var(--pink-deep);
