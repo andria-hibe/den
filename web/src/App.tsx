@@ -12,7 +12,6 @@ import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
-import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
@@ -382,7 +381,7 @@ export function App() {
   // a kit for each ticket or PR session (a ticket look included),
   // its scarf in the session's colour, and Owl for a review.
   const sessionIcon = (s: SessionMeta, size: number) => {
-    if (s.view === "manager") return <PixelFox size={30} />;
+    if (s.view === "manager") return <Fox pose="sit" size={size} bust />;
     if (s.shell) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;

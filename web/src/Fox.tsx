@@ -31,13 +31,20 @@ export function rasterize(
 export function Fox({
   pose = "sit",
   size = 96,
+  bust = false,
   className,
 }: {
   pose?: FoxPose;
   size?: number;
+  /** Head and shoulders only, cropped like a kit's bust (critterSprites
+   * BUSTS), to sit beside the kits and Owl in the rail. */
+  bust?: boolean;
   className?: string;
 }) {
-  const frames = useMemo(() => FOX_FRAMES[pose].map((g) => rasterize(g)), [pose]);
+  const frames = useMemo(
+    () => FOX_FRAMES[pose].map((g) => rasterize(bust ? g.slice(0, 11).map((r) => r.slice(0, 15)) : g)),
+    [pose, bust],
+  );
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
