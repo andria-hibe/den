@@ -607,6 +607,18 @@ developer's day across the other sessions instead of them being the glue.
   `startManager` handles). Attention (the bell) is deliberately not a
   blocker: Claude rings it at the end of every turn. No keep-alive pin yet;
   unticking a pane in the dialog does the same tonight.
+- **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
+  Linear notifications (`getInboxNotifications`, a query of its own so a
+  schema surprise can't break the ticket list; newest first) and GitHub
+  threads the developer takes part in from the last 24h (`getNotifications`,
+  `gh api notifications?participating=true`, `notificationWebUrl` for links)
+  - and each PR's failing checks by name with run links (`failingChecks`,
+  from the same `gh pr checks --json bucket,name,link` call), plus
+  `sharedFailures` (a check failing on more than one PR; tested). Fox's
+  `managerAgents` add tanuki (Sonnet, sorts the Inbox section) and raccoon
+  (Haiku, reads failed logs with `gh run view --log-failed`, says flake or
+  real and whether a fix landed on the base; never reruns). Kits get raccoon
+  too, for their own red CI.
 
 ## Features (all built + committed on `master`)
 

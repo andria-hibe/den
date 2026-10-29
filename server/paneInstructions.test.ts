@@ -14,7 +14,7 @@ import {
   buildManagerPermissions,
   clockOutBlockers,
 } from "./sessions.ts";
-import { crewRule, kitAgents } from "./crew.ts";
+import { crewRule, kitAgents, managerAgents } from "./crew.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 
@@ -134,7 +134,7 @@ describe("managerInstruction", () => {
 
 describe("the crew", () => {
   it("gives kits ASCII reviewers, with Owl on Fable only when the week has room", () => {
-    expect(isAscii(crewRule() + JSON.stringify(kitAgents(true)))).toBe(true);
+    expect(isAscii(crewRule() + JSON.stringify(kitAgents(true)) + JSON.stringify(managerAgents(true, "/d.md")))).toBe(true);
     expect(kitAgents(true).owl.model).toBe("claude-fable-5-1");
     expect(kitAgents(false).owl.model).toBe("opus");
     expect(workspaceInstruction(NOTEPAD, true)).toContain(crewRule());

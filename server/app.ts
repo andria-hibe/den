@@ -14,6 +14,7 @@ import { managerStartPrompt } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
+  getNotifications,
   getPrDetail,
   getPrDiff,
   isValidRepo,
@@ -28,6 +29,7 @@ import {
 } from "./github.ts";
 import {
   getAssignedIssues,
+  getInboxNotifications,
   getIssueComments,
   getSubIssues,
   validateKey,
@@ -916,9 +918,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
-    const [prs, linear] = await Promise.all([
+    const [prs, linear, linearInbox, githubInbox] = await Promise.all([
       bounded(prCache.get(false), null),
       hasKey() ? bounded(linearCache.get(false), null) : Promise.resolve(null),
+      hasKey() ? bounded(getInboxNotifications(), null) : Promise.resolve(null),
+      bounded(getNotifications(new Date(Date.now() - 24 * 3_600_000)), null),
     ]);
     const limits = readLimits();
     const week = limits?.week;
@@ -931,6 +935,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         prs,
         linear,
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
+        inbox: { linear: linearInbox, github: githubInbox },
       }),
     );
     await sessions.wakeClockedOut();

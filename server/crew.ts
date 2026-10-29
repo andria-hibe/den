@@ -53,6 +53,37 @@ const WOLF_PROMPT =
   `like <repo>-security-review), use it. Say how confident you are in each ` +
   `finding.\n` + REPORT_ONLY;
 
+const RACCOON_PROMPT =
+  `You are Raccoon, the den's CI investigator. For each failing check you're ` +
+  `given (a check name and its run link), read the failed log (\`gh run view ` +
+  `<run id> --log-failed\`; the run id is in the link) and say: whether it's ` +
+  `infrastructure or a flake (install timeouts, runner crashes, network) or ` +
+  `a real failure in the code; the first error line that matters; whether ` +
+  `other PRs fail the same way; and whether a fix has already landed on the ` +
+  `base branch (look at its recent commits, especially to CI, lockfiles, and ` +
+  `the failing files). Recommend a rerun, a merge of the base branch, or a ` +
+  `code fix, but don't rerun anything yourself.\n` + REPORT_ONLY;
+
+const tanukiPrompt = (digest: string) =>
+  `You are Tanuki, the den's inbox keeper. Read the Inbox section of ` +
+  `${digest}: the developer's unread Linear notifications and the GitHub ` +
+  `threads they take part in. For each item decide whether it needs the ` +
+  `developer (a decision, a reply, a review they owe), is worth knowing, or ` +
+  `needs nothing (their own activity, something a session is already ` +
+  `handling, noise). Open the linked issue or PR only when the item alone ` +
+  `doesn't tell you. Return only the items that need them or are worth ` +
+  `knowing, one line each with its link, marked Decide, Unblock others, or ` +
+  `FYI.\n` + REPORT_ONLY;
+
+const raccoon: AgentDef = {
+  description:
+    "Raccoon, the CI investigator. Give it failing checks (names and run links): " +
+    "it reads the logs and says whether each is a flake or real, whether other PRs " +
+    "fail the same way, and whether a fix already landed on the base branch.",
+  prompt: RACCOON_PROMPT,
+  model: "haiku",
+};
+
 /** The subagents for a ticket workspace (a kit). `fable`: the week has room
  * for Owl to think on Fable rather than Opus. */
 export function kitAgents(fable: boolean): Record<string, AgentDef> {
@@ -79,6 +110,7 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
       prompt: HARE_PROMPT,
       model: "sonnet",
     },
+    raccoon,
     wolf: {
       description:
         "Wolf, the security reviewer. Call it when the change touches auth, " +
@@ -89,9 +121,20 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
   };
 }
 
-/** The Manager's only subagent: Owl, for advice. */
-export function managerAgents(fable: boolean): Record<string, AgentDef> {
-  return { owl: kitAgents(fable).owl };
+/** The Manager's crew: Owl for advice, Tanuki for the inbox, Raccoon for
+ * failing CI. */
+export function managerAgents(fable: boolean, digest: string): Record<string, AgentDef> {
+  return {
+    owl: kitAgents(fable).owl,
+    tanuki: {
+      description:
+        "Tanuki, the inbox keeper. Sorts the digest's Inbox section (Linear and GitHub) " +
+        "into what needs the developer, what's worth knowing, and what to drop.",
+      prompt: tanukiPrompt(digest),
+      model: "sonnet",
+    },
+    raccoon,
+  };
 }
 
 /** What a kit is told about its crew. */
@@ -101,7 +144,8 @@ export function crewRule(): string {
     `say a piece of work is done, have badger check it, plus hare when it ` +
     `touches performance and wolf when it touches security. Ask owl when ` +
     `you're stuck on a hard problem, and to review your branch before you ask ` +
-    `the developer to. They report; you decide and fix. Say in your handover ` +
+    `the developer to, and raccoon when CI fails. They report; you decide and ` +
+    `fix. Say in your handover ` +
     `who checked what.`
   );
 }

@@ -429,7 +429,10 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `asks you to start: every session with the developer's part of its ` +
     `handover, the developer's pull requests and reviews with CI and review ` +
     `state, their Linear tickets and unread inbox count, and the week's token ` +
-    `use. Read it first. The digest's session names are the names ` +
+    `use. Read it first, then send tanuki to sort its Inbox section and, when ` +
+    `any of the developer's PRs has failing checks, raccoon to read those ` +
+    `logs, both at once, and fold what they report into the list. The ` +
+    `digest's session names are the names ` +
     `ListAgents shows. ListAgents can also list sessions from other apps, ` +
     `such as the developer's original den: work only with the sessions in ` +
     `the digest. Read a session's full handover in ` +
@@ -1594,7 +1597,7 @@ class SessionManager {
       "--settings", managerSettingsPath,
       "--add-dir", PROGRESS_DIR,
       "--add-dir", MANAGER_DIR,
-      "--agents", JSON.stringify(managerAgents(fableHasRoom())),
+      "--agents", JSON.stringify(managerAgents(fableHasRoom(), DIGEST_PATH)),
       "--append-system-prompt", managerInstruction(notepad, TODAY_PATH, DIGEST_PATH),
     ];
   }

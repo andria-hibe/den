@@ -238,8 +238,8 @@ export interface CrewMember {
 /** The Manager and its workers, in the order the crew strip shows them. */
 export const CREW: CrewMember[] = [
   { kind: "fox", name: "Fox", job: "Plans your day with you and passes your answers to sessions", model: "Opus", built: true },
-  { kind: "tanuki", name: "Tanuki", job: "Sweeps your Linear inbox and GitHub notifications", model: "Sonnet", built: false },
-  { kind: "raccoon", name: "Raccoon", job: "Digs through failing CI and spots the same failure on other PRs", model: "Haiku", built: false },
+  { kind: "tanuki", name: "Tanuki", job: "Sweeps your Linear inbox and GitHub notifications", model: "Sonnet", built: true },
+  { kind: "raccoon", name: "Raccoon", job: "Digs through failing CI and spots the same failure on other PRs", model: "Haiku", built: true },
   { kind: "hedgehog", name: "Hedgehog", job: "Tucks sessions in at clock out by refreshing each handover", model: "each session's own", built: true },
   { kind: "mouse", name: "Field mouse", job: "Rations the week's tokens: the pace chip in the top bar", model: "no model, den's own code", built: true },
   { kind: "badger", name: "Badger", job: "QA: runs the tests, checks the change in the browser with screenshots, and tries to break it", model: "Sonnet", built: true },

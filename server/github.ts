@@ -38,6 +38,8 @@ export interface PullRequest {
   updatedAt: string;
   checks: CheckState;
   checkCounts: { passed: number; failed: number; pending: number; total: number };
+  /** The checks failing on the latest run, by name, with their run pages. */
+  failingChecks?: { name: string; link?: string }[];
   review: ReviewState;
   /** Ticket id parsed from the branch (e.g. "fast-5979"). */
   ticketHint?: string;
@@ -187,10 +189,13 @@ export function splitByAuthor(
   return { authored: [...authored.values()], review: [...review.values()] };
 }
 
-/** One row of `gh pr checks --json bucket` (one check, latest run only). */
+/** One row of `gh pr checks --json bucket,name,link` (one check, latest run only). */
 export interface CheckRow {
   /** gh's own rollup of a check's state: pass|fail|pending|skipping|cancel. */
   bucket?: string;
+  name?: string;
+  /** The check's run page, for reading its log. */
+  link?: string;
 }
 
 /**
@@ -232,7 +237,7 @@ export function summarizeChecks(rows: CheckRow[]): {
  */
 async function fetchChecks(repo: string, number: number): Promise<CheckRow[]> {
   const { stdout, stderr } = await ghAllowFail([
-    "pr", "checks", String(number), "--repo", repo, "--json", "bucket",
+    "pr", "checks", String(number), "--repo", repo, "--json", "bucket,name,link",
   ]);
   if (!stdout.trim()) {
     // Expected for a branch with no checks; anything else is worth surfacing.
@@ -268,9 +273,14 @@ export function parseTicketHint(branch?: string | null): string | undefined {
 async function toPullRequest(n: SearchNode): Promise<PullRequest> {
   const repo = n.repository.nameWithOwner;
   let checks = summarizeChecks([]);
+  let failingChecks: { name: string; link?: string }[] = [];
   // See summarizeChecks for why CI can't come from the search's rollup.
   try {
-    checks = summarizeChecks(await fetchChecks(repo, n.number));
+    const rows = await fetchChecks(repo, n.number);
+    checks = summarizeChecks(rows);
+    failingChecks = rows
+      .filter((r) => r.bucket === "fail" && r.name)
+      .map((r) => ({ name: r.name as string, link: r.link }));
   } catch (err) {
     logWarn(`github.checks pr#${n.number}`, err);
   }
@@ -287,6 +297,7 @@ async function toPullRequest(n: SearchNode): Promise<PullRequest> {
     updatedAt: n.updatedAt,
     checks: checks.state,
     checkCounts: checks.counts,
+    failingChecks,
     review: reviewFrom(n.reviewDecision ?? null),
     ticketHint: parseTicketHint(branch),
     isMine: false,
@@ -657,4 +668,43 @@ async function viewerLogin(): Promise<string> {
   }
 }
 
+/** A GitHub notification on a thread the developer takes part in. */
+export interface GhNotification {
+  /** Why it reached them: mention, review_requested, comment, author, ... */
+  reason: string;
+  type: string;
+  title: string;
+  repo: string;
+  url: string | null;
+  updatedAt: string;
+}
 
+/** The web page for a notification's API subject URL, where there's an
+ * obvious one (a PR or an issue). */
+export function notificationWebUrl(apiUrl: string | null | undefined): string | null {
+  const m = apiUrl?.match(/^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/(pulls|issues)\/(\d+)$/);
+  if (!m) return null;
+  return `https://github.com/${m[1]}/${m[2] === "pulls" ? "pull" : "issues"}/${m[3]}`;
+}
+
+/** Participating notifications updated since `since`, for the Manager's
+ * digest. One call, read once per Start my day. */
+export async function getNotifications(since: Date): Promise<GhNotification[]> {
+  const stdout = await gh([
+    "api", `notifications?participating=true&all=false&per_page=50&since=${since.toISOString()}`,
+  ]);
+  const rows = JSON.parse(stdout) as {
+    reason: string;
+    updated_at: string;
+    subject: { title: string; type: string; url: string | null };
+    repository: { full_name: string };
+  }[];
+  return rows.map((r) => ({
+    reason: r.reason,
+    type: r.subject.type,
+    title: r.subject.title,
+    repo: r.repository.full_name,
+    url: notificationWebUrl(r.subject.url),
+    updatedAt: r.updated_at,
+  }));
+}
