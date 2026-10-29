@@ -4,6 +4,9 @@ import { renderMarkdown } from "./markdown.ts";
 import { relTimeAgo } from "./format.ts";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber } from "./usePersistent.ts";
+import { Fox } from "./Fox.tsx";
+import { Critter } from "./Critter.tsx";
+import { CREW } from "./critterSprites.ts";
 
 /** Checklist marks as glyphs: markdown.ts has no task-list syntax. */
 export function todayMarkdown(md: string): string {
@@ -28,11 +31,13 @@ export function openItems(md: string): number {
 /** The Manager's layout (#46): the Today list it keeps above, its pane below,
  * one splitter, like the review view, so it fits a small screen. */
 export function TodayView({
+  foxRunning,
   onStartDay,
   onOpenSession,
   header,
   terminal,
 }: {
+  foxRunning: boolean;
   onStartDay: () => Promise<void>;
   /** Open the rail session with this name. */
   onOpenSession: (name: string) => void;
@@ -75,6 +80,25 @@ export function TodayView({
           <span className="pr-info-title">Today</span>
           {content && <span className="today-open">{openItems(content)} open</span>}
           {today?.writtenAt ? <span className="today-when">updated {relTimeAgo(today.writtenAt)}</span> : null}
+          <span className="today-crew">
+            {CREW.map((c) => {
+              const awake = c.kind === "fox" ? foxRunning : c.built;
+              const state = c.built ? (awake ? "" : " (asleep: start my day wakes it)") : " (coming soon)";
+              return (
+                <span
+                  key={c.kind}
+                  className={`today-critter${awake ? "" : " resting"}`}
+                  title={`${c.name}: ${c.job}. Runs on ${c.model}.${state}`}
+                >
+                  {c.kind === "fox" ? (
+                    <Fox pose={foxRunning ? "sit" : "sleep"} size={38} />
+                  ) : (
+                    <Critter kind={c.kind} size={38} />
+                  )}
+                </span>
+              );
+            })}
+          </span>
           <button className="btn btn-ghost-outline today-start" disabled={starting} onClick={start}>
             {starting ? "starting…" : "☀ start my day"}
           </button>

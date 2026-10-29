@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { FOX_PALETTE, FOX_FRAMES, type FoxPose } from "./foxSprites.ts";
 
-function rasterize(grid: string[]): { src: string; cols: number; rows: number } {
+export function rasterize(
+  grid: string[],
+  palette: Record<string, string> = FOX_PALETTE,
+): { src: string; cols: number; rows: number } {
   const cols = Math.max(...grid.map((r) => r.length));
   const rows = grid.length;
   const canvas = document.createElement("canvas");
@@ -11,7 +14,7 @@ function rasterize(grid: string[]): { src: string; cols: number; rows: number } 
   if (ctx) {
     grid.forEach((row, y) => {
       [...row].forEach((ch, x) => {
-        const fill = FOX_PALETTE[ch];
+        const fill = palette[ch];
         if (fill) {
           ctx.fillStyle = fill;
           ctx.fillRect(x, y, 1, 1);
@@ -34,7 +37,7 @@ export function Fox({
   size?: number;
   className?: string;
 }) {
-  const frames = useMemo(() => FOX_FRAMES[pose].map(rasterize), [pose]);
+  const frames = useMemo(() => FOX_FRAMES[pose].map((g) => rasterize(g)), [pose]);
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {

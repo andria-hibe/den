@@ -2072,8 +2072,19 @@ body {
   font-size: 11px;
   color: var(--ink-soft);
 }
-.today-start {
+.today-crew {
   margin-left: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+/* Workers not built yet, or a Fox that isn't running, rest in the strip. */
+.today-critter.resting {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}
+.today-start {
+  margin-left: 6px;
 }
 .today-empty {
   padding: 16px 12px;
@@ -2109,6 +2120,9 @@ body {
   padding: 3px 10px;
   white-space: nowrap;
   cursor: help;
+}
+.ledger-squirrel {
+  margin: -3px 0 -2px -4px;
 }
 .ledger-bar {
   position: relative;

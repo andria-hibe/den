@@ -582,6 +582,11 @@ developer's day across the other sessions instead of them being the glue.
   Hedgehog (handover refresh at clock out, the session's own model for its
   cache), Squirrel (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
   rare escalation, only with room in the week and the developer's OK).
+  Their pixel art is `critterSprites.ts` (18x19 like the fox's SIT, same
+  outline and eyes; `CREW` holds name, job, model, built), drawn by
+  `Critter.tsx` with the fox's `rasterize`. Burrow shows them as the crew
+  strip in the Today header (resting until built, or while Fox is stopped)
+  and the squirrel on the pace chip. Den keeps only the fox.
 
 ## Features (all built + committed on `master`)
 
@@ -934,7 +939,10 @@ conservative about calling it core).
 Tests cost time on every run; KISS. Den tells the Claude sessions it spawns
 the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
 panes). Beyond that, verification is scripted + visual:
-- Run an **isolated** server: `DEN_DB=<tmp> PORT=4399 npm run start` (node ABI).
+- Run an **isolated** server: `DEN_DATA_DIR=<tmp dir> DEN_DB=<tmp>/den.db PORT=4399 npm run start`
+  (node ABI). `DEN_DB` alone isolates only the database: notepads, review
+  files, and Burrow's `manager/` files are still the installed app's, and a
+  test once overwrote a running Burrow's Fox settings and digest that way.
 - Screenshot the UI by loading the URL in a headless Electron window and calling
   `webContents.capturePage()` (see `scripts/shot.cjs`): `SHOT_URL=... SHOT_OUT=x.png
   npx electron scripts/shot.cjs`, then **read the PNG back to eyeball it**. Keep

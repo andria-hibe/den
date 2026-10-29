@@ -7,8 +7,11 @@ import type { Edition } from "../shared/edition.ts";
 export const EDITION: Edition = process.env.DEN_EDITION === "burrow" ? "burrow" : "den";
 
 /** Where this app keeps its database, notepads, and other files. Burrow's is
- * separate so it never touches the sessions a running Den owns. */
-export const DATA_DIR = join(homedir(), EDITION === "burrow" ? ".burrow" : ".den");
+ * separate so it never touches the sessions a running Den owns. A test server
+ * sets DEN_DATA_DIR: DEN_DB alone still shares the notepads and manager files
+ * with the installed app. */
+export const DATA_DIR =
+  process.env.DEN_DATA_DIR ?? join(homedir(), EDITION === "burrow" ? ".burrow" : ".den");
 
 /** Both apps' data dirs, for what belongs to the account rather than the app
  * (the plan's limits). */

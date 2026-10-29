@@ -562,7 +562,7 @@ export function App() {
             ☀ start my day
           </button>
         )}
-        <LedgerChip />
+        <LedgerChip squirrel={burrow} />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
             className="status-fox"
@@ -665,6 +665,7 @@ export function App() {
         ) : active.view === "manager" ? (
           <TodayView
             key={active.id}
+            foxRunning={active.status === "running"}
             onStartDay={startDay}
             onOpenSession={(name) => {
               const target = rail.find((r) => r.name === name);
