@@ -244,5 +244,5 @@ export const CREW: CrewMember[] = [
   { kind: "badger", name: "Badger", job: "QA: runs the tests, checks the change in the browser with screenshots, and tries to break it", model: "Sonnet", built: false },
   { kind: "hare", name: "Hare", job: "Checks performance: slow queries, wasted renders, heavy loops, with a quick measurement where it can", model: "Sonnet", built: false },
   { kind: "wolf", name: "Wolf", job: "Checks security: auth gaps, leaked secrets, injection, using the repo's own security review", model: "Opus", built: false },
-  { kind: "owl", name: "Owl", job: "Called in for the hardest problems, only with your OK", model: "Fable", built: false },
+  { kind: "owl", name: "Owl", job: "Reviews code: colleagues' PRs, and a kit's own PR before you look. Calls on Fable for a rare hard problem, only with your OK", model: "Opus", built: true },
 ];
