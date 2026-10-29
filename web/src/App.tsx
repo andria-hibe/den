@@ -951,10 +951,9 @@ export function App() {
 
           {/* Right: work — live GitHub PRs + Linear tickets */}
           <div className="work-col" style={{ width: workW }}>
-            <button className="work-fold" onClick={toggleWork} title={`Fold the work panel (${MOD}+\\)`} aria-label="fold the work panel">
-              »
-            </button>
             <WorkPanel
+              onFold={toggleWork}
+              foldTitle={`Fold the work panel (${MOD}+\\)`}
               onOpenTicket={openTicket}
               onOpenPr={openPr}
               ticketColor={ticketColor}

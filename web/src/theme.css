@@ -79,15 +79,10 @@ body {
 .work-col .work {
   flex: 1;
 }
-.work-col {
-  position: relative;
-}
 /* Folds the work panel to .work-strip. */
 .work-fold {
-  position: absolute;
-  top: 14px;
-  right: 46px;
-  z-index: 2;
+  padding: 0;
+  line-height: 1;
   border: none;
   background: transparent;
   color: var(--ink-soft);

@@ -165,7 +165,12 @@ export function WorkPanel({
   onOpenPr,
   ticketColor,
   prColor,
+  onFold,
+  foldTitle,
 }: {
+  /** Fold the panel to its strip; the button sits at the head's right edge. */
+  onFold?: () => void;
+  foldTitle?: string;
   onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
   onOpenPr: (pr: PullRequest) => void;
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
@@ -191,6 +196,11 @@ export function WorkPanel({
     <aside className="panel work">
       <div className="work-head">
         <h2 style={{ margin: 0 }}>work</h2>
+        {onFold && (
+          <button className="work-fold" onClick={onFold} title={foldTitle} aria-label="fold the work panel">
+            »
+          </button>
+        )}
       </div>
       <div className="ticket-look-tabs work-tabs" role="tablist">
         <button
