@@ -57,6 +57,10 @@ inbox, limits, manager files all live there). The plan's limits are the
 account's, so `readLimits` reads both apps' dirs (`ALL_DATA_DIRS`).
 `MANAGER_ENABLED` gates the manager routes and the relay rule in pane
 prompts; the UI asks `GET /api/edition` (wordmark, title, Start my day).
+The app's own name in copy follows the edition: the UI's `useAppName()`
+(`web/src/appName.ts`, set from `/api/edition`) and the server's `APP_NAME`
+(what sessions are told the tool is called, and the inbox's "Messages from
+..."). The den repo itself (issues, `denIssueRule`) stays "den".
 Burrow's builder config is `electron-builder.burrow.yml` (extends the base:
 app id `io.den.burrow`, `release-burrow/`, icon `build/burrow.icns` from
 `ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil` - a

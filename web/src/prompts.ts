@@ -159,12 +159,19 @@ export function ticketPrompt(issue: LinearIssue): string {
 /** The opener of every self-edit session. This is the session that writes
  * den's commit messages, CLAUDE.md, and issues, so its punctuation habits
  * spread the furthest. */
-export function denPrompt(): string {
+export function denPrompt(app = "den"): string {
+  const which =
+    app === "burrow"
+      ? `burrow itself: den's v2 app, built from this repo with \`npm run pack:burrow\` ` +
+        `(its own code is gated on EDITION in server/edition.ts), and the very app this ` +
+        `session is running inside`
+      : `den itself: the source of the very app this session is running inside (this is ` +
+        `its repo)`;
+  const pack = app === "burrow" ? "`npm run pack:burrow`" : "`npm run pack`";
   return (
-    `You're now working on den itself: the source of the very app this ` +
-    `session is running inside (this is its repo). First read ./CLAUDE.md to get ` +
+    `You're now working on ${which}. First read ./CLAUDE.md to get ` +
     `oriented on the architecture, conventions, and gotchas, then tell me briefly ` +
-    `that you're ready. Important: do NOT run \`npm run pack\` or reinstall or ` +
+    `that you're ready. Important: do NOT run ${pack} or reinstall or ` +
     `reopen the app unless I explicitly ask. I control when the running app is ` +
     `replaced. Then wait for me to tell you what to change.`
   );

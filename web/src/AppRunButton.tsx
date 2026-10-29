@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppName } from "./appName.ts";
 import { api } from "./api.ts";
 
 export interface AppRunner {
@@ -51,6 +52,7 @@ export function AppRunButton({
   /** Stop it (#28): the teardown in a new tab, or Ctrl-C in the app's tab. */
   onStop: (sessionId: string) => Promise<void>;
 }) {
+  const app = useAppName();
   const [runner, setRunner] = useState<AppRunner | null>(null);
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -84,7 +86,7 @@ export function AppRunButton({
       title={
         runner.stopCommand
           ? `stop ${runner.name}: runs ${shortCommand(runner.stopCommand)} in a new tab${runner.containersUp ? ` (${runner.containersUp} containers up)` : ""}`
-          : `stop ${runner.name}: Ctrl-C in the tab den started it in`
+          : `stop ${runner.name}: Ctrl-C in the tab ${app} started it in`
       }
       onClick={async () => {
         setStopping(true);

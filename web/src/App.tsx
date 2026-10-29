@@ -37,6 +37,7 @@ import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 import { canStartFresh } from "../../shared/handover.ts";
 import { EDITION_NAME, type Edition } from "../../shared/edition.ts";
+import { setAppName } from "./appName.ts";
 
 // Modifier shown in the shortcuts hint.
 const MOD =
@@ -114,6 +115,7 @@ export function App() {
     api<{ edition: Edition }>("/api/edition")
       .then((d) => {
         setEdition(d.edition);
+        setAppName(EDITION_NAME[d.edition]);
         document.title = EDITION_NAME[d.edition];
       })
       .catch(() => {});
@@ -315,7 +317,7 @@ export function App() {
 
   const openDenEditor = () => {
     if (!denRoot) {
-      setErrMsg("couldn't locate the den source repo");
+      setErrMsg(`couldn't locate the ${EDITION_NAME[edition]} source repo`);
       return;
     }
     const existing = sessions.find(
@@ -328,9 +330,9 @@ export function App() {
     addSession({
       cwd: denRoot,
       ticket: DEN_TICKET,
-      name: "🦊 edit den",
+      name: `🦊 edit ${EDITION_NAME[edition]}`,
       // No seed: the empty handover every workspace gets, plus the initial prompt.
-      initialPrompt: denPrompt(),
+      initialPrompt: denPrompt(EDITION_NAME[edition]),
     });
   };
 
@@ -469,9 +471,9 @@ export function App() {
             href="http://localhost:5173"
             target="_blank"
             rel="noreferrer"
-            title="open den's latest iteration (the dev server) — needs `npm run dev` running on :5173"
+            title={`open ${EDITION_NAME[edition]}'s latest iteration (the dev server) — needs \`npm run dev\` running on :5173`}
           >
-            ▶ open den in browser
+            ▶ open {EDITION_NAME[edition]} in browser
           </a>
         )}
         {burrow && manager && s.view !== "manager" && (
@@ -586,8 +588,8 @@ export function App() {
           <button
             className="brand-fox"
             onClick={openDenEditor}
-            title="edit den — open a Claude session to change this app"
-            aria-label="edit den"
+            title={`edit ${EDITION_NAME[edition]} — open a Claude session to change this app`}
+            aria-label={`edit ${EDITION_NAME[edition]}`}
           >
             {burrow ? <Critter kind="kit" size={38} /> : <PixelFox size={30} />}
           </button>
@@ -664,8 +666,8 @@ export function App() {
             <Fox pose={statusPose} size={38} />
           </button>
           {foxPopOpen && (
-            <div className="fox-pop" role="dialog" aria-label="den's foxes">
-              <div className="fox-pop-title">den's foxes</div>
+            <div className="fox-pop" role="dialog" aria-label={`${EDITION_NAME[edition]}'s foxes`}>
+              <div className="fox-pop-title">{EDITION_NAME[edition]}&apos;s foxes</div>
               <div className="fox-pop-grid">
                 {FOX_POSES.map(({ pose, label, note }) => (
                   <div
@@ -699,9 +701,9 @@ export function App() {
                 href="/architecture.svg"
                 target="_blank"
                 rel="noreferrer"
-                title="how den fits together — renderer, server, PTYs, and everything they touch"
+                title={`how ${EDITION_NAME[edition]} fits together — renderer, server, PTYs, and everything they touch`}
               >
-                🗺 den&apos;s architecture ↗
+                🗺 {EDITION_NAME[edition]}&apos;s architecture ↗
               </a>
             </div>
           )}
@@ -751,7 +753,7 @@ export function App() {
               <span className="zzz z2">z</span>
               <span className="zzz z3">z</span>
             </div>
-            <div className="placeholder">the den is quiet — start a session 🌙</div>
+            <div className="placeholder">the {EDITION_NAME[edition]} is quiet — start a session 🌙</div>
           </div>
         ) : active.view === "manager" ? (
           <TodayView

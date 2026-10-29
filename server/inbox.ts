@@ -6,7 +6,7 @@
 // tool call.
 import { join } from "node:path";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { DATA_DIR } from "./edition.ts";
+import { APP_NAME, DATA_DIR } from "./edition.ts";
 
 const INBOX_DIR = join(DATA_DIR, "inbox");
 
@@ -24,7 +24,7 @@ const pending = new Map<string, string[]>();
 /** The hook output that hands `messages` to Claude as context. */
 export function hookOutput(event: HookEvent, messages: string[]): string {
   const additionalContext =
-    `Messages from den, the app this session runs in:\n` + messages.map((m) => `- ${m}`).join("\n");
+    `Messages from ${APP_NAME}, the app this session runs in:\n` + messages.map((m) => `- ${m}`).join("\n");
   return JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext } });
 }
 

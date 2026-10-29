@@ -17,5 +17,8 @@ export const DATA_DIR =
  * (the plan's limits). */
 export const ALL_DATA_DIRS = [join(homedir(), ".den"), join(homedir(), ".burrow")];
 
+/** The app's name as sessions are told it, so Claude names it right. */
+export const APP_NAME = EDITION === "burrow" ? "burrow" : "den";
+
 /** The Manager pane and its Today list are Burrow's (#46). */
 export const MANAGER_ENABLED = EDITION === "burrow";

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAppName } from "./appName.ts";
 import { api } from "./api.ts";
 import { DiffView, DiffHunk, diffFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
@@ -166,6 +167,7 @@ export function PrReviewView({
   header: ReactNode;
   terminal: ReactNode;
 }) {
+  const app = useAppName();
   const { detail } = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
   const [review, setReview] = useState<string>("");
@@ -294,7 +296,7 @@ export function PrReviewView({
           <div className="pr-review-scroll">
             <div className="pr-review-overall">
               <div className="pr-review-head">
-                <h4>den&apos;s review</h4>
+                <h4>{app === "burrow" ? "Owl" : "den"}&apos;s review</h4>
                 <ToClaude
                   sessionId={sessionId}
                   text={reviewAsk}

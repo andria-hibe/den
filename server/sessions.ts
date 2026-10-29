@@ -24,7 +24,7 @@ import { hasSession, latestSessionForCwd } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
-import { DATA_DIR, MANAGER_ENABLED } from "./edition.ts";
+import { APP_NAME, DATA_DIR, MANAGER_ENABLED } from "./edition.ts";
 import { crewRule, fableHasRoom, kitAgents, managerAgents } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
@@ -258,7 +258,7 @@ export function scratchBranch(branch: string | null | undefined): string {
 export function progressInstruction(file: string): string {
   const [stands, done, next, waiting] = HANDOVER_HEADINGS;
   return (
-    `You're working in a project inside a tool called "den". Keep a handover ` +
+    `You're working in a project inside a tool called "${APP_NAME}". Keep a handover ` +
     `at the absolute path ${file}. It has two readers: the developer, who ` +
     `wants to see where the work stands in one glance, and the next session ` +
     `that picks this work up (which may be you, after a restart, with no ` +
@@ -407,8 +407,8 @@ export function commentRules(): string {
  * session doesn't keep its own background watch alive. */
 export function denWatchRule(): string {
   return (
-    `den watches CI on the pull request for your branch and tells you when ` +
-    `the checks finish, as "Messages from den" on your next prompt or tool ` +
+    `${APP_NAME} watches CI on the pull request for your branch and tells you when ` +
+    `the checks finish, as "Messages from ${APP_NAME}" on your next prompt or tool ` +
     `call. Don't start a background \`gh pr checks --watch\` for that. If ` +
     `you're only waiting on CI, end your turn: den nudges the developer when ` +
     `it finishes.`
@@ -439,7 +439,7 @@ export function managerRelayRule(): string {
 export function managerInstruction(notepad: string, today: string, digest: string): string {
   return (
     `You are ${MANAGER_NAME}, the developer's manager session inside a tool ` +
-    `called "den". The developer runs one Claude session per ticket or pull ` +
+    `called "${APP_NAME}". The developer runs one Claude session per ticket or pull ` +
     `request in den. Your job is to run their day across those sessions: work ` +
     `out what needs them, go through it with them one item at a time, and ` +
     `pass their answers to the sessions. You don't do ticket work yourself.\n` +
@@ -503,7 +503,7 @@ export function myPrInstruction(
   const where = branch ? `, checked out on branch ${branch}` : "";
   return (
     `You're working on the developer's own ${which}${where}, inside a tool ` +
-    `called "den". den shows the PR's description, reviews, and comments beside ` +
+    `called "${APP_NAME}". ${APP_NAME} shows the PR's description, reviews, and comments beside ` +
     `you, and the developer pastes individual comments into this session for ` +
     `you to action. For each one, make the change it asks for (or explain why ` +
     `not), run the checks that cover it, and say briefly what you changed. ` +
@@ -523,7 +523,7 @@ export function lookInstruction(
 ): string {
   const which = ticket ? `${ticket}: ${title}` : title;
   return (
-    `You're inside a tool called "den". The developer is reading the Linear ` +
+    `You're inside a tool called "${APP_NAME}". The developer is reading the Linear ` +
     `ticket ${which} in a pane beside you, and will ask you about it. The ` +
     `ticket's description is saved at the absolute path ${ticketFile}; read it ` +
     `before you answer anything about the ticket. That file is for reference, ` +
@@ -550,7 +550,7 @@ export function reviewInstruction(
 ): string {
   const scratch = scratchBranch(branch);
   const rules = owned
-    ? `You're working on a GitHub pull request inside a tool called "den". ` +
+    ? `You're working on a GitHub pull request inside a tool called "${APP_NAME}". ` +
       `Someone else opened it, but the developer has taken it on: treat it as ` +
       `the developer's own PR. You have a full shell, and you may edit the code ` +
       `on the PR's branch` + (branch ? ` (${branch})` : "") + `, commit, push ` +
@@ -562,7 +562,7 @@ export function reviewInstruction(
       `The PR's full unified diff, as it was when den opened this PR, is saved ` +
       `at ${diffFile}; once you push, use git or \`gh pr diff\` for the current ` +
       `change. Read the changed files in your working directory for context. `
-    : `You're reviewing a GitHub pull request inside a tool called "den". It's ` +
+    : `You're reviewing a GitHub pull request inside a tool called "${APP_NAME}". It's ` +
       `someone else's work and your job is to review it, not to change it. You have ` +
       `a full shell and can run anything you need to understand the change: the ` +
       `tests, a build, git history, gh reads. But these rules are absolute:\n` +

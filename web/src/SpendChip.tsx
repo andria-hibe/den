@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppName } from "./appName.ts";
 import { api } from "./api.ts";
 import { formatTokens, formatUSD, relTimeAgo } from "./format.ts";
 import type { Usage } from "../../server/usage.ts";
@@ -29,6 +30,7 @@ function limitLine(label: string, w: LimitWindow | null, week: boolean): string 
 // at API prices and the plan's session and week limits. Refreshed every 30s
 // while the pane is on screen; hidden until there's something to show.
 export function SpendChip({ sessionId }: { sessionId: string }) {
+  const app = useAppName();
   const [spend, setSpend] = useState<SessionSpend | null>(null);
   useEffect(() => {
     let stop = false;
@@ -48,7 +50,7 @@ export function SpendChip({ sessionId }: { sessionId: string }) {
   const { handovers: h, total, limits } = spend;
   const lines = [
     `${formatTokens(tokens(total))} tokens: ${formatTokens(total.output)} output, ${formatTokens(total.input + total.cacheWrite)} input, ${formatTokens(total.cacheRead)} read from cache.`,
-    `About ${formatUSD(total.costUSD)} at API prices${total.unpriced ? " (plus a model den has no price for)" : ""}.`,
+    `About ${formatUSD(total.costUSD)} at API prices${total.unpriced ? ` (plus a model ${app} has no price for)` : ""}.`,
   ];
   if (h.costUSD > 0) lines.push(`Idle handovers: ${formatUSD(h.costUSD)} of that.`);
   if (limits) {
@@ -57,9 +59,9 @@ export function SpendChip({ sessionId }: { sessionId: string }) {
     const week = limitLine("Current week", limits.week, true);
     if (session) lines.push(session);
     if (week) lines.push(week);
-    lines.push(`Plan limits as of ${relTimeAgo(limits.at)}, from any den pane.`);
+    lines.push(`Plan limits as of ${relTimeAgo(limits.at)}, from any ${app} pane.`);
   } else {
-    lines.push("", "Plan limits show once a den pane has had a reply.");
+    lines.push("", `Plan limits show once a ${app} pane has had a reply.`);
   }
   return (
     <span className="spend-chip" title={lines.join("\n")}>

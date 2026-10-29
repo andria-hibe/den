@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useAppName } from "./appName.ts";
 import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { isHandover } from "../../shared/handover.ts";
@@ -27,6 +28,7 @@ export function NotepadPane({
   handover?: boolean;
   onHandover?: (on: boolean) => void;
 }) {
+  const app = useAppName();
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -91,8 +93,8 @@ export function NotepadPane({
             onClick={() => onHandover(!handover)}
             title={
               handover
-                ? "Claude keeps this handover, and den refreshes it after 30 min idle. Turn off for a quick session that doesn't need one (saves tokens; the instruction goes from the session's next start)."
-                : "Off: den won't refresh this handover when idle, and from the session's next start Claude isn't asked to keep it. Turn on to bring both back."
+                ? `Claude keeps this handover, and ${app} refreshes it after 30 min idle. Turn off for a quick session that doesn't need one (saves tokens; the instruction goes from the session's next start).`
+                : `Off: ${app} won't refresh this handover when idle, and from the session's next start Claude isn't asked to keep it. Turn on to bring both back.`
             }
           >
             {handover ? "on" : "off"}
