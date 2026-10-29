@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView } from "./TodayView.tsx";
+import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -116,6 +117,8 @@ export function App() {
       .catch(() => {});
   }, []);
   const burrow = edition === "burrow";
+  const [clockingOut, setClockingOut] = useState(false);
+  const closeClockOut = useCallback(() => setClockingOut(false), []);
   const prs = work.flatPrs;
   const issues = work.issues;
   // A PR I'm only reviewing that fails CI doesn't count: the server clears its
@@ -562,6 +565,11 @@ export function App() {
             ☀ start my day
           </button>
         )}
+        {burrow && rail.some((r) => r.status === "running" && !r.shell && (!r.view || r.view === "manager") && !r.look) && (
+          <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Hedgehog updates each session's handover and ends its chat for the night">
+            ☾ clock out
+          </button>
+        )}
         <LedgerChip mouse={burrow} />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
@@ -899,6 +907,7 @@ export function App() {
           }}
         />
       )}
+      {clockingOut && <ClockOutDialog onDone={closeClockOut} onError={setErrMsg} />}
       {errMsg && (
         <div className="toast" onClick={() => setErrMsg(null)}>
           <span>⚠️ {errMsg}</span>

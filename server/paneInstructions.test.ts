@@ -12,6 +12,7 @@ import {
   managerInstruction,
   managerRelayRule,
   buildManagerPermissions,
+  clockOutBlockers,
 } from "./sessions.ts";
 import { crewRule, kitAgents } from "./crew.ts";
 
@@ -137,5 +138,16 @@ describe("the crew", () => {
     expect(kitAgents(true).owl.model).toBe("claude-fable-5-1");
     expect(kitAgents(false).owl.model).toBe("opus");
     expect(workspaceInstruction(NOTEPAD, true)).toContain(crewRule());
+  });
+});
+
+describe("clockOutBlockers", () => {
+  const quiet = { busy: false, merging: false, staged: false, ciPending: false };
+
+  it("ends a quiet pane, and keeps one up for each thing the sessions asked us never to cut off", () => {
+    expect(clockOutBlockers(quiet)).toEqual([]);
+    for (const key of Object.keys(quiet) as (keyof typeof quiet)[]) {
+      expect(clockOutBlockers({ ...quiet, [key]: true })).toHaveLength(1);
+    }
   });
 });

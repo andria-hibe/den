@@ -594,6 +594,19 @@ developer's day across the other sessions instead of them being the glue.
   even pace), else Opus; full model ids work in `--agents` (verified: a
   subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
   their crew up at spawn, so existing ones need a restart.
+- **Clock out** (Burrow): the topbar's "clock out" opens `ClockOutDialog`,
+  fed by `GET /api/manager/clockout` (`sessions.clockOutVerdicts`: every
+  running workspace main plus Fox, with pure `clockOutBlockers` - busy
+  (output in the last 20s), a merge or rebase in progress or staged changes
+  (`gitWorkState`), CI pending on its PR from `prCache`). Ticked panes go to
+  `POST /api/manager/clockout` -> `clockOut`: Hedgehog's round is the idle
+  handover fork (`runIdleHandover`, now awaitable; skipped when the notepad
+  is newer than the pane's last output), then `stopPane`, and the id goes
+  in `~/.burrow/manager/clocked-out.json`. Start my day calls
+  `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
+  `startManager` handles). Attention (the bell) is deliberately not a
+  blocker: Claude rings it at the end of every turn. No keep-alive pin yet;
+  unticking a pane in the dialog does the same tonight.
 
 ## Features (all built + committed on `master`)
 

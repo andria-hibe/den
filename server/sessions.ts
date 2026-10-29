@@ -99,6 +99,41 @@ export const MANAGER_NAME = "Fox";
 export const TODAY_PATH = join(MANAGER_DIR, "today.md");
 export const DIGEST_PATH = join(MANAGER_DIR, "digest.md");
 const managerSettingsPath = join(MANAGER_DIR, "settings.json");
+// Panes ended at clock out, which Start my day brings back fresh.
+const clockedOutPath = join(MANAGER_DIR, "clocked-out.json");
+
+function readClockedOut(): string[] {
+  try {
+    const ids = JSON.parse(readFileSync(clockedOutPath, "utf8")) as unknown;
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeClockedOut(ids: string[]): void {
+  mkdirSync(MANAGER_DIR, { recursive: true });
+  writeFileSync(clockedOutPath, JSON.stringify(ids));
+}
+
+/** Whether a checkout is mid-merge or mid-rebase, or has staged changes. */
+function gitWorkState(cwd: string): { merging: boolean; staged: boolean } {
+  const git = (...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 5000 }).trim();
+  try {
+    const gitPath = (p: string) => git("rev-parse", "--git-path", p);
+    const abs = (p: string) => (p.startsWith("/") ? p : join(cwd, p));
+    const merging = ["MERGE_HEAD", "rebase-merge", "rebase-apply"].some((p) => existsSync(abs(gitPath(p))));
+    let staged = false;
+    try {
+      git("diff", "--cached", "--quiet");
+    } catch {
+      staged = true;
+    }
+    return { merging, staged };
+  } catch {
+    return { merging: false, staged: false }; // not a git checkout
+  }
+}
 
 /** The Manager pane's permission rules: a deny backstop under
  * managerInstruction, like buildReviewPermissions (a shell can still route
@@ -616,6 +651,25 @@ export function chooseResume(
   const latest = latestForCwd();
   if (latest) return { resume: true, id: latest };
   return { resume: false, id: randomUUID() };
+}
+
+/** Why a pane must stay up at clock out (#46), or [] when it's safe to end.
+ * The running sessions' own list: never end one mid-work, mid-merge, with
+ * something staged, or while CI is running. A question waiting for the
+ * developer isn't on it: den can't see one (the bell rings at the end of
+ * every turn), and Hedgehog's handover carries it into "Waiting on you". */
+export function clockOutBlockers(p: {
+  busy: boolean;
+  merging: boolean;
+  staged: boolean;
+  ciPending: boolean;
+}): string[] {
+  const out: string[] = [];
+  if (p.busy) out.push("still working");
+  if (p.merging) out.push("a merge or rebase is in progress");
+  if (p.staged) out.push("has staged changes");
+  if (p.ciPending) out.push("CI is still running on its PR");
+  return out;
 }
 
 /** How long a workspace pane sits with no output before den refreshes its
@@ -1151,7 +1205,7 @@ class SessionManager {
         now, idleMs, notepadMtime,
         lastOutputAt: s.lastOutputAt, lastInputAt: s.lastInputAt, lastHandoverAt: s.lastHandoverAt,
       });
-      if (due) this.runIdleHandover(s);
+      if (due) void this.runIdleHandover(s);
     }
   }
 
@@ -1163,13 +1217,13 @@ class SessionManager {
    * It may only read and edit the notepad. Fire-and-forget; a failure is
    * logged and the pane is left as it was.
    */
-  private runIdleHandover(s: DenSession) {
+  private runIdleHandover(s: DenSession): Promise<void> {
     const id = s.claudeSessionId;
-    if (!id || !hasSession(id)) return; // nothing said in the pane yet
+    if (!id || !hasSession(id)) return Promise.resolve(); // nothing said in the pane yet
     const notepad = notepadPath(s.groupId);
     s.handoverRunning = true;
     s.lastHandoverAt = Date.now();
-    execFile(
+    return new Promise((resolve) => execFile(
       "claude",
       [
         "-p",
@@ -1189,8 +1243,67 @@ class SessionManager {
         // The fork saves no transcript, so its spend is only in this result.
         const spent = forkUsage(stdout);
         if (spent) s.handoverUsage = addUsage(s.handoverUsage, spent);
+        resolve();
       },
+    ));
+  }
+
+  // --- Clock out (#46) ---
+
+  /** Every running Claude workspace and the Manager, with why each must stay
+   * up tonight, if it must. `pendingBranches`: branches whose PR's CI is
+   * still running. */
+  clockOutVerdicts(pendingBranches: Set<string>): { id: string; name: string; reasons: string[] }[] {
+    const now = Date.now();
+    return [...this.sessions.values()]
+      .filter((s) => s.role === "main" && !s.shell && s.status === "running" && (!s.view || s.view === "manager"))
+      .filter((s) => !s.look)
+      .map((s) => {
+        const git = gitWorkState(s.cwd);
+        return {
+          id: s.id,
+          name: s.name,
+          reasons: clockOutBlockers({
+            busy: !ptyLooksIdle(s.lastOutputAt, now, 20_000),
+            merging: git.merging,
+            staged: git.staged,
+            ciPending: !!s.branch && pendingBranches.has(s.branch) && s.view !== "manager",
+          }),
+        };
+      });
+  }
+
+  /** Hedgehog's round: refresh each pane's handover from a fork of its
+   * conversation (skipped when the notepad is already newer than its last
+   * output), end the pane, and remember it, so Start my day brings it back
+   * fresh rather than reloading the whole chat. */
+  async clockOut(ids: string[]): Promise<void> {
+    const list = new Set(readClockedOut());
+    await Promise.all(
+      ids.map(async (id) => {
+        const s = this.sessions.get(id);
+        if (!s || s.status !== "running") return;
+        let notepadMtime = 0;
+        try {
+          notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
+        } catch {
+          // no notepad yet
+        }
+        if (!s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) await this.runIdleHandover(s);
+        if (await this.stopPane(s)) list.add(s.id);
+      }),
     );
+    writeClockedOut([...list]);
+  }
+
+  /** Start my day: bring back last night's clocked-out panes on fresh
+   * conversations, picking up from their handovers. */
+  async wakeClockedOut(): Promise<void> {
+    for (const id of readClockedOut()) {
+      const s = this.sessions.get(id);
+      if (s && s.status === "exited" && s.view !== "manager") await this.restartFresh(id);
+    }
+    writeClockedOut([]);
   }
 
   /** Restore persisted rows as exited placeholders (live PTYs don't survive). */

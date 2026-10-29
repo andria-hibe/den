@@ -933,6 +933,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
       }),
     );
+    await sessions.wakeClockedOut();
     const manager = await sessions.startManager();
     if (!manager || manager.status !== "running") {
       reply.code(500);
@@ -941,6 +942,34 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // Answered before the paste, which waits for the pane to finish drawing.
     void deliverStart(manager, managerStartPrompt(new Date()));
     return manager.meta();
+  });
+
+  // Clock out: which panes are safe to end tonight, then Hedgehog's round
+  // for the ones the developer confirms.
+  app.get("/api/manager/clockout", async (_req, reply) => {
+    if (!MANAGER_ENABLED) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    const prs = await Promise.race([
+      prCache.get(false).catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), 10_000)),
+    ]);
+    const pending = new Set(
+      (prs?.authored ?? []).filter((p) => p.checks === "pending" && p.branch).map((p) => p.branch as string),
+    );
+    return { panes: sessions.clockOutVerdicts(pending), prsKnown: !!prs };
+  });
+
+  app.post("/api/manager/clockout", async (req, reply) => {
+    const { ids } = (req.body ?? {}) as { ids?: unknown };
+    if (!MANAGER_ENABLED || !Array.isArray(ids) || !ids.every((x) => typeof x === "string")) {
+      reply.code(400);
+      return { error: "ids_required" };
+    }
+    // Forks can take minutes; the rail shows each pane go quiet as it ends.
+    void sessions.clockOut(ids as string[]);
+    return { started: ids.length };
   });
 
   // The Manager's Today list, for the Today view.
