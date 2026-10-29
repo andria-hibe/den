@@ -580,13 +580,15 @@ developer's day across the other sessions instead of them being the glue.
   one in theme: Fox (Manager, Opus), Tanuki (Linear inbox + GitHub
   notifications, Sonnet), Raccoon (CI failures across PRs, Haiku),
   Hedgehog (handover refresh at clock out, the session's own model for its
-  cache), Squirrel (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
+  cache), Field mouse (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
   rare escalation, only with room in the week and the developer's OK).
   Their pixel art is `critterSprites.ts` (18x19 like the fox's SIT, same
   outline and eyes; `CREW` holds name, job, model, built), drawn by
   `Critter.tsx` with the fox's `rasterize`. Burrow shows them as the crew
   strip in the Today header (resting until built, or while Fox is stopped)
-  and the squirrel on the pace chip. Den keeps only the fox.
+  and the field mouse on the pace chip. In reserve for future workers
+  (andria likes them): a fluffier squirrel (drawn; its grid is in the crew
+  gallery artifact) and a badger (not drawn yet). Den keeps only the fox.
 
 ## Features (all built + committed on `master`)
 

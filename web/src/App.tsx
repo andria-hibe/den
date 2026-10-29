@@ -562,7 +562,7 @@ export function App() {
             ☀ start my day
           </button>
         )}
-        <LedgerChip squirrel={burrow} />
+        <LedgerChip mouse={burrow} />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
             className="status-fox"

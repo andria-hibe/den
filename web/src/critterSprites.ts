@@ -12,17 +12,17 @@ export const CRITTER_PALETTE: Record<string, string> = {
   t: "#9c7457",
   R: "#b9b1c8", // raccoon
   r: "#8f86a0",
-  Q: "#a8836b", // hedgehog quills
-  q: "#7f6252",
-  F: "#f7dcc4", // hedgehog face
-  S: "#c26e43", // squirrel
-  s: "#94532f",
+  Q: "#b48466", // hedgehog quills
+  q: "#93664c",
+  F: "#f6e7c4", // hedgehog face
+  h: "#f0b48c", // hedgehog ears and feet
+  M: "#cdb39c", // field mouse
   L: "#bba6e6", // owl
   l: "#9784c8",
   y: "#ffd27a", // owl beak and feet
 };
 
-export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "squirrel" | "owl";
+export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl";
 
 export const CRITTERS: Record<CritterKind, string[]> = {
   tanuki: [
@@ -68,46 +68,46 @@ export const CRITTERS: Record<CritterKind, string[]> = {
     "..DDDD....DDDD....",
   ],
   hedgehog: [
-    "..................",
-    ".....D.D..D.D.....",
-    "...D.DQDDDDQD.D...",
-    "...DQQQqQQqQQQD...",
-    "..DQqQQQQQQQQqQD..",
-    ".DQQQQFFFFFFQQQQD.",
-    ".DQqQFFFFFFFFQqQD.",
-    "DQQQFFeFFFFeFFQQQD",
-    "DQqQFFeFFFFeFFQqQD",
-    "DQQQFpFFFFFFpFQQQD",
-    ".DQQFFFFDDFFFFQQD.",
-    ".DQqQFFFFFFFFQqQD.",
+    "....D...D...D.....",
+    "...DQD.DQD.DQD....",
+    "..DQQQDQQQDQQQD...",
+    ".DQQqQQQQqQQQqQDD.",
+    ".DQQQQQQQQQQQQQQQD",
+    "DQQqQQQQQQQQqQQQD.",
+    "DQQQQQqQQQQQQQQQQD",
+    "DhQQQQQFQQQQFQQQD.",
+    "DhhQFFFFFQFFFFhhQD",
+    "DhFFFFFFFFFFFFFQD.",
+    "DFFFeeFFFFFFeeFQQD",
+    "DFFFeeFFppFFeeFQD.",
+    "DFppFFFDFFDFFppQQD",
+    "DFFFFFFFDDFFFFFQD.",
+    ".DFFFFFFFFFFFFFQQD",
+    ".DQFFFFFFFFFFFQQD.",
     "..DQQFFFFFFFFQQD..",
-    "..DQqFFFFFFFFqQD..",
-    "..DQQFFFFFFFFQQD..",
-    "...DQQFFFFFFQQD...",
-    "....DQQQQQQQQD....",
-    "....DFFD..DFFD....",
-    "....DDDD..DDDD....",
+    "..DhhDDDDDDDDhhD..",
+    "...DD........DD...",
   ],
-  squirrel: [
-    "..D...D....DDDD...",
-    ".DSD.DSD..DSSSSD..",
-    ".DSSDSSD.DSSssSSD.",
-    ".DSSSSSSDDSsDDsSD.",
-    ".DSSSSSSSDSsD.DsD.",
-    "DSSeSSSeSSDsSD.D..",
-    "DSSeSSSeSSDssSD...",
-    "DSwwSpSwwSDSsSD...",
-    ".DwwwwwwwD.DSSD...",
-    "..DSSSSSD..DSsD...",
-    ".DSSwwwSSD.DSSD...",
-    ".DSwwwwwSSDDSsD...",
-    "DSSwwwwwwSSDSSD...",
-    "DSwwwwwwwwSSsSD...",
-    "DSwwwwwwwwSsSD....",
-    "DSSwwwwwwSSSD.....",
-    ".DSSSSSSSSSD......",
-    ".DSsSD.DSsSD......",
-    ".DDDD..DDDD.......",
+  mouse: [
+    ".DDDD.....DDDD....",
+    "DMMMMD...DMMMMD...",
+    "DMppMMDDDMMppMD...",
+    "DMppMMMMMMMppMD...",
+    ".DMMMMMMMMMMMD....",
+    "..DMMMMMMMMMD.....",
+    ".DMMeMMMMMeMMD....",
+    ".DMMeMMMMMeMMD....",
+    ".DMMMMMMMMMMMD....",
+    "..DMwwwpwwwMD.....",
+    "...DMwwwwwMD......",
+    "...DMMMMMMMD......",
+    "..DMMwwwwwMMD.....",
+    ".DMwwwwwwwwwMD....",
+    ".DMwwwwwwwwwMD...D",
+    ".DMMwwwwwwwMMD..Dp",
+    "..DMMMMMMMMMDDDDp.",
+    "..DMpMD.DMpMDpppD.",
+    "..DDDD..DDDD.DDD..",
   ],
   owl: [
     "..DD........DD....",
@@ -147,6 +147,6 @@ export const CREW: CrewMember[] = [
   { kind: "tanuki", name: "Tanuki", job: "Sweeps your Linear inbox and GitHub notifications", model: "Sonnet", built: false },
   { kind: "raccoon", name: "Raccoon", job: "Digs through failing CI and spots the same failure on other PRs", model: "Haiku", built: false },
   { kind: "hedgehog", name: "Hedgehog", job: "Tucks sessions in at clock out by refreshing each handover", model: "each session's own", built: false },
-  { kind: "squirrel", name: "Squirrel", job: "Rations the week's tokens: the pace chip in the top bar", model: "no model, den's own code", built: true },
+  { kind: "mouse", name: "Field mouse", job: "Rations the week's tokens: the pace chip in the top bar", model: "no model, den's own code", built: true },
   { kind: "owl", name: "Owl", job: "Called in for the hardest problems, only with your OK", model: "Fable", built: false },
 ];

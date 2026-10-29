@@ -22,7 +22,7 @@ const LABEL = { early: "early in the week", "on-pace": "on pace", ahead: "ahead"
 // The week's token pace (#45): the week's use against an even spend, and on
 // hover the 5-hour window and the chats that cost the most per turn. Hidden
 // until a pane has reported the plan's limits.
-export function LedgerChip({ squirrel = false }: { squirrel?: boolean }) {
+export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
   const [data, setData] = useState<Overview | null>(null);
   useEffect(() => {
     let stop = false;
@@ -57,7 +57,7 @@ export function LedgerChip({ squirrel = false }: { squirrel?: boolean }) {
 
   return (
     <span className={`ledger-chip ${pace.status}`} title={lines.join("\n")}>
-      {squirrel && <Critter kind="squirrel" size={19} className="ledger-squirrel" />}
+      {mouse && <Critter kind="mouse" size={19} className="ledger-mouse" />}
       week {Math.round(pace.used)}%
       <span className="ledger-bar" aria-hidden>
         <span className="ledger-fill" style={{ width: `${Math.min(pace.used, 100)}%` }} />
