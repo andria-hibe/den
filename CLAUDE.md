@@ -498,6 +498,28 @@ writes no transcript until the first message, so an untouched pane has none,
 and look panes share the work repo's main checkout with other sessions:
 borrowing the newest one there resumed another ticket's conversation (issue 25).
 
+**Starting fresh** (issue 43, den v2 groundwork): `restartFresh` ends a
+workspace main pane (if running, via `stopPane`, shared with `setOwned`),
+pins a **new** `claudeSessionId`, and restarts it - `chooseResume` then
+starts a new conversation under that id, which picks up from the handover
+its system prompt says to read first. Only panes `canStartFresh`
+(`shared/handover.ts`: a workspace main with its handover on). Route:
+`POST /api/sessions/:id/restart` with `{ fresh: true }`; UI: the header's
+`FreshStartButton` (inline confirm when running). A plain restart still
+resumes the long conversation, so this is what makes ending chats save
+tokens. The handover instruction also asks for when PR/CI/review state was
+last checked and, on a stacked branch, the stack in merge order (issue 44).
+
+**Token pace** (issue 45): `LedgerChip` in the topbar polls `GET /api/usage`
+(`sessions.usageOverview`: the newest `readLimits` + running Claude panes by
+`contextSize`, the input of the conversation's latest turn, from
+`usage.ts` `lastContext`). Pure `weekPace` (`shared/pace.ts`, tested in
+`server/pace.test.ts`) puts the week's use against an even spend from the
+window's start (reset minus 7 days): `early` for the first 10% of the week,
+`ahead` past the even line + 3 points, and when the limit runs out at the
+rate so far if that's before the reset. The hover lists the panes with the
+largest context, the first to start fresh.
+
 ## Features (all built + committed on `master`)
 
 - Multi-session cockpit: create/rename(double-click)/recolour/close; persistent;

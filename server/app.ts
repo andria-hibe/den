@@ -449,6 +449,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // The rail's clean-up button (#29): the skill it names, and where it opens.
   app.get("/api/cleanup", async () => ({ skill: cleanupSkill(), cwd: roots().workRepo }));
 
+  // The week's pace and the costliest chats, for the topbar (#45).
+  app.get("/api/usage", async () => sessions.usageOverview());
+
   // What a Claude pane has spent (#11).
   app.get("/api/sessions/:id/usage", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -500,7 +503,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.post("/api/sessions/:id/restart", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const meta = sessions.restart(id);
+    const { fresh } = (req.body ?? {}) as { fresh?: boolean };
+    const meta = fresh === true ? await sessions.restartFresh(id) : sessions.restart(id);
     if (!meta) {
       reply.code(409);
       return { error: "cannot_restart" };

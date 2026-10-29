@@ -3,10 +3,12 @@ import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
+import { LedgerChip } from "./LedgerChip.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
+import { FreshStartButton } from "./FreshStartButton.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
@@ -30,6 +32,7 @@ import { WorktreeCleanupDialog, type StackToStop } from "./WorktreeCleanupDialog
 import type { WorktreeInfo } from "../../server/git.ts";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
+import { canStartFresh } from "../../shared/handover.ts";
 
 // Modifier shown in the shortcuts hint.
 const MOD =
@@ -53,6 +56,7 @@ export function App() {
     addSession,
     patch,
     restartSession,
+    restartFresh,
     closeSession,
     setHandover,
     setOwned,
@@ -404,6 +408,9 @@ export function App() {
             ▶ open den in browser
           </a>
         )}
+        {canStartFresh(s) && (
+          <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
+        )}
         {s.status === "exited" && (
           <button
             className="btn btn-ghost-outline restart-btn"
@@ -531,6 +538,7 @@ export function App() {
             </span>
           </span>
         )}
+        <LedgerChip />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
             className="status-fox"

@@ -2049,6 +2049,58 @@ body {
   background: rgba(255, 255, 255, 0.4);
   transform: translateY(-1px);
 }
+/* The week's token pace (LedgerChip), on the topbar's tinted background. */
+.ledger-chip {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #4a3a52;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  cursor: help;
+}
+.ledger-bar {
+  position: relative;
+  width: 56px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(74, 58, 82, 0.15);
+}
+.ledger-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+  background: #6cbf9b;
+}
+.ledger-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #4a3a52;
+}
+.ledger-chip.ahead .ledger-fill {
+  background: var(--pink-deep);
+}
+.ledger-label {
+  color: #3f8a6a;
+}
+.ledger-chip.ahead .ledger-label {
+  color: #c2457a;
+}
+.ledger-chip.early .ledger-label {
+  color: rgba(74, 58, 82, 0.6);
+}
+.ledger-chip + .status-fox-wrap {
+  margin-left: 0;
+}
+
 .status-fox-wrap {
   margin-left: auto;
   position: relative;

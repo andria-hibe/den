@@ -129,6 +129,18 @@ export function useSessions({
     }
   };
 
+  const restartFresh = async (id: string) => {
+    try {
+      const meta = await api<SessionMeta>(`/api/sessions/${id}/restart`, {
+        method: "POST",
+        body: JSON.stringify({ fresh: true }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   const setHandover = async (id: string, on: boolean) => {
     try {
       const meta = await api<SessionMeta>(`/api/sessions/${id}/handover`, {
@@ -278,6 +290,7 @@ export function useSessions({
     addSession,
     patch,
     restartSession,
+    restartFresh,
     closeSession,
     setHandover,
     setOwned,

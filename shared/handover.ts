@@ -55,3 +55,14 @@ export function lineChanges(before: string, after: string, max = 40): string[] {
   ];
   return out.length > max ? [...out.slice(0, max), `(${out.length - max} more lines)`] : out;
 }
+
+/** Only a workspace main pane keeping a handover has one to start fresh from. */
+export function canStartFresh(s: {
+  shell: boolean;
+  role: string;
+  look: unknown;
+  view: unknown;
+  handover: boolean;
+}): boolean {
+  return !s.shell && s.role === "main" && !s.look && !s.view && s.handover;
+}

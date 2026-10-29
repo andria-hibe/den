@@ -8,10 +8,11 @@ import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import {
-  HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, lineChanges, restoreTicket, ticketDescription,
+  HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, canStartFresh, lineChanges, restoreTicket,
+  ticketDescription,
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
-import { EMPTY_USAGE, addUsage, sessionUsage, type Usage } from "./usage.ts";
+import { EMPTY_USAGE, addUsage, contextSize, sessionUsage, type Usage } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
 import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
@@ -177,7 +178,10 @@ export function progressInstruction(file: string): string {
     `on without re-deriving it. Put the technical detail here: the branch and ` +
     `its base, what is committed and pushed, what is half-done and where (files, ` +
     `functions), decisions and why they were made, what was tried and ruled ` +
-    `out, gotchas, the state of tests and checks, and the exact next step. Keep ` +
+    `out, gotchas, the state of tests and checks, and the exact next step. ` +
+    `Say when you last checked the PR, CI, and review state (date and time), ` +
+    `since it goes stale as soon as someone else pushes. On a stacked branch, ` +
+    `list the stack's branches and PRs in merge order. Keep ` +
     `it current rather than historical, but keep decisions and their reasons ` +
     `until they stop mattering.\n` +
     `Leave everything below the session notes (such as the ticket) as it is. If ` +
@@ -1369,15 +1373,32 @@ class SessionManager {
     if (!s || s.view !== "review") return null;
     s.owned = on;
     store.update(s.toRow());
-    if (s.status === "running") {
-      s.kill();
-      const deadline = Date.now() + 5000;
-      while (s.status === "running" && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      if (s.status === "running") return s.meta();
-    }
+    if (!(await this.stopPane(s))) return s.meta();
     return this.restart(id);
+  }
+
+  /** End a workspace pane's conversation and start a new one that picks up
+   * from its handover (#43), so a chat that has run for days stops reloading
+   * its whole context. The old conversation stays in the Resume list. Null if
+   * the pane has no handover to pick up from. */
+  async restartFresh(id: string): Promise<SessionMeta | null> {
+    const s = this.sessions.get(id);
+    if (!s || !canStartFresh(s)) return null;
+    if (!(await this.stopPane(s))) return s.meta();
+    // A pinned id with no transcript starts a new conversation (chooseResume).
+    s.claudeSessionId = randomUUID();
+    return this.restart(id);
+  }
+
+  /** Kill a running pane and wait for it to exit; false if it didn't. */
+  private async stopPane(s: DenSession): Promise<boolean> {
+    if (s.status !== "running") return true;
+    s.kill();
+    const deadline = Date.now() + 5000;
+    while (s.status === "running" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return s.status !== "running";
   }
 
   /** Turn a workspace's handover on or off. The idle refresh follows at once;
@@ -1393,6 +1414,20 @@ class SessionManager {
 
   get(id: string) {
     return this.sessions.get(id);
+  }
+
+  /** The plan's limits, and the running Claude panes by how much context each
+   * turn sends, largest first (#45). */
+  usageOverview(): { limits: PlanLimits | null; panes: { id: string; name: string; context: number }[] } {
+    const panes = [...this.sessions.values()]
+      .flatMap((s) =>
+        !s.shell && s.status === "running" && s.claudeSessionId
+          ? [{ id: s.id, name: s.name, context: contextSize(s.claudeSessionId) }]
+          : [],
+      )
+      .filter((p) => p.context > 0)
+      .sort((a, b) => b.context - a.context);
+    return { limits: readLimits(), panes };
   }
 
   list(): SessionMeta[] {

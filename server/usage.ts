@@ -14,7 +14,8 @@ import { join } from "node:path";
 /** Dollars per million tokens. Cache writes are 1.25x input for the 5-minute
  * TTL and 2x for 1 hour; cache reads are 0.1x input, except where a model's
  * rate differs (Fable 5.1, Opus 5.5). No long-context premium on these
- * models. Longest id prefix wins, so "claude-opus-5-5" beats "claude-opus-5".
+ * models, except Haiku 5.5, priced here at its rate for prompts up to 100K
+ * tokens. Longest id prefix wins, so "claude-opus-5-5" beats "claude-opus-5".
  * Checked 2026-09-28 against Claude Code's own recorded total for a session:
  * the Opus 5.5 row reproduces it exactly. */
 interface Rate {
@@ -32,6 +33,7 @@ const RATES: [prefix: string, rate: Rate][] = [
   ["claude-opus-4", { input: 5, output: 25, cacheRead: 0.5 }],
   ["claude-sonnet-5", { input: 2, output: 10, cacheRead: 0.2 }],
   ["claude-sonnet-4", { input: 3, output: 15, cacheRead: 0.3 }],
+  ["claude-haiku-5-5", { input: 0.1, output: 0.5, cacheRead: 0.01 }],
   ["claude-haiku-4", { input: 1, output: 5, cacheRead: 0.1 }],
 ];
 
@@ -161,4 +163,44 @@ export function sessionUsage(sessionId: string): Usage {
     }
   }
   return total;
+}
+
+/** The input of a conversation's latest turn (fresh, cache read, and cache
+ * write tokens): what every further turn sends again, so the chats where it's
+ * largest cost the most to keep talking to. Subagent turns don't count. */
+export function lastContext(lines: string[]): number {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (!line.includes('"usage"')) continue;
+    let o: { type?: string; isSidechain?: boolean; message?: { usage?: RawUsage } };
+    try {
+      o = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const u = o.message?.usage;
+    if (o.type !== "assistant" || o.isSidechain || !u) continue;
+    return (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  }
+  return 0;
+}
+
+const contextCache = new Map<string, { key: string; tokens: number }>();
+
+/** lastContext for a conversation's own transcript; 0 before the first reply. */
+export function contextSize(sessionId: string): number {
+  const file = transcriptFiles(sessionId)[0];
+  if (!file) return 0;
+  try {
+    const st = statSync(file);
+    const key = `${st.mtimeMs}:${st.size}`;
+    let hit = contextCache.get(file);
+    if (hit?.key !== key) {
+      hit = { key, tokens: lastContext(readFileSync(file, "utf8").split("\n")) };
+      contextCache.set(file, hit);
+    }
+    return hit.tokens;
+  } catch {
+    return 0;
+  }
 }
