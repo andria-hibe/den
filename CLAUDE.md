@@ -585,6 +585,15 @@ developer's day across the other sessions instead of them being the glue.
   stopped) and the field mouse on the pace chip; Den keeps only the fox.
   Gallery: https://claude.ai/artifact/5Dn81Siu4mP7Qbu6Jg7RBA - update it
   with any sprite or name change.
+- **The reviewers and advisor are real subagents** (Burrow only):
+  `server/crew.ts` builds Claude Code `--agents` JSON - `kitAgents` for every
+  workspace pane (owl, badger, hare, wolf, each with its model and a
+  report-only prompt) and `managerAgents` (owl) for Fox - and `crewRule`
+  (in `workspaceInstruction` with the relay rule) tells a kit when to call
+  them. Owl runs on Fable when `fableHasRoom` (the week isn't ahead of an
+  even pace), else Opus; full model ids work in `--agents` (verified: a
+  subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
+  their crew up at spawn, so existing ones need a restart.
 
 ## Features (all built + committed on `master`)
 

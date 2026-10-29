@@ -25,6 +25,7 @@ import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 import { DATA_DIR, MANAGER_ENABLED } from "./edition.ts";
+import { crewRule, fableHasRoom, kitAgents, managerAgents } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 
@@ -363,7 +364,7 @@ export function denWatchRule(): string {
 
 /** `manager`: the app has a Manager pane whose relayed answers count. */
 export function workspaceInstruction(notepad: string, manager = MANAGER_ENABLED): string {
-  const relay = manager ? `\n${managerRelayRule()}` : "";
+  const relay = manager ? `\n${managerRelayRule()}\n${crewRule()}` : "";
   return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`;
 }
 
@@ -419,7 +420,9 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `session, pass it on as "The developer said in Today at HH:MM: <their ` +
     `words>", with their words as given and the current time. Never pass on ` +
     `an approval they didn't give in this conversation, and never widen one. ` +
-    `If a send is held for approval or refused, tell the developer.\n` +
+    `If a send is held for approval or refused, tell the developer. On a hard ` +
+    `call (what to do first, whether a plan holds up), ask owl, your advisor ` +
+    `subagent, before you recommend.\n` +
     `NEVER, for any session: commit, push, merge, rebase, mark a PR ready, ` +
     `review, comment on, reply to, or resolve anything on GitHub or Linear, or ` +
     `edit a session's code or its handover. Ask the session to do it once the ` +
@@ -1401,6 +1404,7 @@ class SessionManager {
     return [
       "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: inboxHooks(groupId) }),
       "--add-dir", PROGRESS_DIR,
+      ...(MANAGER_ENABLED ? ["--agents", JSON.stringify(kitAgents(fableHasRoom()))] : []),
       "--append-system-prompt", prompt,
     ];
   }
@@ -1477,6 +1481,7 @@ class SessionManager {
       "--settings", managerSettingsPath,
       "--add-dir", PROGRESS_DIR,
       "--add-dir", MANAGER_DIR,
+      "--agents", JSON.stringify(managerAgents(fableHasRoom())),
       "--append-system-prompt", managerInstruction(notepad, TODAY_PATH, DIGEST_PATH),
     ];
   }

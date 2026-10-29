@@ -13,6 +13,7 @@ import {
   managerRelayRule,
   buildManagerPermissions,
 } from "./sessions.ts";
+import { crewRule, kitAgents } from "./crew.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 
@@ -127,5 +128,14 @@ describe("managerInstruction", () => {
     for (const rule of ["Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr merge:*)", "Bash(gh api:*)"]) {
       expect(deny).toContain(rule);
     }
+  });
+});
+
+describe("the crew", () => {
+  it("gives kits ASCII reviewers, with Owl on Fable only when the week has room", () => {
+    expect(isAscii(crewRule() + JSON.stringify(kitAgents(true)))).toBe(true);
+    expect(kitAgents(true).owl.model).toBe("claude-fable-5-1");
+    expect(kitAgents(false).owl.model).toBe("opus");
+    expect(workspaceInstruction(NOTEPAD, true)).toContain(crewRule());
   });
 });

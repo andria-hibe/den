@@ -37,7 +37,7 @@ import {
   type LinearData,
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
-import { listPastSessions } from "./discover.ts";
+import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
   repoBaseName, isValidBranch,
@@ -882,6 +882,27 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // --- The Manager pane (#46) ---
+  // A fresh Claude pane can drop a paste, or its Enter, while it is still
+  // starting up: the installed Burrow's first Manager never got its start
+  // prompt. Claude Code writes the transcript at the first message, so that's
+  // the receipt. Without one, press Enter (the text may be sitting in the
+  // input box), then paste again once.
+  const deliverStart = async (pane: NonNullable<ReturnType<typeof sessions.get>>, text: string) => {
+    const delivered = async () => {
+      for (const end = Date.now() + 20_000; Date.now() < end; ) {
+        if (pane.claudeSessionId && hasSession(pane.claudeSessionId)) return true;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      return false;
+    };
+    await paste(pane, text, true);
+    if (await delivered()) return;
+    pane.write("\r");
+    if (await delivered()) return;
+    await paste(pane, text, true);
+    if (!(await delivered())) logWarn("manager start prompt not delivered", pane.id);
+  };
+
   // Start my day: write what den knows to the digest, bring up the Manager,
   // and ask it to build the Today list. GitHub and Linear are best effort and
   // bounded, like seedWithWhatExists, so a slow API never holds up the day.
@@ -918,7 +939,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "manager_not_started" };
     }
     // Answered before the paste, which waits for the pane to finish drawing.
-    void paste(manager, managerStartPrompt(new Date()), true);
+    void deliverStart(manager, managerStartPrompt(new Date()));
     return manager.meta();
   });
 
