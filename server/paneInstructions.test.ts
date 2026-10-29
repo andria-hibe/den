@@ -142,7 +142,7 @@ describe("the crew", () => {
 });
 
 describe("clockOutBlockers", () => {
-  const quiet = { busy: false, merging: false, staged: false, ciPending: false };
+  const quiet = { pinned: false, busy: false, merging: false, staged: false, ciPending: false };
 
   it("ends a quiet pane, and keeps one up for each thing the sessions asked us never to cut off", () => {
     expect(clockOutBlockers(quiet)).toEqual([]);

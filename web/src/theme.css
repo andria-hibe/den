@@ -2049,6 +2049,12 @@ body {
   background: rgba(255, 255, 255, 0.4);
   transform: translateY(-1px);
 }
+/* A session pinned to stay up through Clock out. */
+.restart-btn.pinned {
+  border-color: var(--pink-deep);
+  color: var(--pink-deep);
+}
+
 /* Clock out (ClockOutDialog). */
 .clockout-title {
   display: flex;

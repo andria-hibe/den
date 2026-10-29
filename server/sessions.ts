@@ -662,12 +662,14 @@ export function chooseResume(
  * developer isn't on it: den can't see one (the bell rings at the end of
  * every turn), and Hedgehog's handover carries it into "Waiting on you". */
 export function clockOutBlockers(p: {
+  pinned: boolean;
   busy: boolean;
   merging: boolean;
   staged: boolean;
   ciPending: boolean;
 }): string[] {
   const out: string[] = [];
+  if (p.pinned) out.push("pinned to stay running");
   if (p.busy) out.push("still working");
   if (p.merging) out.push("a merge or rebase is in progress");
   if (p.staged) out.push("has staged changes");
@@ -832,6 +834,8 @@ export interface SessionMeta {
   ticketChanged: boolean;
   /** A review pane the developer has taken on: it may commit, push, and post. */
   owned: boolean;
+  /** Clock out leaves this pane running, every night (#46). */
+  keepAlive: boolean;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -879,6 +883,7 @@ class DenSession {
   handover = true;
   /** A review pane working on the PR as the developer's own. */
   owned = false;
+  keepAlive = false;
   /** What den's idle handovers for this pane have spent. They run as headless
    * forks that save no transcript, so their usage is tracked here instead
    * (in memory: it resets when den restarts). */
@@ -1110,6 +1115,7 @@ class DenSession {
       pos: this.pos,
       handover: this.handover,
       owned: this.owned,
+      keepAlive: this.keepAlive,
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
     };
@@ -1141,6 +1147,7 @@ class DenSession {
       pos: this.pos,
       handover: this.handover ? 1 : 0,
       owned: this.owned ? 1 : 0,
+      keepAlive: this.keepAlive ? 1 : 0,
     };
   }
 
@@ -1267,6 +1274,7 @@ class SessionManager {
           id: s.id,
           name: s.name,
           reasons: clockOutBlockers({
+            pinned: s.keepAlive,
             busy: !ptyLooksIdle(s.lastOutputAt, now, 20_000),
             merging: git.merging,
             staged: git.staged,
@@ -1336,6 +1344,7 @@ class SessionManager {
       s.titleLocked = row.titleLocked === 1;
       s.handover = row.handover !== 0;
       s.owned = row.owned === 1;
+      s.keepAlive = row.keepAlive === 1;
       if (row.scrollback) s.restoreScrollback(row.scrollback);
       this.sessions.set(s.id, s);
     }
@@ -1715,6 +1724,15 @@ class SessionManager {
     const s = this.sessions.get(id);
     if (!s || s.shell || s.role !== "main" || s.look || s.view) return null;
     s.handover = on;
+    store.update(s.toRow());
+    return s.meta();
+  }
+
+  /** Pin a pane so Clock out leaves it running (#46). */
+  setKeepAlive(id: string, on: boolean): SessionMeta | null {
+    const s = this.sessions.get(id);
+    if (!s || s.shell || s.role !== "main") return null;
+    s.keepAlive = on;
     store.update(s.toRow());
     return s.meta();
   }

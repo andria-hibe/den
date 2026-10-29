@@ -605,8 +605,10 @@ developer's day across the other sessions instead of them being the glue.
   in `~/.burrow/manager/clocked-out.json`. Start my day calls
   `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
   `startManager` handles). Attention (the bell) is deliberately not a
-  blocker: Claude rings it at the end of every turn. No keep-alive pin yet;
-  unticking a pane in the dialog does the same tonight.
+  blocker: Claude rings it at the end of every turn. A **keep-alive pin**
+  (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's
+  "pin" in Burrow) keeps a pane out of it every night - it shows as "pinned
+  to stay running" and keeps its conversation.
 - **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
   Linear notifications (`getInboxNotifications`, a query of its own so a
   schema surprise can't break the ticket list; newest first) and GitHub

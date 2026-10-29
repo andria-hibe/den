@@ -63,6 +63,7 @@ export function App() {
     restartFresh,
     closeSession,
     setHandover,
+    setKeepAlive,
     setOwned,
     addShellTab,
     launchApp,
@@ -431,6 +432,19 @@ export function App() {
         )}
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
+        )}
+        {burrow && canStartFresh(s) && (
+          <button
+            className={`btn btn-ghost-outline restart-btn${s.keepAlive ? " pinned" : ""}`}
+            onClick={() => setKeepAlive(s.id, !s.keepAlive)}
+            title={
+              s.keepAlive
+                ? "Pinned: Clock out leaves this session running and it keeps its conversation. Click to unpin."
+                : "Pin to keep this session running through Clock out, in the same conversation"
+            }
+          >
+            {s.keepAlive ? "📌 pinned" : "📌 pin"}
+          </button>
         )}
         {s.status === "exited" && (
           <button

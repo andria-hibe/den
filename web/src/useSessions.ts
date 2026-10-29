@@ -153,6 +153,18 @@ export function useSessions({
     }
   };
 
+  const setKeepAlive = async (id: string, on: boolean) => {
+    try {
+      const meta = await api<SessionMeta>(`/api/sessions/${id}/keepalive`, {
+        method: "POST",
+        body: JSON.stringify({ on }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === meta.id ? { ...s, keepAlive: meta.keepAlive } : s)));
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  };
+
   const setHandover = async (id: string, on: boolean) => {
     try {
       const meta = await api<SessionMeta>(`/api/sessions/${id}/handover`, {
@@ -306,6 +318,7 @@ export function useSessions({
     restartFresh,
     closeSession,
     setHandover,
+    setKeepAlive,
     setOwned,
     addShellTab,
     launchApp,

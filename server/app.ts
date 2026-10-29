@@ -481,6 +481,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return meta;
   });
 
+  app.post("/api/sessions/:id/keepalive", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { on } = (req.body ?? {}) as { on?: boolean };
+    const meta = sessions.setKeepAlive(id, on === true);
+    if (!meta) {
+      reply.code(400);
+      return { error: "not_a_session" };
+    }
+    return meta;
+  });
+
   app.post("/api/sessions/:id/owned", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { on } = (req.body ?? {}) as { on?: boolean };
