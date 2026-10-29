@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
 import { buildDigest } from "./digest.ts";
+import { openArgs } from "./openPath.ts";
 import { EDITION, MANAGER_ENABLED } from "./edition.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
@@ -1062,6 +1063,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
   });
 
+  // A file path clicked in a terminal (#41): viewable files open, anything
+  // else is revealed in Finder (see openPath.ts).
+  app.post("/api/open-path", async (req, reply) => {
+    const { path } = (req.body ?? {}) as { path?: unknown };
+    const args = typeof path === "string" ? openArgs(path) : null;
+    if (!args) {
+      reply.code(400);
+      return { error: "cannot_open" };
+    }
+    await execFileP("open", args);
+    return { ok: true };
+  });
+
   // --- Terminal WebSocket: attach to an existing session by id ---
   app.get("/ws/terminal", { websocket: true }, (socket, req) => {
     const url = new URL(req.url, "http://localhost");
@@ -1092,6 +1106,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       }
       if (msg.type === "input") session.write(msg.data);
       else if (msg.type === "resize") session.resize(msg.cols, msg.rows);
+      else if (msg.type === "ping") send({ type: "pong" });
     });
 
     socket.on("close", () => detach());

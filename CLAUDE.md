@@ -865,6 +865,20 @@ developer's day across the other sessions instead of them being the glue.
   otherwise pull the wrong way. Existing comments aren't rewritten in passing.
 - **Pixel art**: render via canvas + `image-rendering: pixelated` at an *integer*
   pixel scale; animate with `steps()` (fractional transforms/offsets blur it).
+- **Terminal links and reconnect** (issues 41, 42): `useTerminal` makes
+  URLs (web-links addon, plus `linkHandler` for OSC 8) and absolute/`~`
+  paths (`PATH_RE` link provider) open on **Cmd/Ctrl+click**. Paths go to
+  `POST /api/open-path` -> `openArgs` (`server/openPath.ts`, tested):
+  only under `$HOME` or Claude's `/tmp/claude-<uid>/` scratchpads, viewable
+  types open, anything else is only revealed in Finder (`open -R`), since
+  `open` on a `.command` or `.app` would run it. The socket reconnects on
+  close (backoff to 5s, `term.reset()` before the replayed scrollback) and
+  is pinged (`ping`/`pong` in `ws-protocol.ts`) on visibilitychange,
+  focus, and online, reconnecting if no pong in 2s - after the screen
+  slept, input went nowhere until the session was switched away and back.
+  Verified by restarting the server under an open terminal: it reattached
+  and showed the session as exited without a switch. A real sleep wasn't
+  reproduced.
 - **xterm FitAddon + padding**: never put padding on the element xterm is opened
   into (the one FitAddon measures). FitAddon reads `getComputedStyle(host).height`,
   which under `box-sizing:border-box` *includes* padding, so it fits one row too
