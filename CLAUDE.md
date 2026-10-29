@@ -578,7 +578,7 @@ developer's day across the other sessions instead of them being the glue.
   its handover, end, fresh tomorrow, keep-alive pin), then the workers.
 - **The workers are forest animals** (andria, 2026-10-29), so keep any new
   one in theme: Fox (Manager, Opus), Tanuki (Linear inbox + GitHub
-  notifications, Sonnet), Woodpecker (CI failures across PRs, Haiku),
+  notifications, Sonnet), Raccoon (CI failures across PRs, Haiku),
   Hedgehog (handover refresh at clock out, the session's own model for its
   cache), Squirrel (token pace - `LedgerChip`, plain code), Owl (Fable 5.1,
   rare escalation, only with room in the week and the developer's OK).
