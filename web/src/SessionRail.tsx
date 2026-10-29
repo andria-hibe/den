@@ -22,6 +22,7 @@ export function SessionRail({
   onReorder,
   renderLinks,
   renderIcon,
+  attentionNote,
 }: {
   rail: SessionMeta[];
   activeId: string | null;
@@ -45,7 +46,11 @@ export function SessionRail({
   renderLinks: (s: SessionMeta) => ReactNode;
   /** A sprite in place of the colour dot (Fox, the kits, and Owl), or null. */
   renderIcon: (s: SessionMeta) => ReactNode;
+  /** Why this session wants you, for its "!" and that "!"'s hover, or null. */
+  attentionNote: (s: SessionMeta) => string | null;
 }) {
+  // The "!" note is fixed to the window: the rail's scroll box would clip it.
+  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
   // Drag state is view-local: the index being dragged and the row it's over.
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -62,6 +67,11 @@ export function SessionRail({
 
   return (
     <aside className="panel rail" style={{ width }}>
+      {tip && (
+        <div className="attn-tip" style={{ left: tip.x, top: tip.y }} role="tooltip">
+          {tip.text}
+        </div>
+      )}
       <h2>sessions</h2>
       <div className="session-list">
         {rail.map((s, i) => (
@@ -145,8 +155,16 @@ export function SessionRail({
                 {s.name}
               </span>
             )}
-            {s.attention && (
-              <span className="attn-dot" title="waiting for you">
+            {attentionNote(s) && (
+              <span
+                className="attn-dot"
+                aria-label={attentionNote(s) ?? ""}
+                onMouseEnter={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setTip({ text: attentionNote(s) ?? "", x: r.left, y: r.bottom + 6 });
+                }}
+                onMouseLeave={() => setTip(null)}
+              >
                 !
               </span>
             )}

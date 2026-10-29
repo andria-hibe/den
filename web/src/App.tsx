@@ -14,7 +14,7 @@ import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
-import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
+import { usePersistentJson, usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { api } from "./api.ts";
 import { TerminalView } from "./TerminalView.tsx";
 import { AppRunButton, SetupButton, type AppRunner } from "./AppRunButton.tsx";
@@ -338,6 +338,25 @@ export function App() {
     } catch (e) {
       setErrMsg((e as Error).message);
     }
+  };
+
+  // What each session's "Waiting on you" said when you last had it open:
+  // its "!" shows only for items you haven't seen, since most handovers
+  // always list something.
+  const [seenWaiting, setSeenWaiting] = usePersistentJson<Record<string, string>>("den.seenWaiting", {});
+  const activeWaiting = JSON.stringify(sessions.find((x) => x.id === activeId)?.waiting ?? []);
+  useEffect(() => {
+    if (!activeId) return;
+    setSeenWaiting((m) => (m[activeId] === activeWaiting ? m : { ...m, [activeId]: activeWaiting }));
+  }, [activeId, activeWaiting, setSeenWaiting]);
+  const attentionNote = (s: SessionMeta): string | null => {
+    const waiting = s.waiting ?? [];
+    const fresh = waiting.length > 0 && seenWaiting[s.id] !== JSON.stringify(waiting);
+    const lines = [
+      ...(s.attention ? ["Finished a turn while you were away."] : []),
+      ...(fresh ? ["Waiting on you:", ...waiting.map((w) => `- ${w}`)] : []),
+    ];
+    return lines.length ? lines.join("\n") : null;
   };
 
   // The sessions Fox's open Today items name, so a session header offers
@@ -704,6 +723,7 @@ export function App() {
       <SessionRail
         rail={rail}
         renderIcon={(s) => sessionIcon(s, 22)}
+        attentionNote={attentionNote}
         activeId={activeId}
         width={railW}
         editingId={editingId}

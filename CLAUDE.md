@@ -604,10 +604,15 @@ developer's day across the other sessions instead of them being the glue.
   (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's
   "pin") keeps a pane out of it every night - it shows as "pinned
   to stay running" and keeps its conversation.
-- **Going through the day**: a rail row and the header show a
-  pink "needs you" chip while the session's handover lists anything under
-  "Waiting on you" (`waitingItems` in `shared/handover.ts`, tested; served as
-  `meta().waiting`, re-read only when the notepad's mtime changes). Session
+- **Going through the day**: a rail row has one pink "!" (`attentionNote`
+  in App) when the session rang the bell while unwatched, or its handover's
+  "Waiting on you" lists something you **haven't seen** - most handovers
+  always list something, so a "needs you" chip on every row was noise. Seen =
+  the list as it was when you last had that session open
+  (`den.seenWaiting` in localStorage). Hovering the "!" shows why, in a
+  window-fixed tip (`.attn-tip`; the rail's scroll box clipped a CSS one).
+  The items come from `waitingItems` (`shared/handover.ts`, tested), served
+  as `meta().waiting` and re-read only when the notepad's mtime changes. Session
   headers get "‹ Today" (back to Fox) and "next ›" (`nextItemSession`: the
   next open item's session on the Today list, back to Today after the last;
   shown only while this session is on the open list, from a 20s poll of
