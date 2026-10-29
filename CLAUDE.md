@@ -630,7 +630,7 @@ developer's day across the other sessions instead of them being the glue.
   In Burrow every session writing code is drawn as a kit whose scarf is the
   session's colour, and a review session as Owl (`sessionIcon` in App,
   `Critter bust` crops to head and scarf so the colour reads at 2x in the
-  rail); shells and look panes keep the dot. The palette is andria's 13
+  rail); only shells keep the dot. The palette is andria's 13
   colours in `shared/colors.ts`; `RETIRED_COLORS` maps the old 9 to their
   nearest, and `store.ts` recolours old rows on every boot (idempotent).
 - **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread

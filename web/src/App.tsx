@@ -371,11 +371,11 @@ export function App() {
   };
 
   // A sprite in place of a session's colour dot: Fox (there's only one), and
-  // in Burrow a kit for each session writing code, its scarf in the
-  // session's colour, and Owl for a review.
+  // in Burrow a kit for each ticket or PR session (a ticket look included),
+  // its scarf in the session's colour, and Owl for a review.
   const sessionIcon = (s: SessionMeta, size: number) => {
     if (s.view === "manager") return <PixelFox size={30} />;
-    if (!burrow || s.shell || s.look) return null;
+    if (!burrow || s.shell) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;
   };
