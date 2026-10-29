@@ -59,7 +59,9 @@ account's, so `readLimits` reads both apps' dirs (`ALL_DATA_DIRS`).
 prompts; the UI asks `GET /api/edition` (wordmark, title, Start my day).
 Burrow's builder config is `electron-builder.burrow.yml` (extends the base:
 app id `io.den.burrow`, `release-burrow/`, icon `build/burrow.icns` from
-`ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil`), and
+`ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil` - a
+kit, copied from `critterSprites.ts`, on a mint-to-lilac ground; the topbar
+logo is the kit too), and
 `main.ts` calls `app.setName("Burrow")` so dev runs (`npm run app:burrow`,
 or `DEN_EDITION=burrow npm run dev`) get their own userData too. A new
 Burrow has no Linear key (it lives in the db): paste it once.
@@ -617,7 +619,10 @@ developer's day across the other sessions instead of them being the glue.
   next open item's session on the Today list). Header buttons are compact
   for a 13-inch screen (fresh is "✦", the pin is "📌"). In both apps the
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
-  button, or Cmd+\\).
+  button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
+  GitHub split into Review requested / My open PRs (`den.prTab`); a tab
+  shows "!" when something in it needs you. Fox is drawn with `PixelFox`
+  in place of a colour dot (rail, header, title chip): there's only one.
 - **Tanuki and Raccoon** (Burrow): the digest gains `## Inbox` - unread
   Linear notifications (`getInboxNotifications`, a query of its own so a
   schema surprise can't break the ticket list; newest first) and GitHub

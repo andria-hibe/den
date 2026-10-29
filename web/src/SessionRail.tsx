@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { PixelFox } from "./PixelFox.tsx";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
 
@@ -107,10 +108,17 @@ export function SessionRail({
             }}
             title="drag to reorder (or alt+up/down)"
           >
-            <span
-              className="dot"
-              style={{ background: s.color, opacity: s.status === "exited" ? 0.4 : 1 }}
-            />
+            {s.view === "manager" ? (
+              // There's only ever one Fox, so it's drawn rather than coloured.
+              <span className="fox-dot" style={{ opacity: s.status === "exited" ? 0.4 : 1 }}>
+                <PixelFox size={15} />
+              </span>
+            ) : (
+              <span
+                className="dot"
+                style={{ background: s.color, opacity: s.status === "exited" ? 0.4 : 1 }}
+              />
+            )}
             {editingId === s.id ? (
               <input
                 className="rename-input"

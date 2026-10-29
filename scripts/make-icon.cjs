@@ -1,8 +1,8 @@
 // Renders the den app icon (our pixel-art fox on a pastel gradient) with
 // Electron so Chromium rasterises it crisply, and writes build/icon.png.
 // Run via: npx electron scripts/make-icon.cjs  (then rebuild icon.icns).
-// ICON_EDITION=burrow writes build/burrow.png on Burrow's mint-to-lilac
-// background instead, so the two apps differ in the dock.
+// ICON_EDITION=burrow writes build/burrow.png instead: a kit on Burrow's
+// mint-to-lilac background, so the two apps differ in the dock.
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -38,14 +38,36 @@ const PALETTE = {
   e: "#3a2e40",
   w: "#fff6fb",
 };
-const COLS = GRID[0].length;
-const ROWS = GRID.length;
+// Burrow's icon is a kit (web/src/critterSprites.ts), with its default scarf.
+const KIT = [
+  "...DD.......DD....",
+  "..DOOD.....DOOD...",
+  "..DOpODDDDDOpOD...",
+  "..DOOOOOOOOOOOD...",
+  ".DOOOOOOOOOOOOOD..",
+  ".DOOeeOOOOOeeOOD..",
+  ".DOOeeOOOOOeeOOD..",
+  ".DOpOwwwpwwwOpOD..",
+  "..DOOwwwwwwwOOD...",
+  "..DXXXXXXXXXXXD...",
+  "..DYYYYYYYYYYYD...",
+  "...DOwXYwwwwOD.DD.",
+  "...DOwXYwwwwOD.DOD",
+  "...DOOOOOOOOODDOwD",
+  "...DOwOD.DOwODDwD.",
+  "...DDDD..DDDD..D..",
+];
+const KIT_PALETTE = { ...PALETTE, O: "#f2a25c", X: "#ffb7d5", Y: "#c5809f" };
+const SPRITE = BURROW ? KIT : GRID;
+const SPRITE_PALETTE = BURROW ? KIT_PALETTE : PALETTE;
+const COLS = SPRITE[0].length;
+const ROWS = SPRITE.length;
 
 function foxSvg() {
   let rects = "";
-  GRID.forEach((row, y) => {
+  SPRITE.forEach((row, y) => {
     [...row].forEach((ch, x) => {
-      const fill = PALETTE[ch];
+      const fill = SPRITE_PALETTE[ch];
       // 1.02 overlap avoids hairline seams between rects when rasterised.
       if (fill) rects += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${fill}"/>`;
     });

@@ -5,6 +5,7 @@ import { NotepadPane } from "./NotepadPane.tsx";
 import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView, nextItemSession } from "./TodayView.tsx";
+import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
@@ -369,30 +370,36 @@ export function App() {
 
   const renderHeader = (s: SessionMeta, opts?: { workspace?: boolean }) => (
     <div className="term-header">
-      <span className="color-picker">
-        <button
-          className="dot dot-btn"
-          style={{ background: s.color }}
-          title="recolour"
-          onClick={() => setColorPickerOpen((o) => !o)}
-        />
-        {colorPickerOpen && (
-          <span className="swatches">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                className={`swatch ${c === s.color ? "on" : ""}`}
-                style={{ background: c }}
-                title="recolour"
-                onClick={() => {
-                  patch(s.id, { color: c });
-                  setColorPickerOpen(false);
-                }}
-              />
-            ))}
-          </span>
-        )}
-      </span>
+      {s.view === "manager" ? (
+        <span className="fox-dot">
+          <PixelFox size={15} />
+        </span>
+      ) : (
+        <span className="color-picker">
+          <button
+            className="dot dot-btn"
+            style={{ background: s.color }}
+            title="recolour"
+            onClick={() => setColorPickerOpen((o) => !o)}
+          />
+          {colorPickerOpen && (
+            <span className="swatches">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  className={`swatch ${c === s.color ? "on" : ""}`}
+                  style={{ background: c }}
+                  title="recolour"
+                  onClick={() => {
+                    patch(s.id, { color: c });
+                    setColorPickerOpen(false);
+                  }}
+                />
+              ))}
+            </span>
+          )}
+        </span>
+      )}
       <strong className="term-name" title={s.name}>
         {s.name}
       </strong>
@@ -564,8 +571,10 @@ export function App() {
             title="edit den — open a Claude session to change this app"
             aria-label="edit den"
           >
-            <PixelFox size={30} />
+            {burrow ? <Critter kind="kit" size={38} /> : <PixelFox size={30} />}
           </button>
+        ) : burrow ? (
+          <Critter kind="kit" size={38} />
         ) : (
           <PixelFox size={30} />
         )}
@@ -603,7 +612,13 @@ export function App() {
         </span>
         {active && (
           <span className="topbar-title" title={active.name}>
-            <span className="dot" style={{ background: active.color }} />
+            {active.view === "manager" ? (
+              <span className="fox-dot">
+                <PixelFox size={15} />
+              </span>
+            ) : (
+              <span className="dot" style={{ background: active.color }} />
+            )}
             <span className="topbar-name">{active.name}</span>
             <span className="topbar-kind">
               {active.shell ? "shell" : "claude"}

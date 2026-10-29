@@ -2102,6 +2102,23 @@ body {
   color: #4a3a52;
 }
 
+/* Linear / GitHub tabs at the top of the work panel. */
+.work-tabs {
+  padding: 0 12px;
+}
+/* Review requested / My open PRs: one line each, even in a narrow column. */
+.pr-tabs .look-tab {
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* Fox's rail row, header, and title chip: its sprite in place of a colour dot. */
+.fox-dot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 /* A session pinned to stay up through Clock out. */
 .restart-btn.pinned {
   border-color: var(--pink-deep);

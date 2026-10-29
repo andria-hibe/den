@@ -3,6 +3,7 @@ import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
 import { accentStyle, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
+import { usePersistentString } from "./usePersistent.ts";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -120,41 +121,43 @@ function PrCard({
   );
 }
 
-function Section({
-  title,
+function PrList({
   prs,
   onOpenPr,
   onDismissPr,
   prColor,
 }: {
-  title: string;
   prs: PullRequest[];
   onOpenPr: (pr: PullRequest) => void;
   onDismissPr: (pr: PullRequest) => void;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
-  return (
-    <div className="pr-section">
-      <div className="pr-section-title">
-        {title} <span className="pr-count">{prs.length}</span>
+  if (prs.length === 0) {
+    return (
+      <div className="placeholder" style={{ padding: "4px 6px" }}>
+        nothing here 🌿
       </div>
-      {prs.length === 0 ? (
-        <div className="placeholder" style={{ padding: "4px 6px" }}>
-          nothing here 🌿
-        </div>
-      ) : (
-        prs.map((pr) => (
-          <PrCard
-            key={`${pr.repo}#${pr.number}`}
-            pr={pr}
-            onOpen={onOpenPr}
-            onDismiss={onDismissPr}
-            accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
-          />
-        ))
-      )}
-    </div>
+    );
+  }
+  return (
+    <>
+      {prs.map((pr) => (
+        <PrCard
+          key={`${pr.repo}#${pr.number}`}
+          pr={pr}
+          onOpen={onOpenPr}
+          onDismiss={onDismissPr}
+          accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
+        />
+      ))}
+    </>
   );
+}
+
+/** A tab label with its count, and a "!" when anything in it needs you. */
+function tabLabel(name: string, prs: PullRequest[]): string {
+  const bang = prs.some((p) => p.needsAttention) ? " !" : "";
+  return `${name}${prs.length ? ` (${prs.length})` : ""}${bang}`;
 }
 
 export function WorkPanel({
@@ -174,61 +177,99 @@ export function WorkPanel({
     prsLoading: loading,
     refreshPrs,
     dismissPrAttention,
+    linear,
   } = useWorkData();
+
+  // Linear and GitHub each get the whole column on a small screen, rather
+  // than GitHub sitting below every ticket.
+  const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github"] as const);
+  const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine"] as const);
+  const linearBang = (linear?.unreadNotifications ?? 0) > 0 ? " !" : "";
+  const prsBang = data && [...data.reviewRequested, ...data.authored].some((p) => p.needsAttention) ? " !" : "";
 
   return (
     <aside className="panel work">
       <div className="work-head">
         <h2 style={{ margin: 0 }}>work</h2>
       </div>
+      <div className="ticket-look-tabs work-tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={source === "linear"}
+          className={`look-tab${source === "linear" ? " active" : ""}`}
+          onClick={() => setSource("linear")}
+        >
+          Linear{linearBang}
+        </button>
+        <button
+          role="tab"
+          aria-selected={source === "github"}
+          className={`look-tab${source === "github" ? " active" : ""}`}
+          onClick={() => setSource("github")}
+        >
+          GitHub{prsBang}
+        </button>
+      </div>
 
       <div className="pr-scroll">
-        <LinearSection onOpenTicket={onOpenTicket} ticketColor={ticketColor} />
-
-        <div className="pr-section">
-          <div className="pr-section-title">
-            <span>github</span>
-            {data && (
-              <span className="pr-count">
-                {data.reviewRequested.length + data.authored.length}
+        {source === "linear" ? (
+          <LinearSection onOpenTicket={onOpenTicket} ticketColor={ticketColor} />
+        ) : (
+          <div className="pr-section">
+            <div className="pr-section-title">
+              <span>github</span>
+              {data && (
+                <span className="pr-count">
+                  {data.reviewRequested.length + data.authored.length}
+                </span>
+              )}
+              <span style={{ marginLeft: "auto" }}>
+                <button
+                  className="btn-ghost"
+                  onClick={refreshPrs}
+                  disabled={loading}
+                  title="refresh"
+                >
+                  {loading ? "…" : "↻"}
+                </button>
               </span>
-            )}
-            <span style={{ marginLeft: "auto" }}>
-              <button
-                className="btn-ghost"
-                onClick={refreshPrs}
-                disabled={loading}
-                title="refresh"
-              >
-                {loading ? "…" : "↻"}
-              </button>
-            </span>
-          </div>
-          {error && <div className="browser-error">⚠️ {error}</div>}
-          {!data && !error && (
-            <div className="loading-row">
-              <Fox pose="walk" size={22} /> loading your PRs…
             </div>
-          )}
-          {data && (
-            <>
-              <Section
-                title="review requested"
-                prs={data.reviewRequested}
-                onOpenPr={onOpenPr}
-                onDismissPr={dismissPrAttention}
-                prColor={prColor}
-              />
-              <Section
-                title="my open PRs"
-                prs={data.authored}
-                onOpenPr={onOpenPr}
-                onDismissPr={dismissPrAttention}
-                prColor={prColor}
-              />
-            </>
-          )}
-        </div>
+            {error && <div className="browser-error">⚠️ {error}</div>}
+            {!data && !error && (
+              <div className="loading-row">
+                <Fox pose="walk" size={22} /> loading your PRs…
+              </div>
+            )}
+            {data && (
+              <>
+                <div className="ticket-look-tabs pr-tabs" role="tablist">
+                  <button
+                    role="tab"
+                    aria-selected={prTab === "review"}
+                    className={`look-tab${prTab === "review" ? " active" : ""}`}
+                    onClick={() => setPrTab("review")}
+                  >
+                    {tabLabel("Review requested", data.reviewRequested)}
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={prTab === "mine"}
+                    className={`look-tab${prTab === "mine" ? " active" : ""}`}
+                    onClick={() => setPrTab("mine")}
+                  >
+                    {tabLabel("My open PRs", data.authored)}
+                  </button>
+                </div>
+                <PrList
+                  prs={prTab === "review" ? data.reviewRequested : data.authored}
+                  onOpenPr={onOpenPr}
+                  onDismissPr={dismissPrAttention}
+                  prColor={prColor}
+                />
+              </>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
