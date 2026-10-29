@@ -7,6 +7,7 @@ import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView, nextItemSession } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
+import { DenImportBanner } from "./DenImportBanner.tsx";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -1014,6 +1015,7 @@ export function App() {
         />
       )}
       {clockingOut && <ClockOutDialog onDone={closeClockOut} onError={setErrMsg} />}
+      {burrow && <DenImportBanner onImported={() => window.location.reload()} />}
       {errMsg && (
         <div className="toast" onClick={() => setErrMsg(null)}>
           <span>⚠️ {errMsg}</span>

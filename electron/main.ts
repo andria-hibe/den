@@ -7,7 +7,7 @@ import { MIN_SIZE, parseWindowState, restoreBounds } from "./windowState.ts";
 import { EDITION } from "../server/edition.ts";
 import { EDITION_NAME } from "../shared/edition.ts";
 
-// Burrow runs from the same package as Den in dev (`npm run app:burrow`), so
+// Burrow runs from the same package as Den in dev (`npm run app`), so
 // name it here too: the name picks its own userData (window state, storage).
 if (EDITION === "burrow") app.setName("Burrow");
 

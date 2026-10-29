@@ -162,12 +162,12 @@ export function ticketPrompt(issue: LinearIssue): string {
 export function denPrompt(app = "den"): string {
   const which =
     app === "burrow"
-      ? `burrow itself: den's v2 app, built from this repo with \`npm run pack:burrow\` ` +
+      ? `burrow itself: den's v2 app, built from this repo with \`npm run pack\` ` +
         `(its own code is gated on EDITION in server/edition.ts), and the very app this ` +
         `session is running inside`
       : `den itself: the source of the very app this session is running inside (this is ` +
         `its repo)`;
-  const pack = app === "burrow" ? "`npm run pack:burrow`" : "`npm run pack`";
+  const pack = app === "burrow" ? "`npm run pack`" : "`npm run pack:den`";
   return (
     `You're now working on ${which}. First read ./CLAUDE.md to get ` +
     `oriented on the architecture, conventions, and gotchas, then tell me briefly ` +

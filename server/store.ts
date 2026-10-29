@@ -150,6 +150,30 @@ const stmts = {
   deleteSetting: db.prepare(`DELETE FROM settings WHERE key=?`),
 };
 
+/** Another app's sessions and settings, read-only: Den's, for Burrow's
+ * import. Columns that db predates get their defaults. */
+export function readForeignDb(path: string): { sessions: SessionRow[]; settings: { key: string; value: string }[] } {
+  const nativeBinding = sqliteBinding();
+  const other = new Database(path, { readonly: true, ...(nativeBinding ? { nativeBinding } : {}) });
+  try {
+    const sessions = (other.prepare(`SELECT * FROM sessions ORDER BY pos ASC, createdAt ASC`).all() as Partial<SessionRow>[]).map(
+      (r) =>
+        ({
+          ...r,
+          status: "exited",
+          pos: r.pos ?? r.createdAt,
+          handover: r.handover ?? 1,
+          owned: r.owned ?? 0,
+          keepAlive: r.keepAlive ?? 0,
+        }) as SessionRow,
+    );
+    const settings = other.prepare(`SELECT key, value FROM settings`).all() as { key: string; value: string }[];
+    return { sessions, settings };
+  } finally {
+    other.close();
+  }
+}
+
 export const store = {
   insert(row: SessionRow) {
     stmts.insert.run(row);

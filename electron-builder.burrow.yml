@@ -1,5 +1,5 @@
 # Burrow: den v2 (the Manager pane), built from this repo with
-# `npm run pack:burrow`. Its own app id, name, and icon so it installs next to
+# `npm run pack` (Den is `npm run pack:den`). Its own app id, name, and icon so it installs next to
 # Den; its own data in ~/.burrow (server/edition.ts).
 extends: electron-builder.yml
 appId: io.den.burrow

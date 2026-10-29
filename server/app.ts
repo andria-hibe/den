@@ -8,6 +8,7 @@ import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
 import { buildDigest } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
+import { denImportStatus, importFromDen } from "./importDen.ts";
 import { EDITION, MANAGER_ENABLED } from "./edition.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
@@ -987,6 +988,30 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // Forks can take minutes; the rail shows each pane go quiet as it ends.
     void sessions.clockOut(ids as string[]);
     return { started: ids.length };
+  });
+
+  // Moving from Den: whether there's anything to bring over, and doing it.
+  app.get("/api/import/den", async () =>
+    MANAGER_ENABLED ? denImportStatus() : { available: false, denRunning: false, sessions: 0 },
+  );
+  app.post("/api/import/den", async (_req, reply) => {
+    if (!MANAGER_ENABLED) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    try {
+      const { rows, files } = importFromDen();
+      sessions.adopt(rows);
+      return { sessions: rows.filter((r) => r.role === "main").length, files };
+    } catch (err) {
+      if ((err as Error).message === "den_running") {
+        reply.code(409);
+        return { error: "Quit Den first, then import." };
+      }
+      logWarn("import from den", err);
+      reply.code(500);
+      return { error: "Import failed." };
+    }
   });
 
   // The Manager's Today list, for the Today view.

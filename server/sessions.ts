@@ -1341,7 +1341,14 @@ class SessionManager {
   /** Restore persisted rows as exited placeholders (live PTYs don't survive). */
   hydrate() {
     store.markAllExited();
-    for (const row of store.all()) {
+    this.adopt(store.all());
+  }
+
+  /** Load stored rows as exited panes, skipping any already loaded: at boot,
+   * and for sessions imported from Den. */
+  adopt(rows: SessionRow[]) {
+    for (const row of rows) {
+      if (this.sessions.has(row.id)) continue;
       const s = new DenSession({
         id: row.id,
         name: row.name,

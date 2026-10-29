@@ -10,8 +10,8 @@ juggling terminal tabs. This file orients the next agent — read it first.
 ```bash
 npm install            # postinstall: scripts/fix-pty.mjs restores node-pty's +x bit
 npm run dev            # browser dev: server :4321 + Vite :5173 (open :5173)  ← fast loop
-npm run app            # launch as an Electron app (builds native/ for Electron first, once)
-npm run pack           # build release/mac-arm64/Den.app (unsigned, local)
+npm run app            # launch Burrow as an Electron app (builds native/ for Electron first, once)
+npm run pack           # build release-burrow/mac-arm64/Burrow.app (unsigned, local); Den: pack:den
 npm run typecheck
 npm run lint           # eslint (flat config; non-type-checked)
 npm test               # vitest (server + web pure logic)
@@ -21,7 +21,7 @@ npm run smoke          # end-to-end: real server + UI in headless Electron (node
 
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
 > typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
-> `ditto` to `/Applications/Den.app` → reopen) for when they say so. They
+> staged copy into `/Applications/Burrow.app` → reopen) for when they say so. They
 > control when the running app is replaced. (Swap the bundle in with a staged
 > copy + `mv`, not `ditto` over the running app: the running process keeps its
 > old files.)
@@ -46,9 +46,18 @@ rebuild) fails with a message naming the command to run (`openDb` in
 
 ## Two apps: Den and Burrow
 
-One codebase builds two apps that install side by side (andria, 2026-10-29):
-**Den** (`npm run pack`, the original) and **Burrow** (`npm run pack:burrow`,
-den v2: the Manager pane, Fox, and its Today list). `server/edition.ts` holds
+One codebase builds two apps (andria, 2026-10-29): **Burrow** (`npm run
+pack` / `app` / `dist`, den v2: the Manager pane, Fox, and its Today list)
+and **Den** (`npm run pack:den` / `app:den` / `dist:den`, the original).
+**andria moved to Burrow full-time on 2026-10-29**: Den.app is retired from
+/Applications, and the Den edition stays in the code, unused. Burrow's
+banner offers a one-time import of Den's sessions (`server/importDen.ts`:
+sessions, notepads, review and inbox files, settings except the window's
+place; refuses while a `Den` process runs; a session already open in Burrow
+for the same ticket, PR, or checkout is kept and takes Den's handover if
+its own is still empty; `DEN_IMPORT_FROM` points it at a copy for tests,
+which skips the running check). Imported rows come back exited and reopen
+on their own conversations (`sessions.adopt`). `server/edition.ts` holds
 `EDITION`, from `process.env.DEN_EDITION` - which `build:electron:burrow`
 bakes in with esbuild's `--define`, so the packaged app needs no env - and
 `DATA_DIR`: `~/.den` for Den, **`~/.burrow`** for Burrow, so Burrow never
@@ -66,7 +75,7 @@ app id `io.den.burrow`, `release-burrow/`, icon `build/burrow.icns` from
 `ICON_EDITION=burrow npx electron scripts/make-icon.cjs` + `iconutil` - a
 kit, copied from `critterSprites.ts`, on a mint-to-lilac ground; the topbar
 logo is the kit too), and
-`main.ts` calls `app.setName("Burrow")` so dev runs (`npm run app:burrow`,
+`main.ts` calls `app.setName("Burrow")` so dev runs (`npm run app`,
 or `DEN_EDITION=burrow npm run dev`) get their own userData too. A new
 Burrow has no Linear key (it lives in the db): paste it once.
 

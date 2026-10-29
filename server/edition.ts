@@ -3,7 +3,8 @@ import { join } from "node:path";
 import type { Edition } from "../shared/edition.ts";
 
 /** Which app this is. The packaged Burrow app has DEN_EDITION baked in by
- * esbuild's --define (pack:burrow); in dev it's an ordinary env var. */
+ * esbuild's --define (build:electron:burrow, used by app/pack/dist); in dev
+ * it's an ordinary env var. */
 export const EDITION: Edition = process.env.DEN_EDITION === "burrow" ? "burrow" : "den";
 
 /** Where this app keeps its database, notepads, and other files. Burrow's is
