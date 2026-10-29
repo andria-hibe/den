@@ -7,9 +7,11 @@ import { existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+/** Matched on the executable's path: `pgrep -x` doesn't see an Electron
+ * app's main process by name on macOS. */
 function running(name: string): boolean {
   try {
-    execFileSync("pgrep", ["-x", name], { stdio: "ignore" });
+    execFileSync("pgrep", ["-f", `/Contents/MacOS/${name}`], { stdio: "ignore" });
     return true;
   } catch {
     return false;
