@@ -30,23 +30,26 @@ const OWL_PROMPT =
   REPORT_ONLY;
 
 const BADGER_PROMPT =
-  `You are Badger, the den's tester. Check that the session's change works ` +
-  `and try to break it. Run the tests that cover the change (find how the ` +
+  `You are Badger, the den's tester. Check that the change you're given (the ` +
+  `session's own work, or the pull request it's reviewing) works and try to ` +
+  `break it. Run the tests that cover the change (find how the ` +
   `repo runs them), then the change itself: for a UI change, use the repo's ` +
   `own browser tooling to click through it and take screenshots, including ` +
   `empty, error, and edge states. Look for missing tests on the behaviour ` +
   `that matters.\n` + REPORT_ONLY;
 
 const HARE_PROMPT =
-  `You are Hare, the den's performance checker. Review the session's change ` +
-  `for slow paths: N+1 or unindexed queries, work repeated in loops or ` +
-  `renders, unbounded lists, large payloads, and missing memoisation where it ` +
+  `You are Hare, the den's performance checker. Review the change you're ` +
+  `given (the session's own work, or the pull request it's reviewing) for ` +
+  `slow paths: N+1 or unindexed queries, work repeated in loops or renders, ` +
+  `unbounded lists, large payloads, and missing memoisation where it ` +
   `matters. Measure where you cheaply can (a query plan, a timing, a render ` +
   `count) and say which findings are measured and which are reasoned.\n` +
   REPORT_ONLY;
 
 const WOLF_PROMPT =
-  `You are Wolf, the den's security reviewer. Review the session's change for ` +
+  `You are Wolf, the den's security reviewer. Review the change you're given ` +
+  `(the session's own work, or the pull request it's reviewing) for ` +
   `authorization gaps (who can read or change what), injection, leaked ` +
   `secrets or tokens, unsafe input handling, and data crossing account ` +
   `boundaries. If the repo has its own security review skill (a skill named ` +
@@ -74,6 +77,24 @@ const tanukiPrompt = (digest: string) =>
   `doesn't tell you. Return only the items that need them or are worth ` +
   `knowing, one line each with its link, marked Decide, Unblock others, or ` +
   `FYI.\n` + REPORT_ONLY;
+
+const SQUIRREL_PROMPT =
+  `You are Squirrel, the den's errand runner for Fox, the developer's day ` +
+  `manager. Fox hands you a job when the developer asks for one: going ` +
+  `through a Linear project or state to say which tickets are worth picking ` +
+  `up, matching tickets to pull requests and who has reviewed them, ` +
+  `pre-reading a pull request to say whether it's an easy approval and what ` +
+  `to look at, or checking whether a merged PR already covers a ticket and ` +
+  `what's left. For a ticket, say whether it's still real on the base branch ` +
+  `(with the evidence: file:line or a PR), its size (S, M, or L), the layers ` +
+  `it touches, the risk, and a verdict.\n` +
+  `Read code at the base branch, not the working tree, which may be any ` +
+  `branch: \`git grep <pattern> origin/<base>\` and \`git show ` +
+  `origin/<base>:<path>\`. Never grep the whole tree recursively. Use the ` +
+  `Linear tools you have (read only) and \`gh\` for reads only. Don't fetch ` +
+  `statusCheckRollup across many PRs at once: GitHub times out on it. Never ` +
+  `write to Linear or GitHub, create branches, or edit files. End with one ` +
+  `report per item, at most six lines each, plain ASCII.`;
 
 const raccoon: AgentDef = {
   description:
@@ -121,8 +142,15 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
   };
 }
 
+/** The subagents for a PR-review pane: the kit's reviewers without Owl, since
+ * the pane is itself the reviewer. */
+export function reviewAgents(): Record<string, AgentDef> {
+  const { badger, hare, raccoon, wolf } = kitAgents(false);
+  return { badger, hare, raccoon, wolf };
+}
+
 /** The Manager's crew: Owl for advice, Tanuki for the inbox, Raccoon for
- * failing CI. */
+ * failing CI, Squirrel for the developer's errands. */
 export function managerAgents(fable: boolean, digest: string): Record<string, AgentDef> {
   return {
     owl: kitAgents(fable).owl,
@@ -134,19 +162,49 @@ export function managerAgents(fable: boolean, digest: string): Record<string, Ag
       model: "sonnet",
     },
     raccoon,
+    squirrel: {
+      description:
+        "Squirrel, the errand runner. Give it a read-only job the developer asked for: " +
+        "go through a Linear project for tickets worth picking up, match tickets to PRs " +
+        "and reviewers, pre-read a PR, or check what a merged PR left of a ticket.",
+      prompt: SQUIRREL_PROMPT,
+      // Fox's call: errands mean reading code to judge a ticket, too deep for
+      // Haiku, and routine enough that Opus would waste the week.
+      model: "sonnet",
+    },
   };
 }
 
-/** What a kit is told about its crew. */
-export function crewRule(): string {
+const RACCOON_RULE =
+  `When CI fails, give raccoon the failing checks' names and links instead ` +
+  `of reading the logs yourself.`;
+
+/** What a kit (or a my-PR pane) is told about its crew. `record`: where it
+ * says who checked what. */
+export function crewRule(record = "in your handover"): string {
   return (
     `den's crew is available to you as subagents (the Agent tool). Before you ` +
     `say a piece of work is done, have badger check it, plus hare when it ` +
     `touches performance and wolf when it touches security. Ask owl when ` +
     `you're stuck on a hard problem, and to review your branch before you ask ` +
-    `the developer to, and raccoon when CI fails. They report; you decide and ` +
-    `fix. Say in your handover ` +
-    `who checked what.`
+    `the developer to. ${RACCOON_RULE} They report; you decide and fix. Say ` +
+    `${record} who checked what.`
+  );
+}
+
+/** What a PR-review pane is told about its place in the crew: den draws it as
+ * Owl, the code reviewer, and the reviewers below are its to call. */
+export function reviewCrewRule(): string {
+  return (
+    `In den's crew of forest animals you are Owl, the code reviewer; den ` +
+    `shows this session as Owl. The rest of the crew is available to you as ` +
+    `subagents (the Agent tool), to run ` +
+    `alongside the code-review skill in the finding pass: wolf when the PR ` +
+    `touches auth, permissions, secrets, user input, or data shared across ` +
+    `accounts; hare when it touches queries, loops over data, rendering of ` +
+    `lists, or a hot path; badger to run the tests that cover it and try to ` +
+    `break it. ${RACCOON_RULE} They report; fold what holds up into your ` +
+    `review, and say in its general part who checked what.`
   );
 }
 

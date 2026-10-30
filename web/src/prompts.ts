@@ -195,3 +195,32 @@ export function cleanupPrompt(skill: string | null): string {
     "touch the main checkout, and never discard uncommitted work."
   );
 }
+
+/** The helpers a pane's crew buttons can call: the subagents den gives it
+ * (kitAgents / reviewAgents in server/crew.ts). */
+export type CrewHelper = "owl" | "badger" | "hare" | "wolf" | "raccoon";
+
+/** What a crew button asks the pane to do. `review`: a PR-review pane, whose
+ * subject is the PR it's reviewing rather than its own work. */
+export function crewAskPrompt(helper: CrewHelper, review: boolean): string {
+  const subject = review ? "this pull request" : "the change on this branch";
+  const report = review
+    ? "Fold anything that holds up into your review, then tell me briefly what it found."
+    : "Tell me briefly what it found and what you'd do about it; don't change anything yet.";
+  switch (helper) {
+    case "owl":
+      return `Ask owl, your advisor subagent, to review the change on this branch against its base now. ${report}`;
+    case "badger":
+      return `Ask badger, your testing subagent, to check ${subject} now: run the tests that cover it and try to break it. ${report}`;
+    case "hare":
+      return `Ask hare, your performance subagent, to check ${subject} for slow paths now. ${report}`;
+    case "wolf":
+      return `Ask wolf, your security subagent, to review ${subject} now. ${report}`;
+    case "raccoon":
+      return (
+        `Check CI on ${review ? "this pull request" : "this branch's pull request"} with gh pr checks. ` +
+        `If any check fails, give raccoon, your CI subagent, the failing checks' names and links, ` +
+        `and tell me what it says. If nothing fails, just say so.`
+      );
+  }
+}

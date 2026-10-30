@@ -2,7 +2,7 @@ import * as pty from "node-pty";
 import os from "node:os";
 import { join } from "node:path";
 import {
-  existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync,
+  existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, rmSync, statSync,
 } from "node:fs";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -13,7 +13,7 @@ import {
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
-import { EMPTY_USAGE, addUsage, contextSize, sessionUsage, type Usage } from "./usage.ts";
+import { contextSize } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
 import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
@@ -25,7 +25,7 @@ import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 import { DATA_DIR } from "./dataDir.ts";
-import { crewRule, fableHasRoom, kitAgents, managerAgents } from "./crew.ts";
+import { crewRule, fableHasRoom, kitAgents, managerAgents, reviewAgents, reviewCrewRule } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 
@@ -67,6 +67,25 @@ export const socketDir = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join("/tmp", `den-${groupId.slice(0, 8)}`);
 };
+
+const EMPTY_NOTEPAD = `# Handover\n\n${HANDOVER_TEMPLATE}`;
+
+// The den editor (the "den:self-edit" workspace) is one job that runs across
+// many workspaces, so its handover outlives each one: closing it moves the
+// notepad here and the next editor starts from it. Kept out of PROGRESS_DIR,
+// which the Manager reads as the live sessions' handovers.
+const CARRY_DIR = join(DATA_DIR, "carry");
+const carryPath = (ticket: string | null | undefined) =>
+  ticket === "den:self-edit" ? join(CARRY_DIR, "self-edit.md") : null;
+
+/** The handover a closed workspace with this ticket left, removed as it's taken. */
+function takeCarried(ticket: string | undefined): string | undefined {
+  const file = carryPath(ticket);
+  if (!file || !existsSync(file)) return undefined;
+  const md = readFileSync(file, "utf8");
+  rmSync(file, { force: true });
+  return md;
+}
 
 /** den's copy of a ticket workspace's ticket section (#39). */
 const ticketCopyPath = (groupId: string) => {
@@ -418,8 +437,8 @@ export function denWatchRule(): string {
 
 /** `manager`: the app has a Manager pane whose relayed answers count. */
 export function workspaceInstruction(notepad: string, manager = true): string {
-  const relay = manager ? `\n${managerRelayRule()}\n${crewRule()}` : "";
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`;
+  const relay = manager ? `\n${managerRelayRule()}` : "";
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${crewRule()}\n${denIssueRule()}`;
 }
 
 /** How a workspace treats the Manager's relayed approvals (#46): the
@@ -481,7 +500,11 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `an approval they didn't give in this conversation, and never widen one. ` +
     `If a send is held for approval or refused, tell the developer. On a hard ` +
     `call (what to do first, whether a plan holds up), ask owl, your advisor ` +
-    `subagent, before you recommend.\n` +
+    `subagent, before you recommend. When the developer asks you to look into ` +
+    `something yourself (go through a Linear project, size up tickets, ` +
+    `pre-read a PR), hand the legwork to squirrel, your errand subagent, ` +
+    `running several at once when the job splits, and bring back what it ` +
+    `found.\n` +
     `NEVER, for any session: commit, push, merge, rebase, mark a PR ready, ` +
     `review, comment on, reply to, or resolve anything on GitHub or Linear, or ` +
     `edit a session's code or its handover. Ask the session to do it once the ` +
@@ -512,7 +535,8 @@ export function myPrInstruction(
     `not), run the checks that cover it, and say briefly what you changed. ` +
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
-    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${denIssueRule()}`
+    `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n` +
+    `${crewRule("in your reply")}\n${denIssueRule()}`
   );
 }
 
@@ -648,7 +672,7 @@ export function reviewInstruction(
     `are written, answer follow-up questions (about one file, one comment, or ` +
     `anything else) in the terminal and leave both files as they are, unless ` +
     `the developer asks you to change them.\n` +
-    denIssueRule()
+    `${reviewCrewRule()}\n${denIssueRule()}`
   );
 }
 
@@ -732,31 +756,6 @@ export function idleHandoverDue(p: {
   if (p.lastInputAt <= p.lastHandoverAt) return false;
   if (!p.lastOutputAt || p.now - p.lastOutputAt < p.idleMs) return false;
   return p.notepadMtime < p.lastOutputAt - NOTEPAD_FRESH_MS;
-}
-
-/** The spend in `claude -p --output-format json` output, or null without a
- * `total_cost_usd`. */
-export function forkUsage(stdout: string): Usage | null {
-  try {
-    const o = JSON.parse(stdout) as {
-      total_cost_usd?: number;
-      usage?: {
-        input_tokens?: number; output_tokens?: number;
-        cache_read_input_tokens?: number; cache_creation_input_tokens?: number;
-      };
-    };
-    if (typeof o.total_cost_usd !== "number") return null;
-    return {
-      costUSD: o.total_cost_usd,
-      input: o.usage?.input_tokens ?? 0,
-      output: o.usage?.output_tokens ?? 0,
-      cacheRead: o.usage?.cache_read_input_tokens ?? 0,
-      cacheWrite: o.usage?.cache_creation_input_tokens ?? 0,
-      unpriced: false,
-    };
-  } catch {
-    return null;
-  }
 }
 
 /** What the idle handover asks. It runs in a headless fork of the pane's
@@ -907,10 +906,6 @@ class DenSession {
   /** A review pane working on the PR as the developer's own. */
   owned = false;
   keepAlive = false;
-  /** What den's idle handovers for this pane have spent. They run as headless
-   * forks that save no transcript, so their usage is tracked here instead
-   * (in memory: it resets when den restarts). */
-  handoverUsage: Usage = { ...EMPTY_USAGE };
   /** New output since the last scrollback flush to the store. */
   private scrollbackDirty = false;
   private listeners = new Set<Listener>();
@@ -1267,16 +1262,12 @@ class SessionManager {
         "--add-dir", PROGRESS_DIR,
         "--allowedTools", "Read", `Edit(//${notepad.replace(/^\/+/, "")})`,
         "--append-system-prompt", progressInstruction(notepad),
-        "--output-format", "json",
         "--", idleHandoverPrompt(notepad),
       ],
       { cwd: s.cwd, timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024 },
-      (err, stdout) => {
+      (err) => {
         s.handoverRunning = false;
         if (err) logWarn("idleHandover", err);
-        // The fork saves no transcript, so its spend is only in this result.
-        const spent = forkUsage(stdout);
-        if (spent) s.handoverUsage = addUsage(s.handoverUsage, spent);
         resolve();
       },
     ));
@@ -1464,7 +1455,7 @@ class SessionManager {
     }
 
     const name = opts.name ?? `den-${this.sessions.size + 1}`;
-    this.ensureNotepad(groupId, opts.notepadSeed);
+    this.ensureNotepad(groupId, opts.notepadSeed ?? takeCarried(opts.ticket));
     if (opts.notepadTicket) writeFileSync(ticketCopyPath(groupId), opts.notepadTicket);
 
     const main = new DenSession({
@@ -1554,7 +1545,7 @@ class SessionManager {
     // the notepad instruction (the notepad stays for the developer's own use).
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
-      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${denIssueRule()}`;
+      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${crewRule("in your reply")}\n${denIssueRule()}`;
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [
@@ -1579,6 +1570,7 @@ class SessionManager {
     if (s.view === "mypr") {
       return [
         "--settings", JSON.stringify({ ...statusLineSettings(s.groupId), hooks: inboxHooks(s.groupId) }),
+        "--agents", JSON.stringify(kitAgents(fableHasRoom())),
         "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
       ];
     }
@@ -1611,6 +1603,7 @@ class SessionManager {
       "--permission-mode", "default",
       "--add-dir", PROGRESS_DIR,
       "--add-dir", REVIEW_DIR,
+      "--agents", JSON.stringify(reviewAgents()),
       "--append-system-prompt", reviewInstruction(file, diffFile, s.branch, guideFile, s.owned),
     ];
   }
@@ -1694,21 +1687,6 @@ class SessionManager {
     return pick.resume
       ? ["--resume", pick.id]
       : ["--session-id", pick.id, "-n", s.name];
-  }
-
-  /** What a Claude pane has spent: its conversation (from the transcript)
-   * plus den's idle handovers for it, and the plan's limits across all panes.
-   * Null for a shell or an unknown id. */
-  usage(id: string): { conversation: Usage; handovers: Usage; total: Usage; limits: PlanLimits | null } | null {
-    const s = this.sessions.get(id);
-    if (!s || s.shell) return null;
-    const conversation = s.claudeSessionId ? sessionUsage(s.claudeSessionId) : { ...EMPTY_USAGE };
-    return {
-      conversation,
-      handovers: s.handoverUsage,
-      total: addUsage(conversation, s.handoverUsage),
-      limits: readLimits(),
-    };
   }
 
   /** Switch a review pane between reviewing the PR and working on it as the
@@ -1850,8 +1828,10 @@ class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return false;
     const groupId = s.groupId;
+    let carry: string | null = null;
     for (const other of [...this.sessions.values()]) {
       if (other.groupId === groupId) {
+        if (other.role === "main") carry = carryPath(other.ticket);
         other.kill();
         this.sessions.delete(other.id);
         store.delete(other.id);
@@ -1859,7 +1839,13 @@ class SessionManager {
     }
     // Closing the workspace deletes its files; exit and restart keep them.
     try {
-      rmSync(notepadPath(groupId), { force: true });
+      const notepad = notepadPath(groupId);
+      // An untouched notepad isn't carried, so it can't replace a real handover.
+      if (carry && existsSync(notepad) && readFileSync(notepad, "utf8") !== EMPTY_NOTEPAD) {
+        mkdirSync(CARRY_DIR, { recursive: true });
+        renameSync(notepad, carry);
+      }
+      rmSync(notepad, { force: true });
       rmSync(ticketCopyPath(groupId), { force: true });
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
@@ -1928,7 +1914,7 @@ class SessionManager {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     const file = notepadPath(groupId);
     if (!existsSync(file)) {
-      writeFileSync(file, seed ?? `# Handover\n\n${HANDOVER_TEMPLATE}`);
+      writeFileSync(file, seed ?? EMPTY_NOTEPAD);
     }
     return file;
   }

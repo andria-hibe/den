@@ -440,19 +440,14 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   the `idle_handover_min` setting → 30; `0`/`off` disables it (there's no UI
   toggle beyond the per-workspace switch below). It spends tokens with nobody
   watching.
-- **Token spend** (issue 11). `server/usage.ts` prices a session from its
-  transcript: `sumUsage` dedupes by message id (Claude Code repeats a
-  message's usage on every content-block line) and prices input / output /
-  cache writes (5m 1.25x, 1h 2x input) / cache reads at API rates (`RATES`,
-  longest model-id prefix wins; verified to reproduce Claude Code's own
-  `cost-state` total to the cent). Claude Code's `cost-state` line is only
-  written on exit, so it can't show a live session. `GET
-  /api/sessions/:id/usage` adds the idle handovers' spend (`handoverUsage`,
-  in memory, read from the fork's `--output-format json`). `SpendChip` shows
-  it in every Claude pane's header (30s poll): **tokens** on the chip (all
-  kinds, cache reads included), and on hover the cost at API prices plus the
-  **plan's limits** (current session = 5-hour window, current week, % used +
-  reset time). Those limits reach nothing but a **status line command**
+- **Token spend** (issue 11). Each pane's header used to carry a spend chip
+  (tokens, and cost at API prices from pricing each transcript); it was
+  removed on 2026-10-30 once the field mouse's pace chip (Token pace, below)
+  covered the plan's limits, to free header space. Git history has the
+  pricing (`sumUsage`, `RATES`, verified to the cent against Claude Code's
+  own `cost-state`) if a cost view comes back. The **plan's limits**
+  (current session = 5-hour window, current week, % used + reset time)
+  reach nothing but a **status line command**
   (`rate_limits` in its JSON stdin, only after a pane's first reply; not in
   `claude -p --output-format json`, no file, no hook), so every Claude pane
   gets a status line via `--settings` (`statusLineSettings` in
@@ -472,7 +467,8 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill
   with orphans. (The "edit den" workspace passes no seed, so it gets the empty
-  handover like any workspace; its opener lives in the initial prompt.)
+  handover, or the last editor's carried one (see Edit den itself); its
+  opener lives in the initial prompt.)
 - **shell** session = a single plain terminal.
 - **Single-pane claude** sessions carry a `view`: `look` (ticket + claude),
   `review` (others' PR), `mypr` (your PR), `manager` (Fox, see above), or a
@@ -574,7 +570,7 @@ developer's day across the other sessions instead of them being the glue.
 - Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
   its handover, end, fresh tomorrow, keep-alive pin), then the workers.
 - **The crew are forest animals** (andria, 2026-10-29), so keep any new
-  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. In reserve: a fluffier squirrel.
+  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. Squirrel (Fox's errand runner, Sonnet by Fox's own pick, 2026-10-30): read-only jobs the developer asks Fox for, such as going through a Linear project for tickets worth picking up, matching tickets to PRs, or pre-reading a PR.
   Pixel art: `critterSprites.ts` (18x19 like the fox's SIT, same outline
   and eyes; `CREW` holds name, job, model, built), drawn by `Critter.tsx`
   with the fox's `rasterize` (`tint` recolours a kit's scarf). den shows
@@ -584,10 +580,20 @@ developer's day across the other sessions instead of them being the glue.
   with any sprite or name change.
 - **The reviewers and advisor are real subagents**:
   `server/crew.ts` builds Claude Code `--agents` JSON - `kitAgents` for every
-  workspace pane (owl, badger, hare, wolf, each with its model and a
-  report-only prompt) and `managerAgents` (owl) for Fox - and `crewRule`
-  (in `workspaceInstruction` with the relay rule) tells a kit when to call
-  them. Owl runs on Fable when `fableHasRoom` (the week isn't ahead of an
+  workspace and my-PR pane (owl, badger, hare, wolf, raccoon, each with its
+  model and a report-only prompt), `reviewAgents` (the same minus owl) for a
+  review pane, and `managerAgents` (owl) for Fox - and `crewRule` (workspace
+  and my-PR prompts) / `reviewCrewRule` (in `reviewInstruction`, run
+  alongside the code-review skill; it also tells the pane it *is* Owl) say
+  when to call them. **The developer can call them too**: `CrewButtons` in
+  a workspace, my-PR, or review pane's header is one button holding the
+  helpers' busts (five separate buttons squeezed the path and branch out of
+  the header at 1240px); it opens a card listing each helper's job with an
+  "ask" button that pastes and submits `crewAskPrompt` (`prompts.ts`), so
+  the pane calls its own subagent. A failing-CI
+  message from den (`ciMessage`) lists the failing checks with links and
+  says to hand them to raccoon: before that, sessions read their own logs
+  and never called it (andria, 2026-10-30). Owl runs on Fable when `fableHasRoom` (the week isn't ahead of an
   even pace), else Opus; full model ids work in `--agents` (verified: a
   subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
   their crew up at spawn, so existing ones need a restart.
@@ -645,8 +651,8 @@ developer's day across the other sessions instead of them being the glue.
   `sharedFailures` (a check failing on more than one PR; tested). Fox's
   `managerAgents` add tanuki (Sonnet, sorts the Inbox section) and raccoon
   (Haiku, reads failed logs with `gh run view --log-failed`, says flake or
-  real and whether a fix landed on the base; never reruns). Kits get raccoon
-  too, for their own red CI.
+  real and whether a fix landed on the base; never reruns). Kits, my-PR and
+  review panes get raccoon too, for their own red CI.
 
 ## Features (all built + committed on `master`)
 
@@ -787,7 +793,15 @@ developer's day across the other sessions instead of them being the glue.
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
   Claude primed to read CLAUDE.md. Race-safe reuse via the sentinel ticket
-  `"den:self-edit"` (one editor at a time). The app/dock icon is the same
+  `"den:self-edit"` (one editor at a time); the kit (and the 🧹 button,
+  `reopenSentinel` in App) restarts an **exited** one rather than making a
+  new one, since every pane comes back exited after den restarts. The
+  editor's **handover outlives its workspace**: closing it moves the notepad
+  to `~/.den/carry/self-edit.md` (not under `progress/`, which Fox reads),
+  and the next editor's `create()` starts from it (`takeCarried`); an
+  untouched template isn't carried. Both fix a lost handover (2026-10-30):
+  after a restart the kit opened a fresh editor, and closing the old one
+  deleted the real handover. The app/dock icon is the same
   kit (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and

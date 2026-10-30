@@ -5,6 +5,7 @@ import type { LinearIssue } from "../../server/linear.ts";
 import {
   autoReviewPrompt,
   cleanupPrompt,
+  crewAskPrompt,
   denPrompt,
   fileReviewPrompt,
   guidePrompt,
@@ -56,6 +57,12 @@ describe("paste prompts", () => {
     denPrompt: denPrompt(),
     cleanupWithSkill: cleanupPrompt("runn-cleanup"),
     cleanupGeneric: cleanupPrompt(null),
+    ...Object.fromEntries(
+      (["owl", "badger", "hare", "wolf", "raccoon"] as const).flatMap((h) => [
+        [`crewAsk ${h}`, crewAskPrompt(h, false)],
+        [`crewAsk ${h} (review)`, crewAskPrompt(h, true)],
+      ]),
+    ),
     notePrompt: notePrompt(42, {
       kind: "line comment",
       author: "someone",

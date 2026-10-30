@@ -28,5 +28,9 @@ export function ciFinishes(last: Map<string, CheckState>, prs: PullRequest[]): C
 export function ciMessage({ pr, to }: CiFinish): string {
   const c = pr.checkCounts;
   const result = to === "passing" ? `passed (${c.passed} checks)` : `failed (${c.failed} of ${c.total} checks failing)`;
-  return `CI on PR #${pr.number} (${pr.repo}, branch ${pr.branch ?? "unknown"}) finished and ${result}.`;
+  const head = `CI on PR #${pr.number} (${pr.repo}, branch ${pr.branch ?? "unknown"}) finished and ${result}.`;
+  const failing = pr.failingChecks ?? [];
+  if (to === "passing" || !failing.length) return head;
+  const list = failing.map((f) => `- ${f.name}${f.link ? `: ${f.link}` : ""}`).join("\n");
+  return `${head}\nFailing:\n${list}\nHand these to raccoon, your CI subagent, before reading the logs yourself.`;
 }

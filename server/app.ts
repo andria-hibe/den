@@ -459,17 +459,6 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // The week's pace and the costliest chats, for the topbar (#45).
   app.get("/api/usage", async () => sessions.usageOverview());
 
-  // What a Claude pane has spent (#11).
-  app.get("/api/sessions/:id/usage", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const u = sessions.usage(id);
-    if (!u) {
-      reply.code(404);
-      return { error: "not_found" };
-    }
-    return u;
-  });
-
   app.post("/api/sessions/:id/handover", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { on } = (req.body ?? {}) as { on?: boolean };

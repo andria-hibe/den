@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
-import { SpendChip } from "./SpendChip.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
@@ -11,6 +10,7 @@ import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
+import { CrewButtons } from "./CrewButtons.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
@@ -295,6 +295,19 @@ export function App() {
     });
   };
 
+  /** Open the one workspace a sentinel ticket names, or false when there is
+   * none. An exited one is restarted rather than replaced: every pane comes
+   * back exited after den restarts, and a new workspace would start from an
+   * empty notepad while the real handover sat in the old one. */
+  const reopenSentinel = (ticket: string): boolean => {
+    const mine = sessions.filter((s) => s.role === "main" && s.ticket === ticket);
+    const existing = mine.find((s) => s.status === "running") ?? mine[0];
+    if (!existing) return false;
+    selectSession(existing.id);
+    if (existing.status !== "running") void restartSession(existing.id);
+    return true;
+  };
+
   // --- Edit den itself ---
   // The sentinel ticket gives race-safe reuse (one editor at a time) and a
   // locked title.
@@ -305,13 +318,7 @@ export function App() {
       setErrMsg("couldn't locate the den source repo");
       return;
     }
-    const existing = sessions.find(
-      (s) => s.role === "main" && s.status === "running" && s.ticket === DEN_TICKET,
-    );
-    if (existing) {
-      selectSession(existing.id);
-      return;
-    }
+    if (reopenSentinel(DEN_TICKET)) return;
     addSession({
       cwd: denRoot,
       ticket: DEN_TICKET,
@@ -325,13 +332,7 @@ export function App() {
   // The sentinel ticket reuses one workspace, like the den editor.
   const CLEANUP_TICKET = "den:cleanup";
   const openCleanup = async () => {
-    const existing = sessions.find(
-      (s) => s.role === "main" && s.status === "running" && s.ticket === CLEANUP_TICKET,
-    );
-    if (existing) {
-      selectSession(existing.id);
-      return;
-    }
+    if (reopenSentinel(CLEANUP_TICKET)) return;
     try {
       const { skill, cwd } = await api<{ skill: string | null; cwd: string }>("/api/cleanup");
       addSession({ cwd, ticket: CLEANUP_TICKET, name: "🧹 clean up", initialPrompt: cleanupPrompt(skill) });
@@ -459,7 +460,14 @@ export function App() {
       )}
       <WorkLinkChips s={s} issues={issues} prs={prs} />
       <span className="term-actions">
-        {!s.shell && <SpendChip sessionId={s.id} />}
+        {!s.shell && (opts?.workspace || s.view === "mypr" || s.view === "review") && (
+          <CrewButtons
+            sessionId={s.id}
+            review={s.view === "review"}
+            running={s.status === "running"}
+            onError={setErrMsg}
+          />
+        )}
         {s.view === "review" && (
           <OwnPrToggle
             owned={s.owned}
