@@ -14,6 +14,7 @@ import { CrewButtons } from "./CrewButtons.tsx";
 import { HoverTip } from "./HoverTip.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
 import { Fox } from "./Fox.tsx";
+import { PixelFox } from "./PixelFox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentJson, usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { api } from "./api.ts";
@@ -402,7 +403,8 @@ export function App() {
   // a kit for each ticket or PR session (a ticket look included),
   // its scarf in the session's colour, and Owl for a review.
   const sessionIcon = (s: SessionMeta, size: number) => {
-    if (s.view === "manager") return <Fox pose="sit" size={size} bust />;
+    // The whole sitting fox, not a bust, so Fox never reads as one of its kits.
+    if (s.view === "manager") return <Fox pose="sit" size={size} />;
     if (s.shell) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
     if (s.ticket === CLEANUP_TICKET) return <Critter kind="beaver" size={size} bust />;
@@ -615,10 +617,10 @@ export function App() {
             title="edit den — open a Claude session to change this app"
             aria-label="edit den"
           >
-            <Critter kind="kit" size={38} />
+            <PixelFox size={30} />
           </button>
         ) : (
-          <Critter kind="kit" size={38} />
+          <PixelFox size={30} />
         )}
         <span className="wordmark" tabIndex={0}>
           den

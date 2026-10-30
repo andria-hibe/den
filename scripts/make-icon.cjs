@@ -1,43 +1,38 @@
-// Renders the den app icon (a pixel-art kit on a pastel gradient) with
+// Renders the den app icon (the pixel-art fox head on a pastel gradient) with
 // Electron so Chromium rasterises it crisply, and writes build/icon.png.
 // Run via: npx electron scripts/make-icon.cjs  (then rebuild icon.icns).
-// The icon is a kit (one of the fox's cubs) on a mint-to-lilac background.
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const SIZE = 1024;
-const BACKGROUND = "linear-gradient(135deg,#b8e6d4 0%,#b4d8f6 50%,#cdb4f6 100%)";
+const BACKGROUND = "linear-gradient(135deg,#ffc2de 0%,#cdb4f6 55%,#b4d8f6 100%)";
 
-const PALETTE = {
+// Keep this fox in sync with web/src/PixelFox.tsx, the topbar logo.
+const SPRITE = [
+  "..DD........DD..",
+  ".DOOD......DOOD.",
+  ".DOpOD....DOpOD.",
+  ".DOOOD....DOOOD.",
+  ".DOOOOD..DOOOOD.",
+  "DOOOOOOOOOOOOOOD",
+  "DOOOOOOOOOOOOOOD",
+  "DOOeeOOOOOOeeOOD",
+  "DOOeeOOOOOOeeOOD",
+  "DOOOOOOOOOOOOOOD",
+  ".DOwwwwwwwwwwOD.",
+  ".DOwwwwppwwwwOD.",
+  "..DOwwwwwwwwOD..",
+  "...DOwwwwwwOD...",
+  "....DDOOOODD....",
+];
+const SPRITE_PALETTE = {
   D: "#5b4b66",
   O: "#f2a25c",
   p: "#ff9ec4",
   e: "#3a2e40",
   w: "#fff6fb",
 };
-// The kit, copied from web/src/critterSprites.ts, in its default scarf.
-const KIT = [
-  "...DD.......DD....",
-  "..DOOD.....DOOD...",
-  "..DOpODDDDDOpOD...",
-  "..DOOOOOOOOOOOD...",
-  ".DOOOOOOOOOOOOOD..",
-  ".DOOeeOOOOOeeOOD..",
-  ".DOOeeOOOOOeeOOD..",
-  ".DOpOwwwpwwwOpOD..",
-  "..DOOwwwwwwwOOD...",
-  "..DXXXXXXXXXXXD...",
-  "..DYYYYYYYYYYYD...",
-  "...DOwXYwwwwOD.DD.",
-  "...DOwXYwwwwOD.DOD",
-  "...DOOOOOOOOODDOwD",
-  "...DOwOD.DOwODDwD.",
-  "...DDDD..DDDD..D..",
-];
-const KIT_PALETTE = { ...PALETTE, O: "#f2a25c", X: "#ffb7d5", Y: "#c5809f" };
-const SPRITE = KIT;
-const SPRITE_PALETTE = KIT_PALETTE;
 const COLS = SPRITE[0].length;
 const ROWS = SPRITE.length;
 

@@ -54,13 +54,17 @@ export function HoverTip() {
       }, DELAY_MS);
     };
 
-    document.addEventListener("mouseover", over);
-    document.addEventListener("mousedown", restore);
+    // Capture phase: a handler that stops propagation (the rail's rows do)
+    // would otherwise leave the tip up over whatever replaced its element.
+    document.addEventListener("mouseover", over, true);
+    document.addEventListener("mousedown", restore, true);
+    document.addEventListener("keydown", restore, true);
     window.addEventListener("blur", restore);
     return () => {
       restore();
-      document.removeEventListener("mouseover", over);
-      document.removeEventListener("mousedown", restore);
+      document.removeEventListener("mouseover", over, true);
+      document.removeEventListener("mousedown", restore, true);
+      document.removeEventListener("keydown", restore, true);
       window.removeEventListener("blur", restore);
     };
   }, []);

@@ -53,8 +53,8 @@ second app, **Burrow**, beside den v1, with its data in `~/.burrow`; andria
 moved to it the same day, then asked for the den name back once v1 was gone.
 The edition split is removed: there is one app, den, with v2 always on, its
 data in `~/.den` (`server/dataDir.ts`; `DEN_DATA_DIR` overrides it for test
-servers), and the kit as its icon (`scripts/make-icon.cjs` + `iconutil`) and
-topbar logo. `electron/adoptBurrow.ts`, imported **first** in `main.ts` so it
+servers), and the fox head (`PixelFox`) as its icon (`scripts/make-icon.cjs`
++ `iconutil`, on the original pink-to-sky gradient) and topbar logo. `electron/adoptBurrow.ts`, imported **first** in `main.ts` so it
 runs before the store opens a file, moves `~/.burrow` to `~/.den` on the
 packaged app's first start and keeps v1's data as `~/.den-v1`; while a
 `Burrow` process runs it does nothing and `boot()` asks for Burrow to be quit.
@@ -101,7 +101,12 @@ WebSocket; everything else is REST.
   runn's sandbox settings block 1Password's `op-ssh-sign`). There is
   no deny backstop for the draft rule — permission patterns are prefix
   matches, so `Bash(gh pr create:*)` can't say "only with `--draft`" — so
-  the instruction carries it alone. **`denIssueRule()`** goes on **every**
+  the instruction carries it alone. **`ticketDiscussionRule()`**
+  (workspace, my-PR, and look panes; the review pane's `REVIEW_CHECKS` and
+  Squirrel say the same) has a pane read the Linear ticket's **comments**
+  as well as its description, with its Linear tools, since den only hands
+  it the description (andria, 2026-10-30: decisions and scope changes live
+  in the discussion). **`denIssueRule()`** goes on **every**
   pane kind, review included (andria, 2026-09-29): a den bug, rough edge, or
   improvement idea gets filed as an issue in den's repo (`denIssueRepo()`,
   from den's checkout's origin; check for duplicates first), and because den
@@ -363,11 +368,12 @@ WebSocket; everything else is REST.
     is a first pass, not the review: the instruction says to also cover what
     its correctness/simplification scope misses. Every review, a review pane's and
     the owl subagent's, also runs `REVIEW_CHECKS` (`server/crew.ts`;
-    andria, 2026-10-30), with a line each in the general review: **the
+    andria, 2026-10-30) **on top of** the full review (which it says to keep
+    as thorough as ever), with a line each in the general review: **the
     ticket** (find the PR's Linear ticket and read it with the pane's Linear
     tools, read only: is everything done, anything out of scope?),
-    **consistency** (existing patterns, shared components), **intent**, and
-    **performance**. A review pane sees the developer's Linear connector
+    **consistency** (existing patterns, shared components), and **intent**.
+    Performance is hare's, not a checklist line. A review pane sees the developer's Linear connector
     tools (checked with `--permission-mode default` + a settings file). The review paste prompt
     (`reviewPrompt` in `web/src/prompts.ts`) names the skill too so the two
     don't drift. Verified live
@@ -554,7 +560,8 @@ developer's day across the other sessions instead of them being the glue.
   den's code gathers the facts so Fox never re-polls GitHub.
 - Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /
   FYI, `- [ ]` items with `(session: <name>)`); `TodayView` renders it above
-  the Fox pane (review-view layout, one splitter), polls
+  the Fox pane (each box is a button: `tickBoxes` numbers them in file order to
+  match `toggleTodayItem`, and a click posts `/api/manager/today/toggle`) (review-view layout, one splitter), polls
   `GET /api/manager/today`, and turns `(session: X)` into a button that opens
   that rail session (`linkSessions`). Fox is pinned to the top of the rail.
 - Fox talks to sessions with Claude Code's own `SendMessage` (den panes show
@@ -640,8 +647,9 @@ developer's day across the other sessions instead of them being the glue.
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
   button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
   GitHub split into Review requested / My open PRs (`den.prTab`); a tab
-  shows "!" when something in it needs you. Fox is drawn with `PixelFox`
-  in place of a colour dot (rail, header, title chip): there's only one.
+  shows "!" when something in it needs you. Fox is drawn as the whole
+  sitting fox (`Fox pose="sit"`, not a bust) in place of a colour dot
+  (rail, header, title chip), so it never reads as one of its kits.
   Every session writing code is drawn as a kit whose scarf is the
   session's colour, and a review session as Owl (`sessionIcon` in App,
   `Critter bust` crops to head and scarf so the colour reads at 2x in the
@@ -796,7 +804,7 @@ developer's day across the other sessions instead of them being the glue.
   **plan first and change nothing until approved** is in den's prompt, not
   left to the skill. Verified live: the session invoked the skill, ran its
   audit, returned a three-group plan, and stopped.
-- **Edit den itself**: the far-left topbar kit is a button (`openDenEditor`)
+- **Edit den itself**: the far-left topbar fox head is a button (`openDenEditor`)
   that opens a normal 3-pane Claude workspace rooted in den's own source
   (`denRepo()` in `fs.ts` → `roots().den`), notepad seeded with a handover +
   Claude primed to read CLAUDE.md. Race-safe reuse via the sentinel ticket
@@ -809,7 +817,7 @@ developer's day across the other sessions instead of them being the glue.
   untouched template isn't carried. Both fix a lost handover (2026-10-30):
   after a restart the kit opened a fresh editor, and closing the old one
   deleted the real handover. The app/dock icon is the same
-  kit (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
+  fox head (`scripts/make-icon.cjs` → `build/icon.png` → `icon.icns`).
 - **Work panel**: Linear tickets + GitHub PRs, with ↗ open-in-browser links.
 - **Session ↔ branch ↔ ticket ↔ PR linking**: chips in the workspace header and
   on rail cards (matched via the `fast-NNNN` branch hint + explicit ids).

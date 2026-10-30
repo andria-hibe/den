@@ -2241,6 +2241,10 @@ body {
   font-size: 11px;
   color: var(--ink-soft);
 }
+.today-open,
+.today-when {
+  white-space: nowrap;
+}
 .today-crew {
   margin-left: auto;
   display: flex;
@@ -2273,6 +2277,22 @@ body {
 .today-list ul {
   list-style: none;
   padding-left: 4px;
+}
+.today-tick {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.today-tick:hover {
+  color: var(--pink-deep);
+}
+.today-tick.done {
+  color: var(--ink-soft);
 }
 
 /* The week's token pace (LedgerChip), on the topbar's tinted background. */

@@ -969,18 +969,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // The developer ticks a Today item themselves. Fox is told to read the
   // list before it edits it, so the tick survives Fox's next write.
   app.post("/api/manager/today/toggle", async (req, reply) => {
-    const { item } = (req.body ?? {}) as { item?: unknown };
+    const { item, text } = (req.body ?? {}) as { item?: unknown; text?: unknown };
     let next: string | null = null;
     try {
       if (typeof item === "number" && Number.isInteger(item) && item >= 0) {
-        next = toggleTodayItem(readFileSync(TODAY_PATH, "utf8"), item);
+        next = toggleTodayItem(readFileSync(TODAY_PATH, "utf8"), item, typeof text === "string" ? text : undefined);
       }
     } catch {
       // no list yet
     }
     if (next === null) {
-      reply.code(400);
-      return { error: "no_such_item" };
+      reply.code(409);
+      return { error: "list_changed" };
     }
     writeFileSync(TODAY_PATH, next);
     return { content: next, writtenAt: statSync(TODAY_PATH).mtimeMs };

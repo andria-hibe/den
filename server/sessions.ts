@@ -423,6 +423,20 @@ export function commentRules(): string {
 }
 
 /** The system prompt for a Claude workspace's main pane. */
+/** Every pane that works on a ticket or a PR reads the ticket's discussion,
+ * not just the description den hands it. */
+export function ticketDiscussionRule(): string {
+  return (
+    `When the work is on a Linear ticket, or on a pull request that has one ` +
+    `(its id is usually in the branch name, the title, or the description), ` +
+    `read the ticket's comments as well as its description, with the Linear ` +
+    `tools you have, changing nothing in Linear. Decisions, scope changes, and ` +
+    `answers to open questions often live only in the discussion. Read it ` +
+    `before you propose, implement, or review, and again before you call the ` +
+    `work done.`
+  );
+}
+
 /** What den watches for a pane and tells it about (see inbox.ts), so the
  * session doesn't keep its own background watch alive. */
 export function denWatchRule(): string {
@@ -438,7 +452,7 @@ export function denWatchRule(): string {
 /** `manager`: the app has a Manager pane whose relayed answers count. */
 export function workspaceInstruction(notepad: string, manager = true): string {
   const relay = manager ? `\n${managerRelayRule()}` : "";
-  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${crewRule()}\n${denIssueRule()}`;
+  return `${progressInstruction(notepad)}\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n${crewRule()}\n${ticketDiscussionRule()}\n${denIssueRule()}`;
 }
 
 /** How a workspace treats the Manager's relayed approvals (#46): the
@@ -536,7 +550,7 @@ export function myPrInstruction(
     `Commit and push only when the developer asks. If a reviewer needs a reply, ` +
     `write it here for the developer to post; don't post to GitHub yourself ` +
     `unless asked.\n${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}${relay}\n` +
-    `${crewRule("in your reply")}\n${denIssueRule()}`
+    `${crewRule("in your reply")}\n${ticketDiscussionRule()}\n${denIssueRule()}`
   );
 }
 
@@ -554,7 +568,7 @@ export function lookInstruction(
     `ticket ${which} in a pane beside you, and will ask you about it. The ` +
     `ticket's description is saved at the absolute path ${ticketFile}; read it ` +
     `before you answer anything about the ticket. That file is for reference, ` +
-    `so don't edit it.\n${houseRules()}\n${denIssueRule()}`
+    `so don't edit it.\n${ticketDiscussionRule()}\n${houseRules()}\n${denIssueRule()}`
   );
 }
 
@@ -645,8 +659,8 @@ export function reviewInstruction(
     `(create or overwrite it). That file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
     `structure it exactly like this: first the general review (a two or three ` +
-    `line summary, then a line each on the ticket, consistency, intent, and ` +
-    `performance, then any cross-cutting risk), then one "## <file path>" ` +
+    `line summary, then a line each on the ticket, consistency, and intent, ` +
+    `then any cross-cutting risk), then one "## <file path>" ` +
     `heading per file you have comments on, the path exactly as it appears after ` +
     `"b/" in the diff's "diff --git" line, followed by that file's comments as ` +
     `bullets. Put nothing but that file's comments under its heading, and skip ` +
@@ -1547,7 +1561,7 @@ class SessionManager {
     // the notepad instruction (the notepad stays for the developer's own use).
     const base = handover
       ? workspaceInstruction(notepadPath(groupId))
-      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${crewRule("in your reply")}\n${denIssueRule()}`;
+      : `${houseRules()}\n${testingRules()}\n${commentRules()}\n${denWatchRule()}\n${crewRule("in your reply")}\n${ticketDiscussionRule()}\n${denIssueRule()}`;
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [

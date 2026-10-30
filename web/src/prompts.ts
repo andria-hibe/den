@@ -38,9 +38,8 @@ export function reviewPrompt(number: number, repo: string, owned = false): strin
     `Read the diff, then read the changed files for context. Do the finding pass ` +
     `with the code-review skill as your instructions describe, then write your review ` +
     `to the notepad as markdown in this shape: first the general review (a short ` +
-    `**Summary**, a line each on the **Ticket**, **Consistency**, **Intent**, and ` +
-    `**Performance** checks your instructions list, then any cross-cutting ` +
-    `**Risks**), then one \`## <file path>\` ` +
+    `**Summary**, a line each on the **Ticket**, **Consistency**, and **Intent** ` +
+    `checks your instructions list, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
     `heading per file you have comments on, with the exact path as it appears in ` +
     `the diff, and your comments on that file as bullets citing line numbers. Skip ` +
     `files you have nothing to say about. If it all looks solid, say so briefly.`
@@ -152,9 +151,10 @@ export function ticketPrompt(issue: LinearIssue): string {
     "",
     issue.description?.trim() || "(no description provided)",
     "",
-    "Before writing any code, explain the issue in your own words and propose " +
-      "a solution or approach. Don't make changes yet. I'll decide the next " +
-      "step after your proposal.",
+    "Read the ticket's comments in Linear too: decisions and scope changes " +
+      "often live only there. Then, before writing any code, explain the issue " +
+      "in your own words and propose a solution or approach. Don't make changes " +
+      "yet. I'll decide the next step after your proposal.",
   ].join("\n");
 }
 

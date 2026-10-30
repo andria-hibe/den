@@ -7,10 +7,18 @@ import { usePersistentNumber } from "./usePersistent.ts";
 import { Fox } from "./Fox.tsx";
 import { Critter } from "./Critter.tsx";
 import { CREW } from "./critterSprites.ts";
+import { todayItemTexts } from "../../server/manager.ts";
 
-/** Checklist marks as glyphs: markdown.ts has no task-list syntax. */
+// Private-use characters mark where each checklist box goes, so a ☐ or ☑
+// in an item's own text can't be taken for one.
+const OPEN_MARK = "\uE000";
+const DONE_MARK = "\uE001";
+
+/** Checklist marks as box markers: markdown.ts has no task-list syntax. */
 export function todayMarkdown(md: string): string {
-  return md.replace(/^(\s*)- \[ \] /gm, "$1- ☐ ").replace(/^(\s*)- \[[xX]\] /gm, "$1- ☑ ");
+  return md
+    .replace(/^(\s*)- \[ \] /gm, `$1- ${OPEN_MARK} `)
+    .replace(/^(\s*)- \[[xX]\] /gm, `$1- ${DONE_MARK} `);
 }
 
 /** Turns each "(session: Name)" in rendered Today HTML into a button that
@@ -21,6 +29,17 @@ export function linkSessions(html: string): string {
     /\(session: ([^)<]+)\)/g,
     (_, name: string) => `<button class="today-session" data-session="${name.trim()}">${name.trim()}</button>`,
   );
+}
+
+/** Turns each box marker in rendered Today HTML into a button carrying its
+ * index, counted in file order like toggleTodayItem (server/manager.ts)
+ * counts the items it flips. */
+export function tickBoxes(html: string): string {
+  let i = 0;
+  return html.replace(/[\uE000\uE001]/g, (mark) => {
+    const done = mark === DONE_MARK;
+    return `<button class="today-tick${done ? " done" : ""}" data-item="${i++}" aria-label="${done ? "untick" : "tick"} this item">${done ? "☑" : "☐"}</button>`;
+  });
 }
 
 /** The sessions the open items name, in list order, each once. */
@@ -90,6 +109,21 @@ export function TodayView({
     }
   };
 
+  const tick = async (item: number) => {
+    const text = todayItemTexts(today?.content ?? "")[item];
+    try {
+      setToday(
+        await api<{ content: string; writtenAt: number }>("/api/manager/today/toggle", {
+          method: "POST",
+          body: JSON.stringify({ item, text }),
+        }),
+      );
+    } catch {
+      // Fox rewrote the list after it was shown, so nothing was flipped: show the new one.
+      api<{ content: string; writtenAt: number }>("/api/manager/today").then(setToday).catch(() => {});
+    }
+  };
+
   const content = today?.content.trim() ?? "";
   return (
     <div className="pr-review" ref={rootRef}>
@@ -125,10 +159,13 @@ export function TodayView({
           <div
             className="pr-info-scroll md today-list"
             onClick={(e) => {
-              const name = (e.target as HTMLElement).closest<HTMLElement>(".today-session")?.dataset.session;
+              const target = e.target as HTMLElement;
+              const item = target.closest<HTMLElement>(".today-tick")?.dataset.item;
+              if (item !== undefined) return void tick(Number(item));
+              const name = target.closest<HTMLElement>(".today-session")?.dataset.session;
               if (name) onOpenSession(name);
             }}
-            dangerouslySetInnerHTML={{ __html: linkSessions(renderMarkdown(todayMarkdown(content))) }}
+            dangerouslySetInnerHTML={{ __html: tickBoxes(linkSessions(renderMarkdown(todayMarkdown(content)))) }}
           />
         ) : starting ? (
           <div className="loading-row today-empty">

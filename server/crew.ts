@@ -17,23 +17,25 @@ const REPORT_ONLY =
   `most ten bullets, worst first, each with file:line where it applies, then ` +
   `one line on what you checked and what you couldn't. Plain ASCII.`;
 
-/** What every review checks beyond correctness: a review pane's
- * (reviewInstruction) and the owl subagent's alike. */
+/** What every review checks on top of the full review: a review pane's
+ * (reviewInstruction) and the owl subagent's alike. Performance is hare's:
+ * the review pane calls it (reviewCrewRule) and a kit calls it itself. */
 export const REVIEW_CHECKS =
-  `Beyond correctness, check these four on every review and give each a ` +
-  `line in the general review:\n` +
+  `These checks come on top of a full review, never instead of it: review as ` +
+  `thoroughly as ever for correctness, edge cases, error handling, security, ` +
+  `tests, and design, and report everything that holds up. Then also check ` +
+  `these three and give each a line in the general review:\n` +
   `- The ticket: find the PR's Linear ticket (its id is usually in the ` +
-  `branch name, the title, or the description) and read it with the Linear ` +
-  `tools you have, changing nothing in Linear. Is every requirement and acceptance criterion done, and ` +
-  `does the change do anything outside it? Name what's missing. If you ` +
+  `branch name, the title, or the description) and read it, comments ` +
+  `included, with the Linear tools you have, changing nothing in Linear: ` +
+  `the discussion often changes the scope. Is every requirement and ` +
+  `acceptance criterion done, and does the change do anything outside it? Name what's missing. If you ` +
   `can't find or read the ticket, say so.\n` +
   `- Consistency: does the code follow the codebase's existing patterns and ` +
   `reuse its shared components, helpers, and utilities instead of adding ` +
   `near-duplicates?\n` +
   `- Intent: does the change do what it's meant to without breaking other ` +
-  `callers or behaviour?\n` +
-  `- Performance: does it make anything slower, such as extra queries, work ` +
-  `repeated in loops or renders, or larger payloads?`;
+  `callers or behaviour?`;
 
 const OWL_PROMPT =
   `You are Owl, the den's advisor and code reviewer. Sessions call you when ` +
@@ -104,7 +106,9 @@ const SQUIRREL_PROMPT =
   `up, matching tickets to pull requests and who has reviewed them, ` +
   `pre-reading a pull request to say whether it's an easy approval and what ` +
   `to look at, or checking whether a merged PR already covers a ticket and ` +
-  `what's left. For a ticket, say whether it's still real on the base branch ` +
+  `what's left. Read a ticket's comments as well as its description: the ` +
+  `discussion often changes the scope. For a ticket, say whether it's still ` +
+  `real on the base branch ` +
   `(with the evidence: file:line or a PR), its size (S, M, or L), the layers ` +
   `it touches, the risk, and a verdict.\n` +
   `Read code at the base branch, not the working tree, which may be any ` +
