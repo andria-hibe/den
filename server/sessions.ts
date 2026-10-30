@@ -334,7 +334,23 @@ export function houseRules(): string {
     `fill whole buffer"), the Bash sandbox may be blocking the signing agent: ` +
     `run the same commit again with the sandbox disabled. If that fails too, ` +
     `ask the developer to unlock or approve the signing agent, then retry the ` +
-    `commit yourself. Don't hand them a script to run instead.`
+    `commit yourself. Don't hand them a script to run instead.\n` +
+    `4. ${pasteRule()}`
+  );
+}
+
+/** How to hand over text the developer pastes elsewhere. Verified on Claude
+ * Code 2.1.314: the TUI hard-wraps at the pane width, draws a bar on every
+ * block-quote line, and drops inline code's backticks, while /copy offers each
+ * fenced block on its own, verbatim. */
+export function pasteRule(): string {
+  return (
+    `Text the developer will paste somewhere themselves (a PR reply, a review ` +
+    `comment, a Slack or Linear message) goes in its own fenced code block ` +
+    `holding only that text, one block per piece, never in a block quote. ` +
+    `Copied off the screen, a reply comes with hard line breaks, a bar beside ` +
+    `every quoted line, and no backticks around code; Claude Code's /copy ` +
+    `offers each code block on its own, exactly as written.`
   );
 }
 
@@ -523,7 +539,7 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `review, comment on, reply to, or resolve anything on GitHub or Linear, or ` +
     `edit a session's code or its handover. Ask the session to do it once the ` +
     `developer has said so. Your settings deny some of these as a backstop.\n` +
-    `Text the developer will copy and paste is plain ASCII. In the terminal, ` +
+    `Text the developer will copy and paste is plain ASCII. ${pasteRule()} In the terminal, ` +
     `lead with the next action, keep lists to five items, and don't recap.\n` +
     `${progressInstruction(notepad)}\n${denIssueRule()}`
   );
@@ -688,7 +704,7 @@ export function reviewInstruction(
     `are written, answer follow-up questions (about one file, one comment, or ` +
     `anything else) in the terminal and leave both files as they are, unless ` +
     `the developer asks you to change them.\n` +
-    `${reviewCrewRule()}\n${denIssueRule()}`
+    `${owned ? "" : `${pasteRule()}\n`}${reviewCrewRule()}\n${denIssueRule()}`
   );
 }
 

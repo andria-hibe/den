@@ -101,7 +101,11 @@ WebSocket; everything else is REST.
   runn's sandbox settings block 1Password's `op-ssh-sign`). There is
   no deny backstop for the draft rule — permission patterns are prefix
   matches, so `Bash(gh pr create:*)` can't say "only with `--draft`" — so
-  the instruction carries it alone. **`ticketDiscussionRule()`**
+  the instruction carries it alone. **`pasteRule()`** (house rule 4, plus
+  Fox and a review pane) hands text the developer pastes elsewhere over in a
+  fenced code block, never a block quote: Claude Code's TUI hard-wraps, draws
+  a bar on quote lines, and drops backticks, so screen copies came out
+  broken, while `/copy` offers each block verbatim. **`ticketDiscussionRule()`**
   (workspace, my-PR, and look panes; the review pane's `REVIEW_CHECKS` and
   Squirrel say the same) has a pane read the Linear ticket's **comments**
   as well as its description, with its Linear tools, since den only hands
