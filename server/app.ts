@@ -971,10 +971,21 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "ids_required" };
     }
-    // Forks can take minutes; the rail shows each pane go quiet as it ends.
-    void sessions.clockOut(ids as string[]);
-    return { started: ids.length };
+    // Forks can take minutes, so this answers at once; the round's progress
+    // is polled below.
+    const round = sessions.clockOut(ids as string[]);
+    if (round === "busy") {
+      reply.code(409);
+      return { error: "clock_out_running" };
+    }
+    if (round === "empty") {
+      reply.code(400);
+      return { error: "nothing_running" };
+    }
+    return { round };
   });
+
+  app.get("/api/manager/clockout/round", async () => ({ round: sessions.clockOutRound() }));
 
   // The developer ticks a Today item themselves. Fox is told to read the
   // list before it edits it, so the tick survives Fox's next write.

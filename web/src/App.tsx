@@ -6,6 +6,7 @@ import { LedgerChip } from "./LedgerChip.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
+import { useClockOutRound } from "./useClockOutRound.ts";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -109,7 +110,15 @@ export function App() {
 
   const work = useWorkData();
   const [clockingOut, setClockingOut] = useState(false);
-  const closeClockOut = useCallback(() => setClockingOut(false), []);
+  const tuck = useClockOutRound();
+  const tuckRunning = !!tuck.round && !tuck.round.finishedAt;
+  const tuckShown = tuckRunning || tuck.unseen;
+  const tuckFailed = tuck.round?.panes.filter((p) => p.stage === "failed").length ?? 0;
+  const { ack: ackTuck } = tuck;
+  const closeClockOut = useCallback(() => {
+    setClockingOut(false);
+    if (!tuckRunning) ackTuck();
+  }, [tuckRunning, ackTuck]);
   const prs = work.flatPrs;
   const issues = work.issues;
   // A PR I'm only reviewing that fails CI doesn't count: the server clears its
@@ -666,7 +675,26 @@ export function App() {
         )}
         <span className="topbar-spacer" />
         {/* One slot for the day: start it until Fox is up, then clock out. */}
-        {manager?.status !== "running" ? (
+        {tuckShown && tuck.round ? (
+            <button
+              className={`btn topbar-day${tuckRunning ? "" : " tucked"}`}
+              onClick={() => setClockingOut(true)}
+              title={
+                tuckRunning
+                  ? "Hedgehog is tucking sessions in: keep your laptop open until it's done"
+                  : tuckFailed
+                    ? "Some sessions didn't end: check them before closing your laptop"
+                    : "All tucked in: safe to close your laptop"
+              }
+            >
+              <Critter kind="hedgehog" size={19} className={tuckRunning ? "fox-bob" : undefined} />
+              {tuckRunning
+                ? `${tuck.round.panes.filter((p) => p.stage === "done" || p.stage === "failed").length}/${tuck.round.panes.length}`
+                : tuckFailed
+                  ? `${tuckFailed} didn't end`
+                  : "safe to close"}
+            </button>
+          ) : manager?.status !== "running" ? (
             <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
               ☀ start
             </button>
@@ -1035,7 +1063,14 @@ export function App() {
           }}
         />
       )}
-      {clockingOut && <ClockOutDialog onDone={closeClockOut} onError={setErrMsg} />}
+      {clockingOut && (
+        <ClockOutDialog
+          round={tuckShown ? tuck.round : null}
+          onStarted={tuck.watch}
+          onDone={closeClockOut}
+          onError={setErrMsg}
+        />
+      )}
       {errMsg && (
         <div className="toast" onClick={() => setErrMsg(null)}>
           <span>⚠️ {errMsg}</span>

@@ -738,6 +738,16 @@ export function chooseResume(
  * something staged, or while CI is running. A question waiting for the
  * developer isn't on it: den can't see one (the bell rings at the end of
  * every turn), and Hedgehog's handover carries it into "Waiting on you". */
+/** Where one pane is in Hedgehog's clock out round. "failed": it didn't end. */
+export type TuckStage = "handover" | "ending" | "done" | "failed";
+
+export interface ClockOutRound {
+  startedAt: number;
+  /** Set once every pane is ended or given up on: safe to close the laptop. */
+  finishedAt: number | null;
+  panes: { id: string; name: string; stage: TuckStage; handoverFailed?: boolean }[];
+}
+
 export function clockOutBlockers(p: {
   pinned: boolean;
   busy: boolean;
@@ -1231,6 +1241,7 @@ const SCROLLBACK_FLUSH_MS = 5000;
 class SessionManager {
   private sessions = new Map<string, DenSession>();
   private colorIdx = 0;
+  private round: ClockOutRound | null = null;
 
   constructor() {
     const timer = setInterval(() => {
@@ -1275,12 +1286,12 @@ class SessionManager {
    * `claude -p --resume <id> --fork-session --no-session-persistence` reads the
    * whole conversation, writes the notepad, and exits without saving the fork,
    * so the live pane, its transcript, and the resume list are all untouched.
-   * It may only read and edit the notepad. Fire-and-forget; a failure is
-   * logged and the pane is left as it was.
+   * It may only read and edit the notepad. A failure is logged, the pane is
+   * left as it was, and the promise resolves false.
    */
-  private runIdleHandover(s: DenSession): Promise<void> {
+  private runIdleHandover(s: DenSession): Promise<boolean> {
     const id = s.claudeSessionId;
-    if (!id || !hasSession(id)) return Promise.resolve(); // nothing said in the pane yet
+    if (!id || !hasSession(id)) return Promise.resolve(true); // nothing said in the pane yet
     const notepad = notepadPath(s.groupId);
     s.handoverRunning = true;
     s.lastHandoverAt = Date.now();
@@ -1300,7 +1311,7 @@ class SessionManager {
       (err) => {
         s.handoverRunning = false;
         if (err) logWarn("idleHandover", err);
-        resolve();
+        resolve(!err);
       },
     ));
   }
@@ -1334,24 +1345,54 @@ class SessionManager {
   /** Hedgehog's round: refresh each pane's handover from a fork of its
    * conversation (skipped when the notepad is already newer than its last
    * output), end the pane, and remember it, so Start my day brings it back
-   * fresh rather than reloading the whole chat. */
-  async clockOut(ids: string[]): Promise<void> {
+   * fresh rather than reloading the whole chat. Its progress is
+   * `clockOutRound()`, which the developer watches to know when it's safe to
+   * close the laptop. "busy": a round is already running; "empty": none of
+   * the ids is a running pane. */
+  clockOut(ids: string[]): ClockOutRound | "busy" | "empty" {
+    if (this.round && !this.round.finishedAt) return "busy";
+    const panes = ids.flatMap((id) => {
+      const s = this.sessions.get(id);
+      const entry: ClockOutRound["panes"][number] = { id, name: s?.name ?? "", stage: "ending" };
+      return s && s.status === "running" ? [{ s, entry }] : [];
+    });
+    if (panes.length === 0) return "empty";
+    const round: ClockOutRound = { startedAt: Date.now(), finishedAt: null, panes: panes.map((p) => p.entry) };
+    this.round = round;
     const list = new Set(readClockedOut());
-    await Promise.all(
-      ids.map(async (id) => {
-        const s = this.sessions.get(id);
-        if (!s || s.status !== "running") return;
-        let notepadMtime = 0;
+    void Promise.all(
+      panes.map(async ({ s, entry }) => {
         try {
-          notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
-        } catch {
-          // no notepad yet
+          let notepadMtime = 0;
+          try {
+            notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
+          } catch {
+            // no notepad yet
+          }
+          if (!s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
+            entry.stage = "handover";
+            if (!(await this.runIdleHandover(s))) entry.handoverFailed = true;
+            entry.stage = "ending";
+          }
+          if (await this.stopPane(s)) {
+            list.add(s.id);
+            entry.stage = "done";
+          } else entry.stage = "failed";
+        } catch (err) {
+          logWarn("clockOut", err);
+          entry.stage = "failed";
         }
-        if (!s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) await this.runIdleHandover(s);
-        if (await this.stopPane(s)) list.add(s.id);
       }),
-    );
-    writeClockedOut([...list]);
+    ).finally(() => {
+      writeClockedOut([...list]);
+      round.finishedAt = Date.now();
+    });
+    return round;
+  }
+
+  /** The latest clock out round, running or finished; null before the first. */
+  clockOutRound(): ClockOutRound | null {
+    return this.round;
   }
 
   /** Start my day: bring back last night's clocked-out panes on fresh

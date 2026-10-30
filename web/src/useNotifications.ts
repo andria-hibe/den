@@ -7,7 +7,7 @@ import { prKey } from "./format.ts";
 // newly needing you. Only transitions notify: the state at startup is seeded
 // silently so a fresh launch never spams. A `null` "previous" ref means "not
 // seeded yet".
-function notify(title: string, body: string) {
+export function notify(title: string, body: string) {
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
   try {

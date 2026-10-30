@@ -2217,6 +2217,45 @@ body {
 .clockout-stay {
   color: var(--danger-ink);
 }
+.clockout-safe {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.clockout-round {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.clockout-pane {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.clockout-mark {
+  flex: none;
+  width: 1em;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.clockout-pane.is-done .clockout-mark {
+  color: var(--ink);
+}
+.clockout-pane.is-failed .clockout-mark,
+.clockout-pane.is-failed .cleanup-sub {
+  color: var(--danger-ink);
+}
+.topbar-day:has(img) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-block: 2px;
+}
+.topbar-day.tucked {
+  border-color: var(--pink-deep);
+}
 
 /* The Manager's Today list (TodayView). */
 .today-head {
