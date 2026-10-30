@@ -25,7 +25,7 @@ import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 import { DATA_DIR } from "./dataDir.ts";
-import { crewRule, fableHasRoom, kitAgents, managerAgents, reviewAgents, reviewCrewRule } from "./crew.ts";
+import { REVIEW_CHECKS, crewRule, fableHasRoom, kitAgents, managerAgents, reviewAgents, reviewCrewRule } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
 
@@ -640,11 +640,13 @@ export function reviewInstruction(
     `the verified findings into the notepad review described next, and cover ` +
     `yourself what its scope misses (design, tests, naming, missing cases). If ` +
     `the skill is unavailable, do the whole review by hand.\n` +
+    `${REVIEW_CHECKS}\n` +
     `THE REVIEW goes as markdown at the absolute path ${notepad} ` +
     `(create or overwrite it). That file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
     `structure it exactly like this: first the general review (a two or three ` +
-    `line summary, then any cross-cutting risk), then one "## <file path>" ` +
+    `line summary, then a line each on the ticket, consistency, intent, and ` +
+    `performance, then any cross-cutting risk), then one "## <file path>" ` +
     `heading per file you have comments on, the path exactly as it appears after ` +
     `"b/" in the diff's "diff --git" line, followed by that file's comments as ` +
     `bullets. Put nothing but that file's comments under its heading, and skip ` +

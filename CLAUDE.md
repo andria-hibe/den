@@ -361,7 +361,14 @@ WebSocket; everything else is REST.
     working tree) explicitly forbidden, and the notepad review still the
     deliverable (the skill's report renders only in the terminal). The skill
     is a first pass, not the review: the instruction says to also cover what
-    its correctness/simplification scope misses. The review paste prompt
+    its correctness/simplification scope misses. Every review, a review pane's and
+    the owl subagent's, also runs `REVIEW_CHECKS` (`server/crew.ts`;
+    andria, 2026-10-30), with a line each in the general review: **the
+    ticket** (find the PR's Linear ticket and read it with the pane's Linear
+    tools, read only: is everything done, anything out of scope?),
+    **consistency** (existing patterns, shared components), **intent**, and
+    **performance**. A review pane sees the developer's Linear connector
+    tools (checked with `--permission-mode default` + a settings file). The review paste prompt
     (`reviewPrompt` in `web/src/prompts.ts`) names the skill too so the two
     don't drift. Verified live
     2026-08-22: a den-spawned review session lists the skill and invokes it

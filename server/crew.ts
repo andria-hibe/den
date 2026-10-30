@@ -17,6 +17,24 @@ const REPORT_ONLY =
   `most ten bullets, worst first, each with file:line where it applies, then ` +
   `one line on what you checked and what you couldn't. Plain ASCII.`;
 
+/** What every review checks beyond correctness: a review pane's
+ * (reviewInstruction) and the owl subagent's alike. */
+export const REVIEW_CHECKS =
+  `Beyond correctness, check these four on every review and give each a ` +
+  `line in the general review:\n` +
+  `- The ticket: find the PR's Linear ticket (its id is usually in the ` +
+  `branch name, the title, or the description) and read it with the Linear ` +
+  `tools you have, changing nothing in Linear. Is every requirement and acceptance criterion done, and ` +
+  `does the change do anything outside it? Name what's missing. If you ` +
+  `can't find or read the ticket, say so.\n` +
+  `- Consistency: does the code follow the codebase's existing patterns and ` +
+  `reuse its shared components, helpers, and utilities instead of adding ` +
+  `near-duplicates?\n` +
+  `- Intent: does the change do what it's meant to without breaking other ` +
+  `callers or behaviour?\n` +
+  `- Performance: does it make anything slower, such as extra queries, work ` +
+  `repeated in loops or renders, or larger payloads?`;
+
 const OWL_PROMPT =
   `You are Owl, the den's advisor and code reviewer. Sessions call you when ` +
   `they're stuck on a hard problem or before the developer reviews their ` +
@@ -27,6 +45,7 @@ const OWL_PROMPT =
   `For a review: review the branch's diff against its base for correctness ` +
   `bugs first, then risky design and missing tests. Use the code-review skill ` +
   `if it's available, at high effort, without --comment or --fix.\n` +
+  `${REVIEW_CHECKS}\n` +
   REPORT_ONLY;
 
 const BADGER_PROMPT =

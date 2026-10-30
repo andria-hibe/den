@@ -38,7 +38,9 @@ export function reviewPrompt(number: number, repo: string, owned = false): strin
     `Read the diff, then read the changed files for context. Do the finding pass ` +
     `with the code-review skill as your instructions describe, then write your review ` +
     `to the notepad as markdown in this shape: first the general review (a short ` +
-    `**Summary**, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
+    `**Summary**, a line each on the **Ticket**, **Consistency**, **Intent**, and ` +
+    `**Performance** checks your instructions list, then any cross-cutting ` +
+    `**Risks**), then one \`## <file path>\` ` +
     `heading per file you have comments on, with the exact path as it appears in ` +
     `the diff, and your comments on that file as bullets citing line numbers. Skip ` +
     `files you have nothing to say about. If it all looks solid, say so briefly.`
