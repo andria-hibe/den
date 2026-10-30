@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Fox } from "./Fox.tsx";
 import { api } from "./api.ts";
 import { Critter } from "./Critter.tsx";
 
@@ -67,7 +68,9 @@ export function ClockOutDialog({ onDone, onError }: { onDone: () => void; onErro
           tomorrow on a fresh chat that picks up from the handover.
         </p>
         {!panes ? (
-          <div className="placeholder">checking each session…</div>
+          <div className="loading-row">
+            <Fox pose="walk" size={20} /> Hedgehog is checking each session…
+          </div>
         ) : panes.length === 0 ? (
           <div className="placeholder">Nothing is running.</div>
         ) : (

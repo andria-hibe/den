@@ -471,7 +471,9 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `session is already handling and what needs nobody. Rank by what unblocks ` +
     `the most, and keep the whole list to about ten items. Then say in the ` +
     `terminal how many items there are and present the first one.\n` +
-    `DURING THE DAY. Keep ${today} current: mark an item "- [x]" when it's ` +
+    `DURING THE DAY. The developer can tick items in den's Today view too, so ` +
+    `read ${today} before you change it and keep their ticks. Keep ${today} ` +
+    `current: mark an item "- [x]" when it's ` +
     `done and add new ones as they come up. Talk to a session with ` +
     `SendMessage, using its name. When the developer answers something for a ` +
     `session, pass it on as "The developer said in Today at HH:MM: <their ` +

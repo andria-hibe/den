@@ -352,7 +352,9 @@ export function PrReviewView({
             {detail ? (
               <Md text={detail.body || "_(no description)_"} />
             ) : (
-              <div className="placeholder">loading…</div>
+              <div className="loading-row">
+                <Fox pose="walk" size={20} /> loading the PR…
+              </div>
             )}
           </div>
         )}
@@ -421,7 +423,9 @@ export function PrMyView({
         </div>
         <div className="pr-info-scroll">
           {!detail ? (
-            <div className="placeholder">loading…</div>
+            <div className="loading-row">
+              <Fox pose="walk" size={20} /> loading the PR…
+            </div>
           ) : tab === "overview" ? (
             <>
               <h4>Description</h4>

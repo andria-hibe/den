@@ -10,7 +10,7 @@ import { buildDigest } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
-import { managerStartPrompt } from "./manager.ts";
+import { managerStartPrompt, toggleTodayItem } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
@@ -975,6 +975,26 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // Forks can take minutes; the rail shows each pane go quiet as it ends.
     void sessions.clockOut(ids as string[]);
     return { started: ids.length };
+  });
+
+  // The developer ticks a Today item themselves. Fox is told to read the
+  // list before it edits it, so the tick survives Fox's next write.
+  app.post("/api/manager/today/toggle", async (req, reply) => {
+    const { item } = (req.body ?? {}) as { item?: unknown };
+    let next: string | null = null;
+    try {
+      if (typeof item === "number" && Number.isInteger(item) && item >= 0) {
+        next = toggleTodayItem(readFileSync(TODAY_PATH, "utf8"), item);
+      }
+    } catch {
+      // no list yet
+    }
+    if (next === null) {
+      reply.code(400);
+      return { error: "no_such_item" };
+    }
+    writeFileSync(TODAY_PATH, next);
+    return { content: next, writtenAt: statSync(TODAY_PATH).mtimeMs };
   });
 
   // The Manager's Today list, for the Today view.

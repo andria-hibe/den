@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Fox } from "./Fox.tsx";
 import { api } from "./api.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { relTimeAgo } from "./format.ts";
@@ -26,7 +27,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   if (failed)
     return <div className="ticket-comments-note">Couldn't load comments.</div>;
   if (comments === null)
-    return <div className="ticket-comments-note">loading comments…</div>;
+    return (
+      <div className="loading-row">
+        <Fox pose="walk" size={20} /> loading comments…
+      </div>
+    );
   if (comments.length === 0)
     return <div className="ticket-comments-note">No comments yet.</div>;
 

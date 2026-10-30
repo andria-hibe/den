@@ -130,6 +130,10 @@ export function TodayView({
             }}
             dangerouslySetInnerHTML={{ __html: linkSessions(renderMarkdown(todayMarkdown(content))) }}
           />
+        ) : starting ? (
+          <div className="loading-row today-empty">
+            <Fox pose="walk" size={20} /> Fox is reading every session, your PRs, and Linear…
+          </div>
         ) : (
           <div className="placeholder today-empty">
             Nothing yet. "Start my day" has Fox read every session, your PRs, and Linear, and

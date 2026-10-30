@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Fox } from "./Fox.tsx";
 import { api } from "./api.ts";
 import { PixelFox } from "./PixelFox.tsx";
 import { relTimeAgo } from "./format.ts";
@@ -238,7 +239,11 @@ export function NewSessionDialog({
               </span>
             </div>
             <div className="browser-list">
-              {past === null && <div className="placeholder" style={{ padding: 8 }}>loading…</div>}
+              {past === null && (
+                <div className="loading-row">
+                  <Fox pose="walk" size={20} /> finding past sessions…
+                </div>
+              )}
               {past?.length === 0 && (
                 <div className="placeholder" style={{ padding: 8 }}>
                   no past sessions found
