@@ -4,19 +4,22 @@ import { Critter } from "./Critter.tsx";
 import { CREW } from "./critterSprites.ts";
 import { crewAskPrompt, crewFor, type CrewHelper, type CrewPane } from "./prompts.ts";
 
-/** A pane header's crew: the helpers' busts in one button, which opens a card
- * listing each helper's job with a button that asks the pane to call it. One
- * button so the header keeps room for the path and branch; a card because
- * den's window doesn't show native tooltips. */
+/** A pane header's crew: the helpers' busts in one button, lit while the pane
+ * has that helper at work and dimmed otherwise, which opens a card listing
+ * each helper's job with a button that asks the pane to call it. One button so
+ * the header keeps room for the path and branch. */
 export function CrewButtons({
   sessionId,
   pane,
   running,
+  active,
   onError,
 }: {
   sessionId: string;
   pane: CrewPane;
   running: boolean;
+  /** Agent types the pane has at work (SessionMeta.crewActive). */
+  active: string[];
   onError: (msg: string) => void;
 }) {
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
@@ -59,11 +62,17 @@ export function CrewButtons({
   };
 
   const helpers = crewFor(pane);
+  const name = (h: CrewHelper) => CREW.find((c) => c.kind === h)?.name ?? h;
+  const working = helpers.filter((h) => active.includes(h));
+  const face = (h: CrewHelper) => (
+    <Critter kind={h} bust size={22} className={`crew-face${active.includes(h) ? " on" : ""}`} />
+  );
   return (
     <>
       <button
         className={`crew-stack${open ? " on" : ""}`}
         aria-label="ask a helper"
+        title={working.length ? `At work: ${working.map(name).join(", ")}` : "ask a helper"}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
@@ -71,7 +80,7 @@ export function CrewButtons({
         }}
       >
         {helpers.map((h) => (
-          <Critter key={h} kind={h} bust size={22} />
+          <span key={h}>{face(h)}</span>
         ))}
       </button>
       {open && (
@@ -81,11 +90,10 @@ export function CrewButtons({
             const brief = !crewAskPrompt(h, pane).submit;
             return (
               <div className="crew-row" key={h}>
-                <span className="crew-row-face">
-                  <Critter kind={h} bust size={22} />
-                </span>
+                <span className="crew-row-face">{face(h)}</span>
                 <div className="crew-row-text">
                   <strong>{member?.name ?? h}</strong>
+                  {active.includes(h) && <span className="crew-working">at work</span>}
                   <div className="crew-card-job">{member?.job}</div>
                 </div>
                 <button

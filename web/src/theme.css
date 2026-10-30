@@ -726,6 +726,34 @@ body {
   border-color: var(--border);
   background: var(--bg-rail);
 }
+/* A helper is lit while the pane has it at work, and resting otherwise. */
+.crew-face {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}
+.crew-face.on {
+  opacity: 1;
+  filter: none;
+  animation: crew-bob 0.9s steps(1) infinite;
+}
+@keyframes crew-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-face.on {
+    animation: none;
+  }
+}
+.crew-working {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: var(--mint);
+  color: #2b5a48;
+}
 .crew-card {
   position: fixed;
   z-index: 60;

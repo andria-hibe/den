@@ -72,6 +72,7 @@ export function useSessions({
                   stack: s.stack,
                   ticketChanged: s.ticketChanged,
                   waiting: s.waiting,
+                  crewActive: s.crewActive,
                 }
               : loc;
           }),

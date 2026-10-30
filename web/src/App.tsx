@@ -478,6 +478,7 @@ export function App() {
             sessionId={s.id}
             pane={s.view === "review" ? "review" : s.view === "manager" ? "manager" : "kit"}
             running={s.status === "running"}
+            active={s.status === "running" ? s.crewActive : []}
             onError={setErrMsg}
           />
         )}

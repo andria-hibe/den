@@ -17,6 +17,7 @@ import { contextSize } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
 import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
+import { activeCrew, clearCrew, crewHooks } from "./crewActivity.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
 import { repoBaseName } from "./git.ts";
 import { denRepo, workDir } from "./fs.ts";
@@ -900,6 +901,8 @@ export interface SessionMeta {
   keepAlive: boolean;
   /** Its handover's "Waiting on you" items, for the rail. */
   waiting: string[];
+  /** The crew subagents (agent types) its Claude pane has at work. */
+  crewActive: string[];
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -1004,6 +1007,7 @@ class DenSession {
     const loginShell = process.env.SHELL ?? "/bin/zsh";
     const file = this.shell ? loginShell : CLAUDE_BIN;
     const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
+    if (!this.shell) clearCrew(this.groupId);
     let term: pty.IPty;
     try {
       term = pty.spawn(file, args, {
@@ -1033,6 +1037,7 @@ class DenSession {
       this.status = "exited";
       this.term = null;
       this.persistScrollback(); // keep the final output across a restart
+      if (!this.shell) clearCrew(this.groupId);
       this.emit({ type: "exit", code: exitCode, signal });
     });
   }
@@ -1179,6 +1184,7 @@ class DenSession {
       waiting: this.shell || this.role !== "main" || this.look || this.view ? [] : handoverWaiting(this.groupId),
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
+      crewActive: this.shell || this.role !== "main" ? [] : activeCrew(this.groupId),
     };
   }
 
@@ -1622,7 +1628,7 @@ class SessionManager {
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [
-      "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: inboxHooks(groupId) }),
+      "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: { ...inboxHooks(groupId), ...crewHooks(groupId) } }),
       "--add-dir", PROGRESS_DIR,
       "--agents", JSON.stringify(kitAgents(fableHasRoom())),
       // Beaver, the clean-up workspace: its audit is mechanical, and the
@@ -1645,7 +1651,7 @@ class SessionManager {
     const settings = ["--settings", JSON.stringify(statusLineSettings(s.groupId))];
     if (s.view === "mypr") {
       return [
-        "--settings", JSON.stringify({ ...statusLineSettings(s.groupId), hooks: inboxHooks(s.groupId) }),
+        "--settings", JSON.stringify({ ...statusLineSettings(s.groupId), hooks: { ...inboxHooks(s.groupId), ...crewHooks(s.groupId) } }),
         "--agents", JSON.stringify(kitAgents(fableHasRoom())),
         "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
       ];
@@ -1696,6 +1702,7 @@ class SessionManager {
         {
           ...buildManagerPermissions(TODAY_PATH, notepad),
           ...statusLineSettings(s.groupId),
+          hooks: crewHooks(s.groupId),
         },
         null,
         2,
@@ -1930,6 +1937,7 @@ class SessionManager {
       if (isValidGroupId(groupId)) {
         removeLimits(groupId);
         removeInbox(groupId);
+        clearCrew(groupId);
       }
     } catch {
       // invalid id / already gone — nothing to clean up
@@ -1979,6 +1987,7 @@ class SessionManager {
     const settings = {
       ...buildReviewPermissions(notepadPath(groupId), reviewGuidePath(groupId), owned),
       ...statusLineSettings(groupId),
+      hooks: crewHooks(groupId),
     };
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));

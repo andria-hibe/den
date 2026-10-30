@@ -606,7 +606,11 @@ developer's day across the other sessions instead of them being the glue.
   when to call them. **The developer can call them too**: `CrewButtons` in
   a workspace, my-PR, or review pane's header is one button holding the
   helpers' busts (five separate buttons squeezed the path and branch out of
-  the header at 1240px); it opens a card listing each helper's job with an
+  the header at 1240px), each **lit while the pane has that subagent at
+  work** and dimmed otherwise (`server/crewActivity.ts`: SubagentStart/Stop
+  hooks in the pane's `--settings` append to `~/.den/crew/<groupId>.jsonl`,
+  replayed as `meta().crewActive`; an agent whose transcript has been quiet
+  15 min counts as gone; cleared on pane spawn/exit); it opens a card listing each helper's job with an
   "ask" button that pastes and submits `crewAskPrompt` (`prompts.ts`), so
   the pane calls its own subagent. Fox's header has one too (`crewFor
   ("manager")`): tanuki and raccoon rewrite the digest first (`POST
