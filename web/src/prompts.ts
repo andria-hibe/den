@@ -199,30 +199,75 @@ export function cleanupPrompt(skill: string | null): string {
 }
 
 /** The helpers a pane's crew buttons can call: the subagents den gives it
- * (kitAgents / reviewAgents in server/crew.ts). */
-export type CrewHelper = "owl" | "badger" | "hare" | "wolf" | "raccoon";
+ * (kitAgents / reviewAgents / managerAgents in server/crew.ts). */
+export type CrewHelper = "owl" | "badger" | "hare" | "wolf" | "raccoon" | "tanuki" | "squirrel";
 
-/** What a crew button asks the pane to do. `review`: a PR-review pane, whose
- * subject is the PR it's reviewing rather than its own work. */
-export function crewAskPrompt(helper: CrewHelper, review: boolean): string {
+/** Which pane the crew buttons sit on: a kit (workspace or my-PR), a PR
+ * review, or Fox. */
+export type CrewPane = "kit" | "review" | "manager";
+
+/** The helpers each pane kind has as subagents: a review pane is Owl itself,
+ * so it has no Owl to call. */
+export function crewFor(pane: CrewPane): CrewHelper[] {
+  if (pane === "manager") return ["tanuki", "squirrel", "raccoon", "owl"];
+  return pane === "review" ? ["badger", "hare", "wolf", "raccoon"] : ["owl", "badger", "hare", "wolf", "raccoon"];
+}
+
+/** What a crew button pastes. `submit: false` leaves it in the prompt for the
+ * developer to finish, for a helper that needs to be told what to do.
+ * `digest`: rewrite Fox's digest first, since the ask reads it and it was
+ * written when the day started. */
+export type CrewAsk = { text: string; submit: boolean; digest?: boolean };
+
+export function crewAskPrompt(helper: CrewHelper, pane: CrewPane): CrewAsk {
+  if (pane === "manager") {
+    switch (helper) {
+      case "tanuki":
+        return {
+          text:
+            `Ask tanuki, your inbox subagent, to go through my inbox now. den has just rewritten ` +
+            `the digest, so its Inbox section is current. Tell me what needs me and what's worth ` +
+            `knowing, and add anything that needs me to the Today list.`,
+          submit: true,
+          digest: true,
+        };
+      case "raccoon":
+        return {
+          text:
+            `Give raccoon, your CI subagent, the failing checks on my open PRs (den has just ` +
+            `rewritten the digest, which lists them by name with links). Tell me per PR whether ` +
+            `it's a flake or real, and which session should fix it. If nothing fails, just say so.`,
+          submit: true,
+          digest: true,
+        };
+      case "squirrel":
+        return { text: "Send squirrel, your errand subagent, on this errand and tell me what it finds: ", submit: false };
+      case "owl":
+        return { text: "Ask owl, your advisor subagent: ", submit: false };
+    }
+  }
+  const review = pane === "review";
   const subject = review ? "this pull request" : "the change on this branch";
   const report = review
     ? "Fold anything that holds up into your review, then tell me briefly what it found."
     : "Tell me briefly what it found and what you'd do about it; don't change anything yet.";
+  const ask = (text: string): CrewAsk => ({ text, submit: true });
   switch (helper) {
     case "owl":
-      return `Ask owl, your advisor subagent, to review the change on this branch against its base now. ${report}`;
+      return ask(`Ask owl, your advisor subagent, to review the change on this branch against its base now. ${report}`);
     case "badger":
-      return `Ask badger, your testing subagent, to check ${subject} now: run the tests that cover it and try to break it. ${report}`;
+      return ask(`Ask badger, your testing subagent, to check ${subject} now: run the tests that cover it and try to break it. ${report}`);
     case "hare":
-      return `Ask hare, your performance subagent, to check ${subject} for slow paths now. ${report}`;
+      return ask(`Ask hare, your performance subagent, to check ${subject} for slow paths now. ${report}`);
     case "wolf":
-      return `Ask wolf, your security subagent, to review ${subject} now. ${report}`;
+      return ask(`Ask wolf, your security subagent, to review ${subject} now. ${report}`);
     case "raccoon":
-      return (
+      return ask(
         `Check CI on ${review ? "this pull request" : "this branch's pull request"} with gh pr checks. ` +
-        `If any check fails, give raccoon, your CI subagent, the failing checks' names and links, ` +
-        `and tell me what it says. If nothing fails, just say so.`
+          `If any check fails, give raccoon, your CI subagent, the failing checks' names and links, ` +
+          `and tell me what it says. If nothing fails, just say so.`,
       );
+    default:
+      return ask(`Ask ${helper} now and tell me briefly what it found.`);
   }
 }

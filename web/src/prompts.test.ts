@@ -6,6 +6,7 @@ import {
   autoReviewPrompt,
   cleanupPrompt,
   crewAskPrompt,
+  crewFor,
   denPrompt,
   fileReviewPrompt,
   guidePrompt,
@@ -58,10 +59,9 @@ describe("paste prompts", () => {
     cleanupWithSkill: cleanupPrompt("runn-cleanup"),
     cleanupGeneric: cleanupPrompt(null),
     ...Object.fromEntries(
-      (["owl", "badger", "hare", "wolf", "raccoon"] as const).flatMap((h) => [
-        [`crewAsk ${h}`, crewAskPrompt(h, false)],
-        [`crewAsk ${h} (review)`, crewAskPrompt(h, true)],
-      ]),
+      (["kit", "review", "manager"] as const).flatMap((pane) =>
+        crewFor(pane).map((h) => [`crewAsk ${h} (${pane})`, crewAskPrompt(h, pane).text]),
+      ),
     ),
     notePrompt: notePrompt(42, {
       kind: "line comment",

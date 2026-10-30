@@ -2,13 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { Critter } from "./Critter.tsx";
 import { CREW } from "./critterSprites.ts";
-import { crewAskPrompt, type CrewHelper } from "./prompts.ts";
-
-/** The helpers each pane kind has as subagents (server/crew.ts): a review
- * pane is Owl itself, so it has no Owl to call. */
-export function crewFor(review: boolean): CrewHelper[] {
-  return review ? ["badger", "hare", "wolf", "raccoon"] : ["owl", "badger", "hare", "wolf", "raccoon"];
-}
+import { crewAskPrompt, crewFor, type CrewHelper, type CrewPane } from "./prompts.ts";
 
 /** A pane header's crew: the helpers' busts in one button, which opens a card
  * listing each helper's job with a button that asks the pane to call it. One
@@ -16,12 +10,12 @@ export function crewFor(review: boolean): CrewHelper[] {
  * den's window doesn't show native tooltips. */
 export function CrewButtons({
   sessionId,
-  review,
+  pane,
   running,
   onError,
 }: {
   sessionId: string;
-  review: boolean;
+  pane: CrewPane;
   running: boolean;
   onError: (msg: string) => void;
 }) {
@@ -44,14 +38,19 @@ export function CrewButtons({
     };
   }, [open]);
 
-  const ask = async (helper: CrewHelper) => {
+  const ask = async (helper: CrewHelper, from: HTMLElement) => {
+    const { text, submit, digest } = crewAskPrompt(helper, pane);
+    // The card sits in the pane's header, so this finds that pane's terminal.
+    const input = from.closest(".ws-main")?.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
     setAsking(helper);
     try {
+      if (digest) await api("/api/manager/digest", { method: "POST" });
       await api(`/api/sessions/${sessionId}/paste`, {
         method: "POST",
-        body: JSON.stringify({ text: crewAskPrompt(helper, review), submit: true }),
+        body: JSON.stringify({ text, submit }),
       });
       setOpen(null);
+      if (!submit) input?.focus();
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -59,7 +58,7 @@ export function CrewButtons({
     }
   };
 
-  const helpers = crewFor(review);
+  const helpers = crewFor(pane);
   return (
     <>
       <button
@@ -79,6 +78,7 @@ export function CrewButtons({
         <div className="crew-card" ref={card} style={{ top: open.top, right: open.right }}>
           {helpers.map((h) => {
             const member = CREW.find((c) => c.kind === h);
+            const brief = !crewAskPrompt(h, pane).submit;
             return (
               <div className="crew-row" key={h}>
                 <span className="crew-row-face">
@@ -91,9 +91,10 @@ export function CrewButtons({
                 <button
                   className="btn btn-ghost-outline crew-ask"
                   disabled={!running || asking !== null}
-                  onClick={() => ask(h)}
+                  title={brief ? "Starts the message in the prompt for you to finish" : undefined}
+                  onClick={(e) => ask(h, e.currentTarget)}
                 >
-                  {asking === h ? "asking..." : "ask"}
+                  {asking === h ? "asking..." : brief ? "brief" : "ask"}
                 </button>
               </div>
             );

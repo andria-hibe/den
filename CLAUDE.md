@@ -608,7 +608,11 @@ developer's day across the other sessions instead of them being the glue.
   helpers' busts (five separate buttons squeezed the path and branch out of
   the header at 1240px); it opens a card listing each helper's job with an
   "ask" button that pastes and submits `crewAskPrompt` (`prompts.ts`), so
-  the pane calls its own subagent. A failing-CI
+  the pane calls its own subagent. Fox's header has one too (`crewFor
+  ("manager")`): tanuki and raccoon rewrite the digest first (`POST
+  /api/manager/digest`, `writeDigest` in `app.ts`), since it dates from Start
+  my day; squirrel and owl are "brief", a starter left unsubmitted with the
+  pane focused, since they need to be told the job. A failing-CI
   message from den (`ciMessage`) lists the failing checks with links and
   says to hand them to raccoon: before that, sessions read their own logs
   and never called it (andria, 2026-10-30). Owl runs on Fable when `fableHasRoom` (the week isn't ahead of an

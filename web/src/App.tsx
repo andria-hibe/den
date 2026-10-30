@@ -464,10 +464,10 @@ export function App() {
       )}
       <WorkLinkChips s={s} issues={issues} prs={prs} />
       <span className="term-actions">
-        {!s.shell && (opts?.workspace || s.view === "mypr" || s.view === "review") && (
+        {!s.shell && (opts?.workspace || s.view === "mypr" || s.view === "review" || s.view === "manager") && (
           <CrewButtons
             sessionId={s.id}
-            review={s.view === "review"}
+            pane={s.view === "review" ? "review" : s.view === "manager" ? "manager" : "kit"}
             running={s.status === "running"}
             onError={setErrMsg}
           />

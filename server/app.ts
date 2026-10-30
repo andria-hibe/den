@@ -908,7 +908,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Start my day: write what den knows to the digest, bring up the Manager,
   // and ask it to build the Today list. GitHub and Linear are best effort and
   // bounded, like seedWithWhatExists, so a slow API never holds up the day.
-  app.post("/api/manager/start", async (_req, reply) => {
+  const writeDigest = async () => {
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
     const [prs, linear, linearInbox, githubInbox] = await Promise.all([
@@ -931,6 +931,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         inbox: { linear: linearInbox, github: githubInbox },
       }),
     );
+  };
+
+  app.post("/api/manager/start", async (_req, reply) => {
+    await writeDigest();
     await sessions.wakeClockedOut();
     const manager = await sessions.startManager();
     if (!manager || manager.status !== "running") {
@@ -940,6 +944,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // Answered before the paste, which waits for the pane to finish drawing.
     void deliverStart(manager, managerStartPrompt(new Date()));
     return manager.meta();
+  });
+
+  // A crew button on Fox's pane whose helper reads the digest.
+  app.post("/api/manager/digest", async () => {
+    await writeDigest();
+    return { ok: true };
   });
 
   // Clock out: which panes are safe to end tonight, then Hedgehog's round
