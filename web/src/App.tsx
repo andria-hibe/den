@@ -11,6 +11,7 @@ import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { CrewButtons } from "./CrewButtons.tsx";
+import { HoverTip } from "./HoverTip.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
 import { Fox } from "./Fox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
@@ -335,7 +336,7 @@ export function App() {
     if (reopenSentinel(CLEANUP_TICKET)) return;
     try {
       const { skill, cwd } = await api<{ skill: string | null; cwd: string }>("/api/cleanup");
-      addSession({ cwd, ticket: CLEANUP_TICKET, name: "🧹 clean up", initialPrompt: cleanupPrompt(skill) });
+      addSession({ cwd, ticket: CLEANUP_TICKET, name: "clean up", initialPrompt: cleanupPrompt(skill) });
     } catch (e) {
       setErrMsg((e as Error).message);
     }
@@ -404,6 +405,7 @@ export function App() {
     if (s.view === "manager") return <Fox pose="sit" size={size} bust />;
     if (s.shell) return null;
     if (s.view === "review") return <Critter kind="owl" size={size} bust />;
+    if (s.ticket === CLEANUP_TICKET) return <Critter kind="beaver" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;
   };
 
@@ -454,7 +456,7 @@ export function App() {
         {s.cwd.replace(/^\/Users\/[^/]+/, "~")}
       </span>
       {s.branch && (
-        <span className="term-branch" title="git branch">
+        <span className="term-branch" title={s.branch}>
           ⎇ {s.branch}
         </span>
       )}
@@ -595,6 +597,7 @@ export function App() {
 
   return (
     <div className="app">
+      <HoverTip />
       <div
         className="topbar"
         style={

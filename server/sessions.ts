@@ -1471,7 +1471,7 @@ class SessionManager {
       ...(opts.resumeId
         ? ["--resume", opts.resumeId]
         : ["--session-id", main.claudeSessionId, "-n", name]),
-      ...this.workspaceArgs(groupId, cwd),
+      ...this.workspaceArgs(groupId, cwd, true, opts.ticket),
       // `--` so a prompt starting with "-" is read as the prompt, never a flag.
       ...(opts.initialPrompt && !opts.resumeId ? ["--", opts.initialPrompt] : []),
     ];
@@ -1533,7 +1533,7 @@ class SessionManager {
   private restartArgs(s: DenSession): string[] {
     const resume = this.resumeArgs(s);
     if (s.role === "main" && !s.look && !s.view) {
-      return [...resume, ...this.workspaceArgs(s.groupId, s.cwd, s.handover)];
+      return [...resume, ...this.workspaceArgs(s.groupId, s.cwd, s.handover, s.ticket)];
     }
     return [...resume, ...this.singlePaneArgs(s)];
   }
@@ -1541,7 +1541,7 @@ class SessionManager {
   /** The notepad wiring and system prompt for a workspace main pane, shared by
    * create() and restartArgs(). The notepad itself is created (and seeded) by
    * create(); a restart keeps whatever is in it. */
-  private workspaceArgs(groupId: string, cwd: string, handover = true): string[] {
+  private workspaceArgs(groupId: string, cwd: string, handover = true, ticket?: string | null): string[] {
     mkdirSync(PROGRESS_DIR, { recursive: true });
     // With the handover off, the pane still gets the house rules, just not
     // the notepad instruction (the notepad stays for the developer's own use).
@@ -1554,6 +1554,9 @@ class SessionManager {
       "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: inboxHooks(groupId) }),
       "--add-dir", PROGRESS_DIR,
       "--agents", JSON.stringify(kitAgents(fableHasRoom())),
+      // Beaver, the clean-up workspace: its audit is mechanical, and the
+      // developer approving its plan is the safety step, so Opus isn't needed.
+      ...(ticket === "den:cleanup" ? ["--model", "sonnet"] : []),
       "--append-system-prompt", prompt,
     ];
   }

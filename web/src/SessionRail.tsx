@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
+import { Critter } from "./Critter.tsx";
 
 // The left column, one row per workspace. Pure presentation: all state lives in App.
 export function SessionRail({
@@ -118,7 +119,6 @@ export function SessionRail({
               e.stopPropagation();
               commitMove(i, e.key === "ArrowUp" ? i - 1 : i + 1);
             }}
-            title="drag to reorder (or alt+up/down)"
           >
             {renderIcon(s) ? (
               <span className="fox-dot" style={{ opacity: s.status === "exited" ? 0.4 : 1 }}>
@@ -208,10 +208,10 @@ export function SessionRail({
         <button
           className="btn btn-ghost-outline rail-cleanup"
           onClick={onCleanup}
-          title="Clean up the work repo with Claude: merged worktrees, branches, and idle stacks. It shows a plan first and changes nothing until you approve."
+          title="Beaver cleans up the work repo: merged worktrees, branches, and idle stacks. It shows a plan first and changes nothing until you approve."
           aria-label="clean up the work repo"
         >
-          🧹
+          <Critter kind="beaver" size={18} bust />
         </button>
       </div>
     </aside>

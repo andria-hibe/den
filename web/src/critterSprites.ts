@@ -30,11 +30,15 @@ export const CRITTER_PALETTE: Record<string, string> = {
   V: "#757a93",
   S: "#c26e43", // squirrel
   s: "#94532f",
+  B: "#a8775a", // beaver
+  b: "#7e5743",
+  c: "#d9b99c", // beaver muzzle and belly
+  n: "#5a4032", // beaver nose and tail
   X: "#ffb7d5", // kit's scarf: the session's colour in the app (Critter tint)
   Y: "#c5809f", // the scarf's shaded lower row, so it stands off the orange fur
 };
 
-export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "squirrel" | "kit";
+export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "squirrel" | "beaver" | "kit";
 
 export const CRITTERS: Record<CritterKind, string[]> = {
   tanuki: [
@@ -205,6 +209,27 @@ export const CRITTERS: Record<CritterKind, string[]> = {
     "..DWVWD...DWVWD...",
     "..DDDD....DDDD....",
   ],
+  beaver: [
+    "..................",
+    "..DDD.......DDD...",
+    ".DBbBD.....DBbBD..",
+    ".DBBBDDDDDDDBBBD..",
+    "..DBBBBBBBBBBBD...",
+    ".DBBBBBBBBBBBBBD..",
+    ".DBBeeBBBBBeeBBD..",
+    ".DBBeeBBBBBeeBBD..",
+    ".DBBBBcccccBBBBD..",
+    ".DBBBccnnnccBBBD..",
+    "..DBBBccDccBBBD...",
+    "...DBBBwDwBBBD.DD.",
+    "..DBBBBBBBBBBDnbnD",
+    ".DBBccccccccBDbnbD",
+    ".DBcccccccccBDnbnD",
+    ".DBBccccccccBDbnbD",
+    "..DBBBBBBBBBBDDDD.",
+    "..DBbD....DBbD....",
+    "..DDDD....DDDD....",
+  ],
   squirrel: [
     "..D...D...DDDDD...",
     ".DSD.DSD.DSSSSSD..",
@@ -268,6 +293,7 @@ export const CREW: CrewMember[] = [
   { kind: "badger", name: "Badger", job: "QA: runs the tests, checks the change in the browser with screenshots, and tries to break it", model: "Sonnet", built: true },
   { kind: "hare", name: "Hare", job: "Checks performance: slow queries, wasted renders, heavy loops, with a quick measurement where it can", model: "Sonnet", built: true },
   { kind: "wolf", name: "Wolf", job: "Checks security: auth gaps, leaked secrets, injection, using the repo's own security review", model: "Opus", built: true },
+  { kind: "beaver", name: "Beaver", job: "Clears merged worktrees, old branches, and idle stacks out of the work repo, once you approve its plan", model: "Sonnet", built: true },
   { kind: "squirrel", name: "Squirrel", job: "Runs Fox's errands: sizes up a Linear project's tickets, matches tickets to PRs, pre-reads a PR, and reports back", model: "Sonnet", built: true },
   { kind: "owl", name: "Owl", job: "Reviews code (colleagues' PRs, and a kit's own PR before you look) and advises kits and Fox on hard problems", model: "Opus, or Fable for the hardest when the week has room", built: true },
 ];
@@ -282,4 +308,5 @@ export const BUSTS: Partial<Record<CritterKind, [number, number, number, number]
   badger: [1, 12, 0, 17],
   hare: [0, 13, 0, 14],
   wolf: [0, 11, 0, 17],
+  beaver: [1, 12, 0, 16],
 };

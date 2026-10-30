@@ -577,7 +577,7 @@ developer's day across the other sessions instead of them being the glue.
 - Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
   its handover, end, fresh tomorrow, keep-alive pin), then the workers.
 - **The crew are forest animals** (andria, 2026-10-29), so keep any new
-  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. Squirrel (Fox's errand runner, Sonnet by Fox's own pick, 2026-10-30): read-only jobs the developer asks Fox for, such as going through a Linear project for tickets worth picking up, matching tickets to PRs, or pre-reading a PR.
+  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. Squirrel (Fox's errand runner, Sonnet by Fox's own pick, 2026-10-30): read-only jobs the developer asks Fox for, such as going through a Linear project for tickets worth picking up, matching tickets to PRs, or pre-reading a PR. Beaver (clean up, Sonnet, 2026-10-30): the clean-up workspace (`den:cleanup`, the rail's beaver button) is drawn as Beaver and runs `--model sonnet` (`workspaceArgs`), since its audit is mechanical and the developer's approval of its plan is the safety step.
   Pixel art: `critterSprites.ts` (18x19 like the fox's SIT, same outline
   and eyes; `CREW` holds name, job, model, built), drawn by `Critter.tsx`
   with the fox's `rasterize` (`tint` recolours a kit's scarf). den shows
@@ -783,7 +783,7 @@ developer's day across the other sessions instead of them being the glue.
   Claude suggests it when something fails for environment reasons. Setup is
   per worktree (several of the maintainer's were never set up), so it's a
   button, not a one-time step.
-- **Clean up the work repo with Claude** (issue 29): the rail's 🧹 button
+- **Clean up the work repo with Claude** (issue 29): the rail's beaver button (Beaver, the clean-up worker)
   (`openCleanup` in App) opens one Claude workspace in the work repo's main
   checkout (sentinel ticket `den:cleanup`, reused like the den editor) whose
   first message is `cleanupPrompt(skill)` (`prompts.ts`). **The procedure is
@@ -912,6 +912,13 @@ developer's day across the other sessions instead of them being the glue.
   otherwise pull the wrong way. Existing comments aren't rewritten in passing.
 - **Pixel art**: render via canvas + `image-rendering: pixelated` at an *integer*
   pixel scale; animate with `steps()` (fractional transforms/offsets blur it).
+- **Hover tips** (`HoverTip.tsx`, mounted once in App): den's window never
+  shows native `title` tooltips, so one window-fixed tip shows any element's
+  `title` after 400ms (the `.attn-tip` look, neutral border). It moves the
+  title to `data-den-title` while shown so a browser with native tooltips
+  doesn't show two, and puts it back on leave/mousedown/blur unless a
+  re-render set a newer one. So `title` is the way to explain a control;
+  the branch chip's is the full branch name.
 - **Terminal links and reconnect** (issues 41, 42): `useTerminal` makes
   URLs (web-links addon, plus `linkHandler` for OSC 8) and absolute/`~`
   paths (`PATH_RE` link provider) open on **Cmd/Ctrl+click**. Paths go to
