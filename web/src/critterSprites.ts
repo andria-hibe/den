@@ -305,6 +305,8 @@ export const BUSTS: Partial<Record<CritterKind, [number, number, number, number]
   kit: [3, 14, 1, 16],
   owl: [0, 11, 0, 16],
   raccoon: [0, 10, 1, 16],
+  tanuki: [1, 11, 0, 16],
+  squirrel: [0, 10, 0, 18],
   badger: [1, 12, 0, 17],
   hare: [0, 13, 0, 14],
   wolf: [0, 11, 0, 17],

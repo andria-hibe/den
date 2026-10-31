@@ -95,8 +95,9 @@ export function CrewButtons({
   const onWay = (h: CrewHelper) => !active.includes(h) && (asking === h || called[h] !== undefined);
   const busy = (h: CrewHelper) => active.includes(h) || onWay(h);
   const working = helpers.filter(busy);
-  const face = (h: CrewHelper) => (
-    <Critter kind={h} bust size={22} className={`crew-face${busy(h) ? " on" : ""}`} />
+  // Heads in the header; the whole animal in the card, where you ask it for a job.
+  const face = (h: CrewHelper, whole = false) => (
+    <Critter kind={h} bust={!whole} size={whole ? 38 : 22} className={`crew-face${busy(h) ? " on" : ""}`} />
   );
   return (
     <>
@@ -121,7 +122,7 @@ export function CrewButtons({
             const brief = !crewAskPrompt(h, pane).submit;
             return (
               <div className="crew-row" key={h}>
-                <span className="crew-row-face">{face(h)}</span>
+                <span className="crew-row-face">{face(h, true)}</span>
                 <div className="crew-row-text">
                   <strong>{member?.name ?? h}</strong>
                   {active.includes(h) && <span className="crew-working">at work</span>}

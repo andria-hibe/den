@@ -49,6 +49,31 @@ const SCROLLBACK_CAP = 256 * 1024; // characters of terminal output kept per ses
 // Outside any repo, so a notepad never ends up in a commit.
 const PROGRESS_DIR = join(DATA_DIR, "progress");
 
+/** The OSC titles (ESC ] 0|1|2 ; <title> BEL or ST) in a chunk of pane
+ * output, and whether it rang a bell outside any OSC sequence: Claude Code
+ * ends its title and hyperlink sequences with BEL, so a bare search for BEL
+ * fires on every spinner frame. `carry` is an unterminated OSC to prepend to
+ * the next chunk. */
+export function scanOsc(carry: string, chunk: string): { titles: string[]; bell: boolean; carry: string } {
+  let data = carry + chunk;
+  const open = data.lastIndexOf("\x1b]");
+  let next = "";
+  if (open !== -1 && !/\x07|\x1b\\/.test(data.slice(open))) {
+    next = data.slice(open).slice(-512);
+    data = data.slice(0, open);
+  } else if (data.endsWith("\x1b")) {
+    // The chunk may have split an OSC between its ESC and "]".
+    next = "\x1b";
+    data = data.slice(0, -1);
+  }
+  const titles: string[] = [];
+  const rest = data.replace(/\x1b\](\d*);?([^\x07\x1b]*)(?:\x07|\x1b\\)/g, (_, code: string, body: string) => {
+    if (code === "0" || code === "1" || code === "2") titles.push(body);
+    return "";
+  });
+  return { titles, bell: rest.includes("\x07"), carry: next };
+}
+
 // groupIds are randomUUIDs. Validate before building a path so a crafted id
 // (e.g. "../../etc/foo") can't escape PROGRESS_DIR into arbitrary file read/write.
 const GROUP_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
@@ -960,6 +985,8 @@ class DenSession {
   /** Once the user renames, stop auto-updating the title from the terminal. */
   titleLocked = false;
   private oscCarry = "";
+  /** The latest title showed Claude at work (see maybeTitle). */
+  private titleBusy = false;
   /** Set when the terminal rings the bell while unwatched (Claude wants input). */
   attention = false;
 
@@ -1052,10 +1079,10 @@ class DenSession {
     while (this.bufferBytes > SCROLLBACK_CAP && this.buffer.length > 1) {
       this.bufferBytes -= this.buffer.shift()!.length;
     }
-    if (this.listeners.size === 0 && data.includes("\u0007")) {
-      this.attention = true;
-    }
-    this.maybeTitle(data);
+    const osc = scanOsc(this.oscCarry, data);
+    this.oscCarry = osc.carry;
+    if (this.listeners.size === 0 && osc.bell) this.attention = true;
+    if (osc.titles.length) this.maybeTitle(osc.titles[osc.titles.length - 1]);
     this.emit({ type: "output", data });
     for (const w of this.watchers) w(data);
   }
@@ -1067,25 +1094,16 @@ class DenSession {
     return () => this.watchers.delete(fn);
   }
 
-  /** Use the latest OSC title (ESC ] 0|1|2 ; <title> BEL or ST) as the session
-   * name. Claude panes only: shells retitle to the cwd/command on every
-   * prompt, which flaps. */
-  private maybeTitle(chunk: string) {
-    if (this.shell || this.titleLocked) return;
-    const data = this.oscCarry + chunk;
-    const re = /\x1b\][012];([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
-    let m: RegExpExecArray | null;
-    let latest: string | null = null;
-    while ((m = re.exec(data))) latest = m[1];
-
-    // Carry a trailing, not-yet-terminated OSC across chunk boundaries.
-    const open = data.lastIndexOf("\x1b]");
-    this.oscCarry =
-      open !== -1 && !/[\x07]|\x1b\\/.test(data.slice(open))
-        ? data.slice(open).slice(-512)
-        : "";
-
-    if (latest === null) return;
+  /** Use the latest OSC title as the session name, and flag the end of a
+   * turn: Claude Code's title leads with a spinner glyph while it works and
+   * with "\u2733" while it waits for input. Claude panes only: shells retitle
+   * to the cwd/command on every prompt, which flaps. */
+  private maybeTitle(latest: string) {
+    if (this.shell) return;
+    const waiting = latest.trimStart().startsWith("\u2733");
+    if (waiting && this.titleBusy && this.listeners.size === 0) this.attention = true;
+    this.titleBusy = !waiting;
+    if (this.titleLocked) return;
     const title = latest.trim().replace(/\s+/g, " ").slice(0, 60);
     if (title && title !== this.name) {
       this.name = title;

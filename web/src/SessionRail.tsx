@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
 import { Critter } from "./Critter.tsx";
@@ -51,7 +51,14 @@ export function SessionRail({
   attentionNote: (s: SessionMeta) => string | null;
 }) {
   // The "!" note is fixed to the window: the rail's scroll box would clip it.
-  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Looked up live: the "!" can vanish under the pointer (opening the row
+  // clears it), and then no mouseleave comes to hide the tip.
+  const tipRow = tip && rail.find((s) => s.id === tip.id);
+  const tipText = tipRow ? attentionNote(tipRow) : null;
+  useEffect(() => {
+    if (tip && !tipText) setTip(null);
+  }, [tip, tipText]);
   // Drag state is view-local: the index being dragged and the row it's over.
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -68,9 +75,9 @@ export function SessionRail({
 
   return (
     <aside className="panel rail" style={{ width }}>
-      {tip && (
+      {tip && tipText && (
         <div className="attn-tip" style={{ left: tip.x, top: tip.y }} role="tooltip">
-          {tip.text}
+          {tipText}
         </div>
       )}
       <h2>sessions</h2>
@@ -161,7 +168,7 @@ export function SessionRail({
                 aria-label={attentionNote(s) ?? ""}
                 onMouseEnter={(e) => {
                   const r = e.currentTarget.getBoundingClientRect();
-                  setTip({ text: attentionNote(s) ?? "", x: r.left, y: r.bottom + 6 });
+                  setTip({ id: s.id, x: r.left, y: r.bottom + 6 });
                 }}
                 onMouseLeave={() => setTip(null)}
               >

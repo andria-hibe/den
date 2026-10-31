@@ -495,7 +495,8 @@ body {
 /* Why the session wants you, on hovering its "!" (SessionRail's tip). */
 .attn-tip {
   position: fixed;
-  z-index: 60;
+  /* Above every card, dialog, and toast: a tip is read over whatever it explains. */
+  z-index: 200;
   max-width: 300px;
   white-space: pre-wrap;
   font-size: 11px;
@@ -736,12 +737,13 @@ body {
 .crew-face.on {
   opacity: 1;
   filter: none;
-  animation: crew-walk 0.7s steps(1, jump-end) infinite;
+  animation: crew-bounce 0.8s steps(1, jump-end) infinite;
 }
-@keyframes crew-walk {
-  0% { left: -1px; top: 0; }
+/* A side-to-side bob: up at each swing's middle. */
+@keyframes crew-bounce {
+  0% { left: -2px; top: 0; }
   25% { left: 0; top: -2px; }
-  50% { left: 1px; top: 0; }
+  50% { left: 2px; top: 0; }
   75% { left: 0; top: -2px; }
 }
 @media (prefers-reduced-motion: reduce) {

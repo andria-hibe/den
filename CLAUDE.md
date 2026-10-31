@@ -609,8 +609,8 @@ developer's day across the other sessions instead of them being the glue.
   alongside the code-review skill; it also tells the pane it *is* Owl) say
   when to call them. **The developer can call them too**: `CrewButtons` in
   a workspace, my-PR, or review pane's header is one button holding the
-  helpers' busts (five separate buttons squeezed the path and branch out of
-  the header at 1240px), each **walking (a stepped hop) while the pane has that subagent at
+  helpers' heads (the card draws each whole animal; five separate buttons squeezed the path and branch out of
+  the header at 1240px), each **bouncing side to side (stepped) while the pane has that subagent at
   work** or it was just asked for from the card ("on its way", up to 2 min
   until the pane starts it), and dimmed otherwise (`server/crewActivity.ts`: SubagentStart/Stop
   hooks in the pane's `--settings` append to `~/.den/crew/<groupId>.jsonl`,
@@ -639,7 +639,10 @@ developer's day across the other sessions instead of them being the glue.
   in `~/.den/manager/clocked-out.json`. Start my day calls
   `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
   `startManager` handles). Attention (the bell) is deliberately not a
-  blocker: Claude rings it at the end of every turn. **Nap** (the
+  blocker: it fires at the end of every turn. Claude Code rings no
+  bare bell; every BEL it prints ends an OSC (title spinner frames, links),
+  so `scanOsc` in `sessions.ts` skips those and a turn's end is its title
+  glyph going from a spinner to "\u2733" while nobody watches (`titleBusy`). **Nap** (the
   topbar's "💤 nap", `POST /api/manager/nap` -> `sessions.nap()`) is the
   same round (`hedgehogRound`, `kind: "nap"`) without ending anything:
   every running workspace and Fox with its handover on, before a break.
