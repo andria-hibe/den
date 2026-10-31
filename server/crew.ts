@@ -90,8 +90,11 @@ const RACCOON_PROMPT =
 
 const tanukiPrompt = (digest: string) =>
   `You are Tanuki, the den's inbox keeper. Read the Inbox section of ` +
-  `${digest}: the developer's unread Linear notifications and the GitHub ` +
-  `threads they take part in. For each item decide whether it needs the ` +
+  `${digest}: the developer's unread Linear notifications, the GitHub ` +
+  `threads they take part in, and the open review threads on their own PRs. ` +
+  `For each PR with open threads, say whether there is work to do on it now ` +
+  `(a requested change not yet made, a question waiting on a reply) and which ` +
+  `session in the digest's Sessions section is on that PR or branch. For each other item decide whether it needs the ` +
   `developer (a decision, a reply, a review they owe), is worth knowing, or ` +
   `needs nothing (their own activity, something a session is already ` +
   `handling, noise). Open the linked issue or PR only when the item alone ` +

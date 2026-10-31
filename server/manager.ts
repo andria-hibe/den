@@ -9,6 +9,19 @@ export function managerStartPrompt(now: Date): string {
   );
 }
 
+/** Refresh, from Today's header: any time in the day, not just at the start. */
+export function managerRefreshPrompt(now: Date): string {
+  const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return (
+    `Refresh my day. It's ${time}. den has just rewritten the digest. Ask tanuki, your inbox ` +
+    `subagent, to go through its Inbox section, then go through the Today list against the ` +
+    `digest and what tanuki found: tick what's done, add what's new and needs me, and drop ` +
+    `what no longer applies. Read the list first and keep the boxes I ticked. Tell me in a few ` +
+    `lines what changed, then carry on with me from where we were. I can ask for this any ` +
+    `time, so keep it quick.`
+  );
+}
+
 /** The Today list with its `n`th checklist item (0-based, in file order)
  * ticked or unticked, or null when there's no such item or, given `text`,
  * the item there now says something else: the list was rewritten after the

@@ -514,9 +514,11 @@ interface RawThreadComment {
   createdAt: string;
 }
 
+/** `strict`: throw on a failed fetch instead of reading as no comments. */
 async function getReviewComments(
   repo: string,
   number: number,
+  strict = false,
 ): Promise<PrReviewNote[]> {
   const [owner, name] = repo.split("/");
   if (!owner || !name) return [];
@@ -568,8 +570,47 @@ async function getReviewComments(
     return notes;
   } catch (err) {
     logWarn(`github.reviewComments pr#${number}`, err);
+    if (strict) throw err;
     return [];
   }
+}
+
+/** An unresolved review thread on a PR, for the digest. */
+export interface OpenThread {
+  path: string;
+  line?: number;
+  /** Who opened the thread, and what they asked. */
+  author: string;
+  body: string;
+  replies: number;
+  /** The last comment isn't the developer's, so the thread waits on them. */
+  waitingOnMe: boolean;
+}
+
+/** The PR's review threads that are neither resolved nor outdated: what
+ * reviewers are still waiting on. Null when GitHub didn't answer. */
+export async function openReviewThreads(repo: string, number: number): Promise<OpenThread[] | null> {
+  const me = await viewerLogin();
+  if (!me) return null;
+  let notes: PrReviewNote[];
+  try {
+    notes = await getReviewComments(repo, number, true);
+  } catch {
+    return null;
+  }
+  const threads = new Map<string, PrReviewNote[]>();
+  for (const n of notes) {
+    if (n.resolved || n.outdated || !n.threadId) continue;
+    threads.set(n.threadId, [...(threads.get(n.threadId) ?? []), n]);
+  }
+  return [...threads.values()].map((t) => ({
+    path: t[0].path ?? "?",
+    line: t[0].line,
+    author: t[0].author,
+    body: t[0].body,
+    replies: t.length - 1,
+    waitingOnMe: t[t.length - 1].author !== me,
+  }));
 }
 
 // --- Posting to GitHub (#16) -----------------------------------------------

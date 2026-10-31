@@ -7,6 +7,7 @@ import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { useClockOutRound } from "./useClockOutRound.ts";
+import type { ClockOutRound } from "../../server/sessions.ts";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
@@ -113,12 +114,23 @@ export function App() {
   const tuck = useClockOutRound();
   const tuckRunning = !!tuck.round && !tuck.round.finishedAt;
   const tuckShown = tuckRunning || tuck.unseen;
-  const tuckFailed = tuck.round?.panes.filter((p) => p.stage === "failed").length ?? 0;
+  const napping = tuck.round?.kind === "nap";
+  const tuckFailed =
+    tuck.round?.panes.filter((p) => (napping ? p.handoverFailed : p.stage === "failed")).length ?? 0;
   const { ack: ackTuck } = tuck;
   const closeClockOut = useCallback(() => {
     setClockingOut(false);
     if (!tuckRunning) ackTuck();
   }, [tuckRunning, ackTuck]);
+  const nap = async () => {
+    try {
+      tuck.watch((await api<{ round: ClockOutRound }>("/api/manager/nap", { method: "POST" })).round);
+      setClockingOut(true);
+    } catch (e) {
+      const msg = (e as Error).message;
+      setErrMsg(msg === "nothing_running" ? "Nothing to nap: no running session keeps a handover." : msg);
+    }
+  };
   const prs = work.flatPrs;
   const issues = work.issues;
   // A PR I'm only reviewing that fails CI doesn't count: the server clears its
@@ -675,34 +687,55 @@ export function App() {
           </span>
         )}
         <span className="topbar-spacer" />
-        {/* One slot for the day: start it until Fox is up, then clock out. */}
+        {/* The day's slot: nap any time, start until Fox is up, then clock out. */}
         {tuckShown && tuck.round ? (
             <button
               className={`btn topbar-day${tuckRunning ? "" : " tucked"}`}
               onClick={() => setClockingOut(true)}
               title={
-                tuckRunning
-                  ? "Hedgehog is tucking sessions in: keep your laptop open until it's done"
-                  : tuckFailed
-                    ? "Some sessions didn't end: check them before closing your laptop"
-                    : "All tucked in: safe to close your laptop"
+                napping
+                  ? tuckRunning
+                    ? "Hedgehog is saving every session's handover: keep your laptop open until it's done"
+                    : tuckFailed
+                      ? "Some handovers weren't saved"
+                      : "Handovers saved: enjoy the break"
+                  : tuckRunning
+                    ? "Hedgehog is tucking sessions in: keep your laptop open until it's done"
+                    : tuckFailed
+                      ? "Some sessions didn't end: check them before closing your laptop"
+                      : "All tucked in: safe to close your laptop"
               }
             >
               <Critter kind="hedgehog" size={19} className={tuckRunning ? "fox-bob" : undefined} />
               {tuckRunning
                 ? `${tuck.round.panes.filter((p) => p.stage === "done" || p.stage === "failed").length}/${tuck.round.panes.length}`
                 : tuckFailed
-                  ? `${tuckFailed} didn't end`
-                  : "safe to close"}
-            </button>
-          ) : manager?.status !== "running" ? (
-            <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
-              ☀ start
+                  ? napping
+                    ? `${tuckFailed} not saved`
+                    : `${tuckFailed} didn't end`
+                  : napping
+                    ? "saved"
+                    : "safe to close"}
             </button>
           ) : (
-            <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Clock out: Hedgehog updates each session's handover and ends its chat for the night">
-              ☾ clock out
-            </button>
+            <>
+              <button
+                className="btn topbar-day"
+                onClick={nap}
+                title="Nap: Hedgehog saves every session's handover before a break. Nothing ends."
+              >
+                💤 nap
+              </button>
+              {manager?.status !== "running" ? (
+                <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
+                  ☀ start
+                </button>
+              ) : (
+                <button className="btn topbar-day" onClick={() => setClockingOut(true)} title="Clock out: Hedgehog updates each session's handover and ends its chat for the night">
+                  ☾ clock out
+                </button>
+              )}
+            </>
           )}
         <LedgerChip mouse />
         <span className="status-fox-wrap" ref={foxPopRef}>
@@ -811,6 +844,13 @@ export function App() {
             key={active.id}
             foxRunning={active.status === "running"}
             onStartDay={startDay}
+            onRefresh={async () => {
+              try {
+                await api("/api/manager/refresh", { method: "POST" });
+              } catch (e) {
+                setErrMsg((e as Error).message);
+              }
+            }}
             onOpenSession={(name) => {
               const target = rail.find((r) => r.name === name);
               if (target) selectSession(target.id);

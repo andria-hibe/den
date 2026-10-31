@@ -70,12 +70,15 @@ export function openItems(md: string): number {
 export function TodayView({
   foxRunning,
   onStartDay,
+  onRefresh,
   onOpenSession,
   header,
   terminal,
 }: {
   foxRunning: boolean;
   onStartDay: () => Promise<void>;
+  /** Fox redoes the list from a fresh digest, while it's running. */
+  onRefresh: () => Promise<void>;
   /** Open the rail session with this name. */
   onOpenSession: (name: string) => void;
   header: ReactNode;
@@ -103,7 +106,7 @@ export function TodayView({
   const start = async () => {
     setStarting(true);
     try {
-      await onStartDay();
+      await (foxRunning ? onRefresh() : onStartDay());
     } finally {
       setStarting(false);
     }
@@ -151,8 +154,17 @@ export function TodayView({
               );
             })}
           </span>
-          <button className="btn btn-ghost-outline today-start" disabled={starting} onClick={start}>
-            {starting ? "starting…" : "☀ start my day"}
+          <button
+            className="btn btn-ghost-outline today-start"
+            disabled={starting}
+            onClick={start}
+            title={
+              foxRunning
+                ? "Refresh: Tanuki sweeps your inbox and Fox updates the list. Click it any time in the day."
+                : "Start my day: Fox reads every session, your PRs, and Linear, and makes today's list"
+            }
+          >
+            {foxRunning ? (starting ? "refreshing…" : "↻ refresh") : starting ? "starting…" : "☀ start my day"}
           </button>
         </div>
         {content ? (

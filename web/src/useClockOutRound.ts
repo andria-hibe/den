@@ -3,7 +3,7 @@ import type { ClockOutRound } from "../../server/sessions.ts";
 import { api } from "./api.ts";
 import { notify } from "./useNotifications.ts";
 
-/** Hedgehog's clock out round, polled while it runs. `unseen` stays true from
+/** Hedgehog's clock out or nap round, polled while it runs. `unseen` stays true from
  * a round this window watched running until `ack()`, so its "all tucked in"
  * stays on screen until the developer has seen it. */
 export function useClockOutRound() {
@@ -27,7 +27,10 @@ export function useClockOutRound() {
         } else {
           if (r && sawRunning.current) {
             const left = r.panes.filter((p) => p.stage === "failed" || p.handoverFailed).length;
-            if (left) notify("🦔 Clock out done", `${left} didn't finish cleanly. Check before closing your laptop.`);
+            if (r.kind === "nap") {
+              if (left) notify("🦔 Nap round done", `${left} handover${left === 1 ? " wasn't" : "s weren't"} saved.`);
+              else notify("🦔 Handovers saved", "Every session's handover is up to date. Enjoy the break.");
+            } else if (left) notify("🦔 Clock out done", `${left} didn't finish cleanly. Check before closing your laptop.`);
             else notify("🦔 All tucked in", "Every handover is saved. Safe to close your laptop.");
           }
           sawRunning.current = false;

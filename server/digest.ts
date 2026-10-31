@@ -4,7 +4,7 @@
 // secondary rate limit before.
 import { SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import type { Pace } from "../shared/pace.ts";
-import type { GhNotification, PrBuckets, PullRequest } from "./github.ts";
+import type { GhNotification, OpenThread, PrBuckets, PullRequest } from "./github.ts";
 import type { LinearData, LinearNotification } from "./linear.ts";
 import type { StackStatus } from "./stack.ts";
 
@@ -30,6 +30,8 @@ export interface DigestInput {
   week: Pace | null;
   /** Unread inbox items; null when that source didn't answer. */
   inbox: { linear: LinearNotification[] | null; github: GhNotification[] | null };
+  /** Open review threads per authored PR; null where GitHub didn't answer. */
+  reviewThreads?: { pr: number; threads: OpenThread[] | null }[] | null;
 }
 
 /** Checks failing on more than one of the developer's PRs: the same failure
@@ -128,6 +130,21 @@ export function buildDigest(d: DigestInput): string {
   else if (!d.inbox.github.length) out.push("- nothing new");
   for (const n of d.inbox.github ?? []) {
     out.push(`- ${n.reason}: ${n.title} (${n.repo}${n.url ? `, ${n.url}` : ""})`);
+  }
+  if (d.reviewThreads !== undefined) {
+    out.push("", "GitHub, open review threads on my PRs:");
+    if (!d.reviewThreads) out.push("- (GitHub didn't answer)");
+    else if (d.reviewThreads.every((p) => p.threads && !p.threads.length)) out.push("- none open");
+    for (const p of d.reviewThreads ?? []) {
+      if (!p.threads) out.push(`- #${p.pr}: (GitHub didn't answer)`);
+      for (const t of p.threads ?? []) {
+        const body = t.body.replace(/\s+/g, " ").trim();
+        const at = `${t.path}${t.line ? `:${t.line}` : ""}`;
+        const state = t.waitingOnMe ? "waiting on me" : "I replied last";
+        const replies = t.replies ? `, ${t.replies} repl${t.replies === 1 ? "y" : "ies"}` : "";
+        out.push(`- #${p.pr} ${at}, ${t.author}${replies}, ${state}: "${body.length > 300 ? `${body.slice(0, 300)}...` : body}"`);
+      }
+    }
   }
   out.push("");
 

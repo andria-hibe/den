@@ -10,13 +10,14 @@ import { buildDigest } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
-import { managerStartPrompt, toggleTodayItem } from "./manager.ts";
+import { managerRefreshPrompt, managerStartPrompt, toggleTodayItem } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
   getNotifications,
   getPrDetail,
   getPrDiff,
+  openReviewThreads,
   isValidRepo,
   isValidNodeId,
   submitReview,
@@ -26,6 +27,7 @@ import {
   type ReviewEvent,
   type PrBuckets,
   type CheckState,
+  type OpenThread,
 } from "./github.ts";
 import {
   getAssignedIssues,
@@ -917,6 +919,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       hasKey() ? bounded(getInboxNotifications(), null) : Promise.resolve(null),
       bounded(getNotifications(new Date(Date.now() - 24 * 3_600_000)), null),
     ]);
+    // Two at a time, since a burst of GitHub calls has hit its secondary rate
+    // limit before; a PR still unfetched at the bound reads as not answered.
+    const reviewThreads = prs?.authored.map((p) => ({ pr: p.number, repo: p.repo, threads: null as OpenThread[] | null }));
+    if (reviewThreads) {
+      const queue = [...reviewThreads];
+      const worker = async () => {
+        for (let t = queue.shift(); t; t = queue.shift()) t.threads = await openReviewThreads(t.repo, t.pr);
+      };
+      await bounded(Promise.all([worker(), worker()]), undefined);
+    }
     const limits = readLimits();
     const week = limits?.week;
     mkdirSync(MANAGER_DIR, { recursive: true });
@@ -929,6 +941,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         linear,
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
         inbox: { linear: linearInbox, github: githubInbox },
+        reviewThreads: reviewThreads ?? null,
       }),
     );
   };
@@ -944,6 +957,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     // Answered before the paste, which waits for the pane to finish drawing.
     void deliverStart(manager, managerStartPrompt(new Date()));
     return manager.meta();
+  });
+
+  // Today's refresh: any time in the day, a fresh digest and Fox redoes the list.
+  app.post("/api/manager/refresh", async (_req, reply) => {
+    const manager = sessions.manager();
+    if (!manager || manager.status !== "running") {
+      reply.code(409);
+      return { error: "manager_not_running" };
+    }
+    await writeDigest();
+    await paste(manager, managerRefreshPrompt(new Date()), true);
+    return { ok: true };
   });
 
   // A crew button on Fox's pane whose helper reads the digest.
@@ -986,6 +1011,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   app.get("/api/manager/clockout/round", async () => ({ round: sessions.clockOutRound() }));
+
+  // A nap: Hedgehog saves every handover and leaves the panes running.
+  app.post("/api/manager/nap", async (_req, reply) => {
+    const round = sessions.nap();
+    if (round === "busy") {
+      reply.code(409);
+      return { error: "round_running" };
+    }
+    if (round === "empty") {
+      reply.code(400);
+      return { error: "nothing_running" };
+    }
+    return { round };
+  });
 
   // The developer ticks a Today item themselves. Fox is told to read the
   // list before it edits it, so the tick survives Fox's next write.

@@ -561,7 +561,11 @@ developer's day across the other sessions instead of them being the glue.
   `prCache`, Linear from `linearCache`, the week's `weekPace`; GitHub and
   Linear bounded at 10s), then `startManager` (create, or `restartFresh` if
   exited) and pastes + submits `managerStartPrompt` (`server/manager.ts`).
-  den's code gathers the facts so Fox never re-polls GitHub.
+  den's code gathers the facts so Fox never re-polls GitHub. While Fox
+  runs, the Today header's button is **refresh** instead (`POST
+  /api/manager/refresh`: rewrite the digest, then paste + submit
+  `managerRefreshPrompt`: tanuki sweeps the inbox, Fox updates the list,
+  keeping the developer's ticks), meant for any time in the day.
 - Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /
   FYI, `- [ ]` items with `(session: <name>)`); `TodayView` renders it above
   the Fox pane (each box is a button: `tickBoxes` numbers them in file order to
@@ -606,8 +610,9 @@ developer's day across the other sessions instead of them being the glue.
   when to call them. **The developer can call them too**: `CrewButtons` in
   a workspace, my-PR, or review pane's header is one button holding the
   helpers' busts (five separate buttons squeezed the path and branch out of
-  the header at 1240px), each **lit while the pane has that subagent at
-  work** and dimmed otherwise (`server/crewActivity.ts`: SubagentStart/Stop
+  the header at 1240px), each **walking (a stepped hop) while the pane has that subagent at
+  work** or it was just asked for from the card ("on its way", up to 2 min
+  until the pane starts it), and dimmed otherwise (`server/crewActivity.ts`: SubagentStart/Stop
   hooks in the pane's `--settings` append to `~/.den/crew/<groupId>.jsonl`,
   replayed as `meta().crewActive`; an agent whose transcript has been quiet
   15 min counts as gone; cleared on pane spawn/exit); it opens a card listing each helper's job with an
@@ -634,7 +639,12 @@ developer's day across the other sessions instead of them being the glue.
   in `~/.den/manager/clocked-out.json`. Start my day calls
   `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
   `startManager` handles). Attention (the bell) is deliberately not a
-  blocker: Claude rings it at the end of every turn. A **keep-alive pin**
+  blocker: Claude rings it at the end of every turn. **Nap** (the
+  topbar's "💤 nap", `POST /api/manager/nap` -> `sessions.nap()`) is the
+  same round (`hedgehogRound`, `kind: "nap"`) without ending anything:
+  every running workspace and Fox with its handover on, before a break.
+  It's worth more than the 30-minute idle handover when the laptop closes,
+  since a sleeping laptop runs no timers. A **keep-alive pin**
   (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's
   "pin") keeps a pane out of it every night - it shows as "pinned
   to stay running" and keeps its conversation.
@@ -673,7 +683,10 @@ developer's day across the other sessions instead of them being the glue.
   schema surprise can't break the ticket list; newest first) and GitHub
   threads the developer takes part in from the last 24h (`getNotifications`,
   `gh api notifications?participating=true`, `notificationWebUrl` for links)
-  - and each PR's failing checks by name with run links (`failingChecks`,
+  - plus the **open review threads on the developer's PRs**
+  (`openReviewThreads` in `github.ts`: unresolved, not outdated, and
+  whether the last comment is someone else's), so tanuki says which PRs
+  have work to do now and which session should do it - and each PR's failing checks by name with run links (`failingChecks`,
   from the same `gh pr checks --json bucket,name,link` call), plus
   `sharedFailures` (a check failing on more than one PR; tested). Fox's
   `managerAgents` add tanuki (Sonnet, sorts the Inbox section) and raccoon

@@ -739,12 +739,14 @@ export function chooseResume(
  * something staged, or while CI is running. A question waiting for the
  * developer isn't on it: den can't see one (the bell rings at the end of
  * every turn), and Hedgehog's handover carries it into "Waiting on you". */
-/** Where one pane is in Hedgehog's clock out round. "failed": it didn't end. */
+/** Where one pane is in Hedgehog's round. "failed": it didn't end. */
 export type TuckStage = "handover" | "ending" | "done" | "failed";
 
 export interface ClockOutRound {
+  /** "nap": handovers only, the panes keep running (a break, not the day's end). */
+  kind: "clockout" | "nap";
   startedAt: number;
-  /** Set once every pane is ended or given up on: safe to close the laptop. */
+  /** Set once every pane is done or given up on: safe to close the laptop. */
   finishedAt: number | null;
   panes: { id: string; name: string; stage: TuckStage; handoverFailed?: boolean }[];
 }
@@ -1356,16 +1358,34 @@ class SessionManager {
    * close the laptop. "busy": a round is already running; "empty": none of
    * the ids is a running pane. */
   clockOut(ids: string[]): ClockOutRound | "busy" | "empty" {
+    return this.hedgehogRound("clockout", ids);
+  }
+
+  /** A nap: Hedgehog's round without ending anything, for a break in the day.
+   * Every running workspace and Fox with its handover on. */
+  nap(): ClockOutRound | "busy" | "empty" {
+    const ids = [...this.sessions.values()]
+      .filter((s) => s.role === "main" && !s.shell && !s.look && s.status === "running")
+      .filter((s) => (!s.view || s.view === "manager") && s.handover)
+      .map((s) => s.id);
+    return this.hedgehogRound("nap", ids);
+  }
+
+  private hedgehogRound(kind: ClockOutRound["kind"], ids: string[]): ClockOutRound | "busy" | "empty" {
     if (this.round && !this.round.finishedAt) return "busy";
     const panes = ids.flatMap((id) => {
       const s = this.sessions.get(id);
-      const entry: ClockOutRound["panes"][number] = { id, name: s?.name ?? "", stage: "ending" };
+      const entry: ClockOutRound["panes"][number] = {
+        id,
+        name: s?.name ?? "",
+        stage: kind === "nap" ? "handover" : "ending",
+      };
       return s && s.status === "running" ? [{ s, entry }] : [];
     });
     if (panes.length === 0) return "empty";
-    const round: ClockOutRound = { startedAt: Date.now(), finishedAt: null, panes: panes.map((p) => p.entry) };
+    const round: ClockOutRound = { kind, startedAt: Date.now(), finishedAt: null, panes: panes.map((p) => p.entry) };
     this.round = round;
-    const list = new Set(readClockedOut());
+    const list = kind === "clockout" ? new Set(readClockedOut()) : null;
     void Promise.all(
       panes.map(async ({ s, entry }) => {
         try {
@@ -1378,8 +1398,12 @@ class SessionManager {
           if (!s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
             entry.stage = "handover";
             if (!(await this.runIdleHandover(s))) entry.handoverFailed = true;
-            entry.stage = "ending";
           }
+          if (!list) {
+            entry.stage = "done";
+            return;
+          }
+          entry.stage = "ending";
           if (await this.stopPane(s)) {
             list.add(s.id);
             entry.stage = "done";
@@ -1390,13 +1414,13 @@ class SessionManager {
         }
       }),
     ).finally(() => {
-      writeClockedOut([...list]);
+      if (list) writeClockedOut([...list]);
       round.finishedAt = Date.now();
     });
     return round;
   }
 
-  /** The latest clock out round, running or finished; null before the first. */
+  /** The latest clock out or nap round, running or finished; null before the first. */
   clockOutRound(): ClockOutRound | null {
     return this.round;
   }

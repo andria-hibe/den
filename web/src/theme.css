@@ -726,20 +726,23 @@ body {
   border-color: var(--border);
   background: var(--bg-rail);
 }
-/* A helper is lit while the pane has it at work, and resting otherwise. */
+/* A helper walks (a stepped hop from foot to foot) while the pane has it at
+   work or it was just asked for, and rests dimmed otherwise. */
 .crew-face {
+  position: relative;
   opacity: 0.4;
   filter: grayscale(0.6);
 }
 .crew-face.on {
   opacity: 1;
   filter: none;
-  animation: crew-bob 0.9s steps(1) infinite;
+  animation: crew-walk 0.7s steps(1, jump-end) infinite;
 }
-@keyframes crew-bob {
-  50% {
-    transform: translateY(-2px);
-  }
+@keyframes crew-walk {
+  0% { left: -1px; top: 0; }
+  25% { left: 0; top: -2px; }
+  50% { left: 1px; top: 0; }
+  75% { left: 0; top: -2px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .crew-face.on {

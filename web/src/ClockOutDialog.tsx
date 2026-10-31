@@ -17,6 +17,8 @@ const STAGE: Record<TuckStage, string> = {
   failed: "didn't end, still running",
 };
 
+const NAP_STAGE: Record<TuckStage, string> = { ...STAGE, done: "handover saved" };
+
 /** Clock out (#46): Hedgehog refreshes each chosen pane's handover, then ends
  * it; Start my day brings it back on a fresh conversation. Panes that must
  * stay up (mid-work, mid-merge, CI running...) start unticked, with the
@@ -131,6 +133,7 @@ export function ClockOutDialog({
 }
 
 function RoundView({ round, onDone }: { round: ClockOutRound; onDone: () => void }) {
+  if (round.kind === "nap") return <NapView round={round} onDone={onDone} />;
   const finished = !!round.finishedAt;
   const tucked = round.panes.filter((p) => p.stage === "done").length;
   const stillUp = round.panes.filter((p) => p.stage === "failed").length;
@@ -175,6 +178,60 @@ function RoundView({ round, onDone }: { round: ClockOutRound; onDone: () => void
         <div className="modal-foot">
           <button className={`btn${finished ? " btn-primary" : ""}`} onClick={onDone}>
             {finished ? "goodnight" : "hide"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A nap's round: handovers only, so nothing ends and there's no "safe to
+ * close" beyond the handovers being saved. */
+function NapView({ round, onDone }: { round: ClockOutRound; onDone: () => void }) {
+  const finished = !!round.finishedAt;
+  const saved = round.panes.filter((p) => p.stage === "done").length;
+  const unsaved = round.panes.filter((p) => p.handoverFailed).length;
+  const title = !finished
+    ? "Saving handovers…"
+    : unsaved
+      ? `Done, but ${unsaved} handover${unsaved === 1 ? " wasn't" : "s weren't"} saved`
+      : "Handovers saved";
+  return (
+    <div className="modal-backdrop" onClick={onDone}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <span className="clockout-title">
+            <Critter kind="hedgehog" size={38} className={finished ? undefined : "fox-bob"} />
+            <strong>{title}</strong>
+          </span>
+          <button className="btn-ghost" onClick={onDone} title={finished ? "close" : "hide: the topbar keeps count"}>
+            ×
+          </button>
+        </div>
+        {finished && !unsaved ? (
+          <p className="clockout-safe">Every session is still running, with its handover up to date. Enjoy the break.</p>
+        ) : finished ? (
+          <p className="clockout-lede">The sessions marked ! kept running but didn't get a fresh handover.</p>
+        ) : (
+          <p className="clockout-lede">
+            {saved} of {round.panes.length} saved. Sessions keep running. Keep your laptop open until Hedgehog is
+            done: closing it now stops the handovers it's writing.
+          </p>
+        )}
+        <ul className="clockout-round">
+          {round.panes.map((p) => (
+            <li key={p.id} className={`clockout-pane is-${p.handoverFailed ? "failed" : p.stage}`}>
+              <span className="clockout-mark">{p.handoverFailed ? "!" : p.stage === "done" ? "✓" : "·"}</span>
+              <span>
+                {p.name}
+                <span className="cleanup-sub"> {p.handoverFailed ? "handover not saved" : NAP_STAGE[p.stage]}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="modal-foot">
+          <button className={`btn${finished ? " btn-primary" : ""}`} onClick={onDone}>
+            {finished ? "enjoy the break" : "hide"}
           </button>
         </div>
       </div>
