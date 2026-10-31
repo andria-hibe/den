@@ -8,8 +8,18 @@ import { crewAskPrompt, crewFor, type CrewHelper, type CrewPane } from "./prompt
  * has started it: a pane from before the crew hooks never reports one. */
 const CALLED_MS = 2 * 60_000;
 
-/** A pane header's crew: the helpers' busts in one button, walking while the
- * pane has that helper at work (or it was just asked for) and dimmed
+type Called = Partial<Record<CrewHelper, number>>;
+
+/** Helpers asked for per session, outside the component so they survive a
+ * switch to another session and back, and never show on the wrong one. */
+const calledBy = new Map<string, Called>();
+
+/** Asks to one pane run one at a time: the paste route waits for the pane to
+ * go quiet, and two pastes let through together would land in one prompt. */
+const queueBy = new Map<string, Promise<unknown>>();
+
+/** A pane header's crew: the helpers' heads in one button, bouncing while
+ * the pane has that helper at work (or it was just asked for) and dimmed
  * otherwise, which opens a card listing each helper's job with a button that
  * asks the pane to call it. One button so the header keeps room for the path
  * and branch. */
@@ -28,16 +38,21 @@ export function CrewButtons({
   onError: (msg: string) => void;
 }) {
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
-  const [asking, setAsking] = useState<CrewHelper | null>(null);
+  const [asking, setAsking] = useState<CrewHelper[]>([]);
   // Helpers asked for from the card that the pane hasn't started yet.
-  const [called, setCalled] = useState<Partial<Record<CrewHelper, number>>>({});
+  const [called, setCalledState] = useState<Called>(() => calledBy.get(sessionId) ?? {});
+  const setCalled = (update: (prev: Called) => Called) => {
+    const next = update(calledBy.get(sessionId) ?? {});
+    calledBy.set(sessionId, next);
+    setCalledState(next);
+  };
   const card = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const keys = Object.keys(called) as CrewHelper[];
     if (!keys.length) return;
     if (!running) {
-      setCalled({});
+      setCalled(() => ({}));
       return;
     }
     // Once the pane has started a helper, `active` shows it from then on.
@@ -52,6 +67,8 @@ export function CrewButtons({
       Math.max(0, next),
     );
     return () => clearTimeout(t);
+    // setCalled only writes this session's entry and state; it needn't be a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [called, active, running]);
 
   useEffect(() => {
@@ -69,30 +86,40 @@ export function CrewButtons({
     };
   }, [open]);
 
-  const ask = async (helper: CrewHelper, from: HTMLElement) => {
+  const ask = (helper: CrewHelper, from: HTMLElement) => {
     const { text, submit, digest } = crewAskPrompt(helper, pane);
     // The card sits in the pane's header, so this finds that pane's terminal.
     const input = from.closest(".ws-main")?.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
-    setAsking(helper);
-    try {
+    setAsking((prev) => [...prev, helper]);
+    if (submit) setCalled((prev) => ({ ...prev, [helper]: Date.now() }));
+    const job = (queueBy.get(sessionId) ?? Promise.resolve()).then(async () => {
       if (digest) await api("/api/manager/digest", { method: "POST" });
       await api(`/api/sessions/${sessionId}/paste`, {
         method: "POST",
         body: JSON.stringify({ text, submit }),
       });
-      setOpen(null);
-      if (submit) setCalled((prev) => ({ ...prev, [helper]: Date.now() }));
-      else input?.focus();
-    } catch (e) {
-      onError((e as Error).message);
-    } finally {
-      setAsking(null);
-    }
+    });
+    queueBy.set(sessionId, job.catch(() => {}));
+    job
+      .then(() => {
+        // Queued behind earlier asks, it may only now have reached the pane.
+        if (submit) setCalled((prev) => ({ ...prev, [helper]: Date.now() }));
+        // A brief waits in the prompt for the developer to finish it.
+        else {
+          setOpen(null);
+          input?.focus();
+        }
+      })
+      .catch((e) => {
+        onError((e as Error).message);
+        setCalled((prev) => Object.fromEntries(Object.entries(prev).filter(([h]) => h !== helper)));
+      })
+      .finally(() => setAsking((prev) => prev.filter((h) => h !== helper)));
   };
 
   const helpers = crewFor(pane);
   const name = (h: CrewHelper) => CREW.find((c) => c.kind === h)?.name ?? h;
-  const onWay = (h: CrewHelper) => !active.includes(h) && (asking === h || called[h] !== undefined);
+  const onWay = (h: CrewHelper) => !active.includes(h) && (asking.includes(h) || called[h] !== undefined);
   const busy = (h: CrewHelper) => active.includes(h) || onWay(h);
   const working = helpers.filter(busy);
   // Heads in the header; the whole animal in the card, where you ask it for a job.
@@ -131,11 +158,11 @@ export function CrewButtons({
                 </div>
                 <button
                   className="btn btn-ghost-outline crew-ask"
-                  disabled={!running || asking !== null}
+                  disabled={!running || asking.includes(h)}
                   title={brief ? "Starts the message in the prompt for you to finish" : undefined}
                   onClick={(e) => ask(h, e.currentTarget)}
                 >
-                  {asking === h ? "asking..." : brief ? "brief" : "ask"}
+                  {asking.includes(h) ? "asking..." : brief ? "brief" : "ask"}
                 </button>
               </div>
             );

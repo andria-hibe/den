@@ -487,6 +487,7 @@ export function App() {
       <span className="term-actions">
         {!s.shell && (opts?.workspace || s.view === "mypr" || s.view === "review" || s.view === "manager") && (
           <CrewButtons
+            key={s.id}
             sessionId={s.id}
             pane={s.view === "review" ? "review" : s.view === "manager" ? "manager" : "kit"}
             running={s.status === "running"}
