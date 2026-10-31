@@ -125,7 +125,7 @@ export async function getAssignedIssues(): Promise<LinearData> {
 
   const data = await graphql<{
     viewer: { name: string; assignedIssues: { nodes: RawIssue[] } };
-    notifications: { nodes: { readAt: string | null; archivedAt: string | null }[] };
+    inboxNotifications: { nodes: InboxState[] };
   }>(
     `query {
       viewer {
@@ -144,8 +144,8 @@ export async function getAssignedIssues(): Promise<LinearData> {
           }
         }
       }
-      notifications(first: 100) {
-        nodes { readAt archivedAt }
+      inboxNotifications(first: 100, unreadOnly: true) {
+        nodes { readAt archivedAt snoozedUntilAt }
       }
     }`,
     key,
@@ -173,9 +173,7 @@ export async function getAssignedIssues(): Promise<LinearData> {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
 
-  const unreadNotifications = (data.notifications?.nodes ?? []).filter(
-    (n) => !n.readAt && !n.archivedAt,
-  ).length;
+  const unreadNotifications = (data.inboxNotifications?.nodes ?? []).filter(showsUnread).length;
 
   return {
     connected: true,
@@ -255,40 +253,55 @@ export async function getIssueComments(
     .sort((a, b) => a.at.localeCompare(b.at));
 }
 
+interface InboxState {
+  readAt: string | null;
+  archivedAt: string | null;
+  snoozedUntilAt?: string | null;
+}
+
+/** Unread in the inbox as Linear shows it: read, archived, and snoozed
+ * notifications don't count. */
+const showsUnread = (n: InboxState) =>
+  !n.readAt && !n.archivedAt && !(n.snoozedUntilAt && Date.parse(n.snoozedUntilAt) > Date.now());
+
 /** An unread item in the developer's Linear inbox. */
 export interface LinearNotification {
   /** Linear's notification type, e.g. issueCommentMention, issueAssignedToYou. */
   type: string;
   actor: string | null;
   issue: { identifier: string; title: string; url: string } | null;
+  /** Linear's own title and link for it, which a pull request notification
+   * has where an issue one has `issue`. */
+  title: string | null;
+  url: string | null;
   /** The comment it's about, trimmed, when there is one. */
   comment: string | null;
   createdAt: string;
 }
 
-/** The unread, unarchived notifications in the Linear inbox, for the
- * Manager's digest. A separate query from getAssignedIssues, so a schema
+/** The unread notifications in the Linear inbox, grouped as the inbox
+ * groups them, for the Manager's digest. A separate query from getAssignedIssues, so a schema
  * surprise here can't take the ticket list down with it. */
 export async function getInboxNotifications(): Promise<LinearNotification[]> {
   const key = getKey();
   if (!key) throw new Error("not_connected");
   const data = await graphql<{
-    notifications: {
-      nodes: {
+    inboxNotifications: {
+      nodes: (InboxState & {
         type: string;
-        readAt: string | null;
-        archivedAt: string | null;
+        title: string | null;
+        url: string | null;
         createdAt: string;
         actor: { name: string } | null;
         issue?: { identifier: string; title: string; url: string } | null;
         comment?: { body: string } | null;
-      }[];
+      })[];
     };
   }>(
     `query {
-      notifications(first: 50) {
+      inboxNotifications(first: 50, unreadOnly: true) {
         nodes {
-          type readAt archivedAt createdAt
+          type readAt archivedAt snoozedUntilAt createdAt title url
           actor { name }
           ... on IssueNotification { issue { identifier title url } comment { body } }
         }
@@ -296,12 +309,14 @@ export async function getInboxNotifications(): Promise<LinearNotification[]> {
     }`,
     key,
   );
-  return data.notifications.nodes
-    .filter((n) => !n.readAt && !n.archivedAt)
+  return data.inboxNotifications.nodes
+    .filter(showsUnread)
     .map((n) => ({
       type: n.type,
       actor: n.actor?.name ?? null,
       issue: n.issue ?? null,
+      title: n.title ?? null,
+      url: n.url ?? null,
       comment: n.comment?.body ? n.comment.body.replace(/\s+/g, " ").slice(0, 300) : null,
       createdAt: n.createdAt,
     }));

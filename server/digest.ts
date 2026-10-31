@@ -129,8 +129,9 @@ export function buildDigest(d: DigestInput): string {
   if (!d.inbox.linear) out.push("- (Linear didn't answer)");
   else if (!d.inbox.linear.length) out.push("- nothing unread");
   for (const n of d.inbox.linear ?? []) {
-    const about = n.issue ? `${n.issue.identifier} ${n.issue.title}` : "(no issue)";
-    out.push(`- ${n.type} from ${n.actor ?? "someone"} on ${about}${n.comment ? `: "${n.comment}"` : ""}`);
+    const about = n.issue ? `${n.issue.identifier} ${n.issue.title}` : (n.title ?? "(no issue)");
+    const link = n.issue?.url ?? n.url;
+    out.push(`- ${n.type} from ${n.actor ?? "someone"} on ${about}${link ? ` (${link})` : ""}${n.comment ? `: "${n.comment}"` : ""}`);
   }
   out.push("", "GitHub, threads I take part in, since yesterday:");
   if (!d.inbox.github) out.push("- (GitHub didn't answer)");
