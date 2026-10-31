@@ -100,7 +100,13 @@ const tanukiPrompt = (digest: string) =>
   `handling, noise). Open the linked issue or PR only when the item alone ` +
   `doesn't tell you. Return only the items that need them or are worth ` +
   `knowing, one line each with its link, marked Decide, Unblock others, or ` +
-  `FYI.\n` + REPORT_ONLY;
+  `FYI.\n` +
+  `The digest is den's own live read of GitHub and Linear, rewritten just ` +
+  `before you are asked: treat it as current and don't caveat it. Only if ` +
+  `the time at its top is more than 30 minutes ago, say so in one line and ` +
+  `that a refresh on Today rewrites it. To confirm one PR's latest comments ` +
+  `or checks, use \`gh pr view <n> --repo <repo> --comments\` or \`gh pr ` +
+  `checks\` (\`gh api\` is blocked in this pane).\n` + REPORT_ONLY;
 
 const SQUIRREL_PROMPT =
   `You are Squirrel, the den's errand runner for Fox, the developer's day ` +

@@ -80,7 +80,14 @@ function prLine(p: PullRequest): string {
 }
 
 export function buildDigest(d: DigestInput): string {
-  const out: string[] = [`# den digest, ${new Date(d.now).toISOString()}`, ""];
+  const at = new Date(d.now);
+  const local = `${at.toDateString()} ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const out: string[] = [
+    `# den digest, ${local} local (${at.toISOString()})`,
+    "",
+    "den wrote this from live GitHub and Linear reads at that time.",
+    "",
+  ];
 
   out.push("## Sessions", "");
   for (const s of d.sessions) {
