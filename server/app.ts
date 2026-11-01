@@ -47,8 +47,8 @@ import {
   repoBaseName, isValidBranch,
   type WorkEnv,
 } from "./git.ts";
-import { detectAppRunner, appRunnerStatus, detectSetup, setupScript } from "./apprun.ts";
-import { finishMarker, parseFinish, type TabRunLabel } from "./tabRun.ts";
+import { detectAppRunner, appRunnerStatus, detectSetup, setupScript, portHolder, runnPortsFile } from "./apprun.ts";
+import { finishMarker, finishReport, parseFinish, takenPorts, type TabRunLabel } from "./tabRun.ts";
 import { ciFinishes, ciMessage } from "./ciWatch.ts";
 import { notePrs, refreshStacks } from "./stack.ts";
 import { foundAtStart, withFoundAtStart } from "./startContext.ts";
@@ -644,14 +644,24 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       const done = parseFinish(out, label);
       if (!done) return;
       stop();
-      const report = `${what} finished with exit ${done.exit}. Its last lines:\n${done.before.slice(-12).join("\n")}`;
-      // A stack can come up "healthy" and still be unreachable (#34).
-      appRunnerStatus(dir)
-        .then((r) => r.problem)
-        .catch(() => undefined)
-        .then((problem) =>
-          sessions.tell(groupId, problem ? `${report}\nden's check of the app afterwards: ${problem}` : report),
-        );
+      void (async () => {
+        try {
+          const taken = await Promise.all(
+            takenPorts(done.before).map(async (port) => ({ port, holder: await portHolder(port) })),
+          );
+          // A stack can come up "healthy" and still be unreachable (#34).
+          const problem = await appRunnerStatus(dir).then((r) => r.problem, () => undefined);
+          sessions.tell(
+            groupId,
+            finishReport({
+              what, command, dir, exit: done.exit, tail: done.before.slice(-12), taken, problem,
+              portsFile: runnPortsFile(dir),
+            }),
+          );
+        } catch (e) {
+          logWarn("tab run report failed", e);
+        }
+      })();
     });
     return meta;
   };

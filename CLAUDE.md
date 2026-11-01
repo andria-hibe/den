@@ -134,7 +134,12 @@ WebSocket; everything else is REST.
   feedback** (issue 37) - `runInTab` in `app.ts` types the command with a
   `finishMarker` (`server/tabRun.ts`) and watches the tab (`DenSession.watch`,
   not a viewer, so the bell still nudges) for the printed exit status, then
-  tells the pane it started and how it ended, with its last lines.
+  tells the pane it started and how it ended, with its last lines
+  (`finishReport` in `server/tabRun.ts`). A failure also asks the pane to
+  diagnose and fix it then and there and rerun the step, and names any port
+  the output says was taken and what holds it (`takenPorts`, `portHolder`):
+  runn stacks clash on ports every time (runn-cli without a per-worktree
+  Jaeger port), and panes used to report the error and wait to be told.
   Second: **CI watch** (issue 36) - the PR list's fetch (`prCache` in
   `app.ts`) runs `ciFinishes` (`server/ciWatch.ts`) and, for each PR whose
   checks went pending -> pass/fail, `sessions.tellAboutPr` tells its my-PR

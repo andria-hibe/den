@@ -111,7 +111,8 @@ export function runnPortProblem(
   if (!edge.ports.length) {
     return (
       "The edge proxy publishes no ports, so the app can't be reached. Another stack " +
-      "probably holds one of its ports (often the tracing UI's); stop it, then restart this stack."
+      "probably holds one of its ports (often the tracing UI's); give this checkout a free " +
+      "port in .runn/project.env, then restart this stack."
     );
   }
   if (!edge.ports.includes(appPort)) {
@@ -260,6 +261,32 @@ async function runnProblem(dir: string, url: string | undefined, running: boolea
   }
   if (running && url && !(await answersHttp(url))) return `The stack is up but ${url} doesn't answer yet.`;
   return null;
+}
+
+/** What holds a host port: a running container that publishes it, else a
+ * listening process. null when neither answers. */
+export async function portHolder(port: number): Promise<string | null> {
+  try {
+    const { stdout } = await exec("docker", ["ps", "--format", DOCKER_PS_FORMAT], { timeout: 8000 });
+    const c = parseDockerPs(stdout).find((c) => c.ports.includes(port));
+    if (c) return c.project ? `the container ${c.name} (compose project ${c.project})` : `the container ${c.name}`;
+  } catch {
+    // no Docker: fall through to lsof
+  }
+  try {
+    const { stdout } = await exec("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"], { timeout: 5000 });
+    const pid = stdout.match(/^p(\d+)$/m)?.[1];
+    const cmd = stdout.match(/^c(.+)$/m)?.[1];
+    if (pid) return `${cmd ?? "a process"} (pid ${pid})`;
+  } catch {
+    // lsof exits 1 when nothing listens
+  }
+  return null;
+}
+
+/** The checkout's runn ports file, relative to `dir`, if it has one. */
+export function runnPortsFile(dir: string): string | undefined {
+  return existsSync(join(dir, ".runn", "project.env")) ? ".runn/project.env" : undefined;
 }
 
 /** detectAppRunner plus liveness, so the UI offers "open" rather than
