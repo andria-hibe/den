@@ -2911,3 +2911,25 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A pane's context window (ContextChip), in the session header. */
+.context-chip {
+  background: transparent;
+  border: 2px solid var(--border);
+  color: var(--ink-soft);
+  padding: 1px 8px;
+}
+.context-chip .ledger-bar {
+  width: 32px;
+  background: var(--border);
+}
+.context-chip.filling .ledger-fill {
+  background: var(--peach);
+}
+.context-chip.full {
+  border-color: var(--pink-deep);
+  color: var(--pink-deep);
+}
+.context-chip.full .ledger-fill {
+  background: var(--pink-deep);
+}

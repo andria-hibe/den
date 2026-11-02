@@ -15,6 +15,7 @@ import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { CrewButtons } from "./CrewButtons.tsx";
 import { HoverTip } from "./HoverTip.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
+import { ContextChip } from "./ContextChip.tsx";
 import { Fox } from "./Fox.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
@@ -539,6 +540,7 @@ export function App() {
             next ›
           </button>
         )}
+        {s.status === "running" && s.context && <ContextChip context={s.context} canFresh={canStartFresh(s)} />}
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
         )}

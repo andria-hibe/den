@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseLimits, statusLineSettings } from "./limits.ts";
+import { parseContext, parseLimits, statusLineSettings } from "./limits.ts";
 
 describe("parseLimits", () => {
   it("reads both windows, and nothing before the pane's first reply", () => {
@@ -15,6 +15,18 @@ describe("parseLimits", () => {
       at: 1,
     });
     expect(parseLimits(JSON.stringify({ session_id: "x" }), 1)).toBeNull();
+  });
+});
+
+describe("parseContext", () => {
+  it("reads the pane's own conversation only", () => {
+    const json = JSON.stringify({
+      session_id: "now",
+      context_window: { used_percentage: 62, context_window_size: 200000, total_input_tokens: 124000 },
+    });
+    expect(parseContext(json, "now")).toEqual({ usedPercentage: 62, tokens: 124000, windowSize: 200000 });
+    // A pane started fresh still has its old conversation's file until it replies.
+    expect(parseContext(json, "fresh")).toBeNull();
   });
 });
 

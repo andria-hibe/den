@@ -7,6 +7,7 @@ import type { ClockOutRound, TuckStage } from "../../server/sessions.ts";
 interface Verdict {
   id: string;
   name: string;
+  handover: boolean;
   reasons: string[];
 }
 
@@ -96,7 +97,8 @@ export function ClockOutDialog({
         </div>
         <p className="clockout-lede">
           Hedgehog updates each ticked session's handover, then ends its chat. Start my day brings it back
-          tomorrow on a fresh chat that picks up from the handover.
+          tomorrow on a fresh chat that picks up from the handover. A session without a handover, such as a
+          review, comes back on its own chat.
         </p>
         {!panes ? (
           <div className="loading-row">
@@ -112,7 +114,11 @@ export function ClockOutDialog({
                 {p.name}
                 <span className={`cleanup-sub${p.reasons.length ? " clockout-stay" : ""}`}>
                   {" "}
-                  {p.reasons.length ? `keep up: ${p.reasons.join(", ")}` : "safe to end"}
+                  {p.reasons.length
+                    ? `keep up: ${p.reasons.join(", ")}`
+                    : p.handover
+                      ? "safe to end"
+                      : "safe to end, no handover: comes back on its own chat"}
                 </span>
               </span>
             </label>

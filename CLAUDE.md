@@ -554,7 +554,12 @@ last checked and, on a stacked branch, the stack in merge order (issue 44).
 window's start (reset minus 7 days): `early` for the first 10% of the week,
 `ahead` past the even line + 3 points, and when the limit runs out at the
 rate so far if that's before the reset. The hover lists the panes with the
-largest context, the first to start fresh.
+largest context, the first to start fresh. Each Claude pane's header also
+has the field mouse's **context chip** (`ContextChip`: % of the context
+window, peach from 60%, pink from 80%), from `context_window` in the same
+status line file (`readPaneContext` in `limits.ts`, `meta().context`),
+ignored while the file's `session_id` isn't the pane's current
+conversation.
 
 **The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
 `view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
@@ -635,15 +640,18 @@ developer's day across the other sessions instead of them being the glue.
   their crew up at spawn, so existing ones need a restart.
 - **Clock out**: the topbar's "clock out" opens `ClockOutDialog`,
   fed by `GET /api/manager/clockout` (`sessions.clockOutVerdicts`: every
-  running workspace main plus Fox, with pure `clockOutBlockers` - busy
+  running Claude pane, reviews, my-PR and look panes included, with pure
+  `clockOutBlockers` - busy
   (output in the last 20s), a merge or rebase in progress or staged changes
   (`gitWorkState`), CI pending on its PR from `prCache`). Ticked panes go to
   `POST /api/manager/clockout` -> `clockOut`: Hedgehog's round is the idle
   handover fork (`runIdleHandover`, now awaitable; skipped when the notepad
-  is newer than the pane's last output), then `stopPane`, and the id goes
-  in `~/.den/manager/clocked-out.json`. Start my day calls
-  `wakeClockedOut` first, which `restartFresh`es each one (not Fox, which
-  `startManager` handles). Attention (the bell) is deliberately not a
+  is newer than the pane's last output, and for a pane that isn't
+  `canStartFresh`, whose notepad is a review or ticket, not a handover),
+  then `stopPane`, and the id goes in `~/.den/manager/clocked-out.json`.
+  Start my day calls `wakeClockedOut` first, which `restartFresh`es each
+  one that keeps a handover and plain-restarts (resumes) the rest (not
+  Fox, which `startManager` handles). Attention (the bell) is deliberately not a
   blocker: it fires at the end of every turn. Claude Code rings no
   bare bell; every BEL it prints ends an OSC (title spinner frames, links),
   so `scanOsc` in `sessions.ts` skips those and a turn's end is its title

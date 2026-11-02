@@ -15,7 +15,9 @@ import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
 import { contextSize } from "./usage.ts";
 import { setupHint } from "./apprun.ts";
-import { readLimits, removeLimits, statusLineSettings, type PlanLimits } from "./limits.ts";
+import {
+  readLimits, readPaneContext, removeLimits, statusLineSettings, type PaneContext, type PlanLimits,
+} from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
 import { activeCrew, clearCrew, crewHooks } from "./crewActivity.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
@@ -930,6 +932,8 @@ export interface SessionMeta {
   waiting: string[];
   /** The crew subagents (agent types) its Claude pane has at work. */
   crewActive: string[];
+  /** How full its Claude pane's context window is, as of its last reply. */
+  context: PaneContext | null;
 }
 
 type Listener = (msg: ServerMessage) => void;
@@ -1205,6 +1209,7 @@ class DenSession {
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
       crewActive: this.shell || this.role !== "main" ? [] : activeCrew(this.groupId),
+      context: this.shell || this.role !== "main" ? null : readPaneContext(this.groupId, this.claudeSessionId),
     };
   }
 
@@ -1344,19 +1349,21 @@ class SessionManager {
 
   // --- Clock out (#46) ---
 
-  /** Every running Claude workspace and the Manager, with why each must stay
-   * up tonight, if it must. `pendingBranches`: branches whose PR's CI is
-   * still running. */
-  clockOutVerdicts(pendingBranches: Set<string>): { id: string; name: string; reasons: string[] }[] {
+  /** Every running Claude pane, with why each must stay up tonight, if it
+   * must, and whether it keeps a handover to start fresh from.
+   * `pendingBranches`: branches whose PR's CI is still running. */
+  clockOutVerdicts(
+    pendingBranches: Set<string>,
+  ): { id: string; name: string; handover: boolean; reasons: string[] }[] {
     const now = Date.now();
     return [...this.sessions.values()]
-      .filter((s) => s.role === "main" && !s.shell && s.status === "running" && (!s.view || s.view === "manager"))
-      .filter((s) => !s.look)
+      .filter((s) => s.role === "main" && !s.shell && s.status === "running")
       .map((s) => {
         const git = gitWorkState(s.cwd);
         return {
           id: s.id,
           name: s.name,
+          handover: canStartFresh(s),
           reasons: clockOutBlockers({
             pinned: s.keepAlive,
             busy: !ptyLooksIdle(s.lastOutputAt, now, 20_000),
@@ -1370,8 +1377,9 @@ class SessionManager {
 
   /** Hedgehog's round: refresh each pane's handover from a fork of its
    * conversation (skipped when the notepad is already newer than its last
-   * output), end the pane, and remember it, so Start my day brings it back
-   * fresh rather than reloading the whole chat. Its progress is
+   * output, or the pane keeps no handover), end the pane, and remember it, so
+   * Start my day brings it back: fresh from its handover, or on its own chat
+   * when it has none. Its progress is
    * `clockOutRound()`, which the developer watches to know when it's safe to
    * close the laptop. "busy": a round is already running; "empty": none of
    * the ids is a running pane. */
@@ -1413,7 +1421,8 @@ class SessionManager {
           } catch {
             // no notepad yet
           }
-          if (!s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
+          // A review's or ticket look's notepad is its review or ticket, not a handover.
+          if (canStartFresh(s) && !s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
             entry.stage = "handover";
             if (!(await this.runIdleHandover(s))) entry.handoverFailed = true;
           }
@@ -1443,12 +1452,14 @@ class SessionManager {
     return this.round;
   }
 
-  /** Start my day: bring back last night's clocked-out panes on fresh
-   * conversations, picking up from their handovers. */
+  /** Start my day: bring back last night's clocked-out panes, on fresh
+   * conversations picking up from their handovers where they keep one. */
   async wakeClockedOut(): Promise<void> {
     for (const id of readClockedOut()) {
       const s = this.sessions.get(id);
-      if (s && s.status === "exited" && s.view !== "manager") await this.restartFresh(id);
+      if (!s || s.status !== "exited" || s.view === "manager") continue;
+      if (canStartFresh(s)) await this.restartFresh(id);
+      else this.restart(id);
     }
     writeClockedOut([]);
   }

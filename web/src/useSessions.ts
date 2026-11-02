@@ -73,6 +73,7 @@ export function useSessions({
                   ticketChanged: s.ticketChanged,
                   waiting: s.waiting,
                   crewActive: s.crewActive,
+                  context: s.context,
                 }
               : loc;
           }),

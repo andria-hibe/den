@@ -117,6 +117,65 @@ export function readLimits(): PlanLimits | null {
 
 export function removeLimits(groupId: string): void {
   const file = limitsFile(groupId);
+  contextCache.delete(groupId);
   rmSync(file, { force: true });
   rmSync(`${file}.tmp`, { force: true });
+}
+
+/** How full one pane's context window is, from the same status line input. */
+export interface PaneContext {
+  usedPercentage: number;
+  tokens: number;
+  windowSize: number;
+}
+
+/** The context reading in a status line's input, or null when it belongs to
+ * another conversation (a pane started fresh keeps the old file until its
+ * first reply) or Claude Code left it out. */
+export function parseContext(json: string, sessionId: string | null): PaneContext | null {
+  try {
+    const d = JSON.parse(json) as {
+      session_id?: unknown;
+      context_window?: {
+        used_percentage?: unknown;
+        context_window_size?: unknown;
+        total_input_tokens?: unknown;
+      };
+    };
+    if (sessionId && d.session_id !== sessionId) return null;
+    const cw = d.context_window;
+    if (typeof cw?.used_percentage !== "number" || typeof cw.context_window_size !== "number") return null;
+    return {
+      usedPercentage: cw.used_percentage,
+      tokens: typeof cw.total_input_tokens === "number" ? cw.total_input_tokens : 0,
+      windowSize: cw.context_window_size,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const contextCache = new Map<string, { mtime: number; sessionId: string | null; value: PaneContext | null }>();
+
+/** A pane's context reading, re-read only when its file changes, since the
+ * session list asks for every pane every few seconds. */
+export function readPaneContext(groupId: string, sessionId: string | null): PaneContext | null {
+  const file = limitsFile(groupId);
+  let mtime: number;
+  try {
+    mtime = statSync(file).mtimeMs;
+  } catch {
+    contextCache.delete(groupId);
+    return null;
+  }
+  const hit = contextCache.get(groupId);
+  if (hit && hit.mtime === mtime && hit.sessionId === sessionId) return hit.value;
+  let value: PaneContext | null = null;
+  try {
+    value = parseContext(readFileSync(file, "utf8"), sessionId);
+  } catch {
+    // removed since the stat
+  }
+  contextCache.set(groupId, { mtime, sessionId, value });
+  return value;
 }
