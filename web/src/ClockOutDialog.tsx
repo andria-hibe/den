@@ -175,7 +175,11 @@ function RoundView({ round, onDone }: { round: ClockOutRound; onDone: () => void
               <span className="clockout-mark">{p.stage === "done" ? "✓" : p.stage === "failed" ? "!" : "·"}</span>
               <span>
                 {p.name}
-                <span className="cleanup-sub"> {STAGE[p.stage]}</span>
+                <span className="cleanup-sub">
+                  {" "}
+                  {STAGE[p.stage]}
+                  {p.noHandover && p.stage === "done" ? " (no handover)" : ""}
+                </span>
                 {p.handoverFailed && <span className="cleanup-sub clockout-stay"> (handover not saved)</span>}
               </span>
             </li>
@@ -230,7 +234,10 @@ function NapView({ round, onDone }: { round: ClockOutRound; onDone: () => void }
               <span className="clockout-mark">{p.handoverFailed ? "!" : p.stage === "done" ? "✓" : "·"}</span>
               <span>
                 {p.name}
-                <span className="cleanup-sub"> {p.handoverFailed ? "handover not saved" : NAP_STAGE[p.stage]}</span>
+                <span className="cleanup-sub">
+                  {" "}
+                  {p.handoverFailed ? "handover not saved" : p.noHandover ? "no handover to save" : NAP_STAGE[p.stage]}
+                </span>
               </span>
             </li>
           ))}

@@ -658,7 +658,8 @@ developer's day across the other sessions instead of them being the glue.
   glyph going from a spinner to "\u2733" while nobody watches (`titleBusy`). **Nap** (the
   topbar's "💤 nap", `POST /api/manager/nap` -> `sessions.nap()`) is the
   same round (`hedgehogRound`, `kind: "nap"`) without ending anything:
-  every running workspace and Fox with its handover on, before a break.
+  every running Claude pane, before a break; one that isn't
+  `canStartFresh` is listed done at once as `noHandover`.
   It's worth more than the 30-minute idle handover when the laptop closes,
   since a sleeping laptop runs no timers. A **keep-alive pin**
   (`keepAlive` column, `POST /api/sessions/:id/keepalive`, the header's

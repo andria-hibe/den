@@ -775,7 +775,7 @@ export interface ClockOutRound {
   startedAt: number;
   /** Set once every pane is done or given up on: safe to close the laptop. */
   finishedAt: number | null;
-  panes: { id: string; name: string; stage: TuckStage; handoverFailed?: boolean }[];
+  panes: { id: string; name: string; stage: TuckStage; handoverFailed?: boolean; noHandover?: boolean }[];
 }
 
 export function clockOutBlockers(p: {
@@ -1388,11 +1388,10 @@ class SessionManager {
   }
 
   /** A nap: Hedgehog's round without ending anything, for a break in the day.
-   * Every running workspace and Fox with its handover on. */
+   * Every running Claude pane; those without a handover are listed as such. */
   nap(): ClockOutRound | "busy" | "empty" {
     const ids = [...this.sessions.values()]
-      .filter((s) => s.role === "main" && !s.shell && !s.look && s.status === "running")
-      .filter((s) => (!s.view || s.view === "manager") && s.handover)
+      .filter((s) => s.role === "main" && !s.shell && s.status === "running")
       .map((s) => s.id);
     return this.hedgehogRound("nap", ids);
   }
@@ -1401,10 +1400,12 @@ class SessionManager {
     if (this.round && !this.round.finishedAt) return "busy";
     const panes = ids.flatMap((id) => {
       const s = this.sessions.get(id);
+      const noHandover = !!s && !canStartFresh(s);
       const entry: ClockOutRound["panes"][number] = {
         id,
         name: s?.name ?? "",
-        stage: kind === "nap" ? "handover" : "ending",
+        stage: kind === "nap" ? (noHandover ? "done" : "handover") : "ending",
+        ...(noHandover ? { noHandover } : {}),
       };
       return s && s.status === "running" ? [{ s, entry }] : [];
     });
@@ -1422,7 +1423,7 @@ class SessionManager {
             // no notepad yet
           }
           // A review's or ticket look's notepad is its review or ticket, not a handover.
-          if (canStartFresh(s) && !s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
+          if (!entry.noHandover && !s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
             entry.stage = "handover";
             if (!(await this.runIdleHandover(s))) entry.handoverFailed = true;
           }

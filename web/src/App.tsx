@@ -129,7 +129,7 @@ export function App() {
       setClockingOut(true);
     } catch (e) {
       const msg = (e as Error).message;
-      setErrMsg(msg === "nothing_running" ? "Nothing to nap: no running session keeps a handover." : msg);
+      setErrMsg(msg === "nothing_running" ? "Nothing to nap: no Claude session is running." : msg);
     }
   };
   const prs = work.flatPrs;
