@@ -96,7 +96,10 @@ const SEARCH_LIMIT = 20;
 const SEARCH_ATTEMPTS = 3;
 const SEARCHES = {
   authored: "is:pr is:open author:@me",
-  requested: "is:pr is:open review-requested:@me",
+  // `review-requested` also matches a request to a team you're in; GitHub's
+  // round robin adds the member it picks as a reviewer of their own, which this
+  // matches.
+  requested: "is:pr is:open user-review-requested:@me",
   reviewed: "is:pr is:open reviewed-by:@me",
 } as const;
 type SearchName = keyof typeof SEARCHES;
@@ -370,8 +373,8 @@ export function prKey(p: { repo: string; number: number }): string {
 }
 
 /**
- * The "review requested" bucket, from the `--review-requested=@me` and
- * `--reviewed-by=@me` searches. Reviewing a PR clears GitHub's review
+ * The "review requested" bucket, from the `user-review-requested:@me` and
+ * `reviewed-by:@me` searches. Reviewing a PR clears GitHub's review
  * request, so the reviewed-by search keeps the card until the PR is merged or
  * closed (both searches are `--state=open`). Ones still waiting on you sort
  * first, then most recently updated.

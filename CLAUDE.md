@@ -168,11 +168,14 @@ WebSocket; everything else is REST.
   `hydrate()`, so a restart replays recent output instead of an empty pane.
 - `server/github.ts` — wraps the authed `gh` CLI: PR buckets (authored vs
   review-requested → `isMine`). The three searches (`author:@me`,
-  `review-requested:@me`, `reviewed-by:@me`) run as **one `gh api graphql`
+  `user-review-requested:@me`, `reviewed-by:@me`) run as **one `gh api graphql`
   request** (`searchPrs`) that also carries branch + review decision, so the
   only per-PR call left is `gh pr checks` — three `gh search prs` calls plus a
   `gh pr view` per PR hit GitHub's secondary rate limit ("GitHub request
-  failed", 2026-10-23). **GitHub search is flaky**: the same query seconds
+  failed", 2026-10-23). `user-review-requested`, not `review-requested`, which
+  also matches a request to a team you're in (the developers team on every
+  runn PR); a member GitHub's round robin picks is requested by name, so
+  that still shows. **GitHub search is flaky**: the same query seconds
   apart can return its `issueCount` with no nodes, so `searchPrs` retries a
   short result (up to 3 tries, nodes unioned), and **`splitByAuthor` buckets
   by the PR's author, never by which search found it** (`reviewed-by` matches
