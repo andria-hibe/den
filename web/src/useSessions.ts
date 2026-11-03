@@ -152,7 +152,12 @@ export function useSessions({
       });
       setSessions((prev) => prev.map((s) => (s.id === meta.id ? meta : s)));
     } catch (e) {
-      onError((e as Error).message);
+      const msg = (e as Error).message;
+      onError(
+        msg === "handover_failed"
+          ? "Couldn't bring the handover up to date, so this chat is still running. Try again, or update the handover yourself first."
+          : msg,
+      );
     }
   };
 

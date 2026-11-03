@@ -513,7 +513,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   app.post("/api/sessions/:id/restart", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { fresh } = (req.body ?? {}) as { fresh?: boolean };
-    const meta = fresh === true ? await sessions.restartFresh(id) : sessions.restart(id);
+    const meta = fresh === true ? await sessions.restartFresh(id, { saveHandover: true }) : sessions.restart(id);
+    if (meta === "handover_failed") {
+      reply.code(409);
+      return { error: "handover_failed" };
+    }
     if (!meta) {
       reply.code(409);
       return { error: "cannot_restart" };

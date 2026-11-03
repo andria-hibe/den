@@ -538,7 +538,12 @@ borrowing the newest one there resumed another ticket's conversation (issue 25).
 workspace main pane (if running, via `stopPane`, shared with `setOwned`),
 pins a **new** `claudeSessionId`, and restarts it - `chooseResume` then
 starts a new conversation under that id, which picks up from the handover
-its system prompt says to read first. Only panes `canStartFresh`
+its system prompt says to read first. The button's route first has a
+headless fork bring the handover up to date (`runIdleHandover(s, "fresh")`)
+when the notepad is older than the pane's last output or transcript write
+(`handoverBehind`, shared with Hedgehog's round), and leaves the pane
+running with a `handover_failed` 409 if that fails; Start my day's wakes
+skip it, since clock out just wrote the handovers. Only panes `canStartFresh`
 (`shared/handover.ts`: a workspace main with its handover on). Route:
 `POST /api/sessions/:id/restart` with `{ fresh: true }`; UI: the header's
 `FreshStartButton` (inline confirm when running). A plain restart still

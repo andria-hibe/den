@@ -47,8 +47,10 @@ describe("idleHandoverDue", () => {
 describe("idleHandoverPrompt", () => {
   const text = idleHandoverPrompt("/Users/x/.den/progress/g.md");
   it("is ASCII and names the notepad", () => {
-    expect(isAscii(text)).toBe(true);
-    expect(text).toContain("/Users/x/.den/progress/g.md");
+    for (const t of [text, idleHandoverPrompt("/Users/x/.den/progress/g.md", "fresh")]) {
+      expect(isAscii(t)).toBe(true);
+      expect(t).toContain("/Users/x/.den/progress/g.md");
+    }
   });
   it("only touches the notepad", () => {
     expect(text).toContain("Do not run anything or change any other file.");

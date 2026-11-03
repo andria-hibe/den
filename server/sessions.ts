@@ -23,7 +23,7 @@ import { activeCrew, clearCrew, crewHooks } from "./crewActivity.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
 import { repoBaseName } from "./git.ts";
 import { denRepo, workDir } from "./fs.ts";
-import { hasSession, latestSessionForCwd } from "./discover.ts";
+import { hasSession, latestSessionForCwd, sessionMtime } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
@@ -835,9 +835,15 @@ export function idleHandoverDue(p: {
  * a pane waiting at a permission prompt looks exactly as idle as a finished
  * one, and typing into it would answer the prompt, or send a draft the
  * developer left in the input box. */
-export function idleHandoverPrompt(notepad: string): string {
+export function idleHandoverPrompt(notepad: string, reason: "quiet" | "fresh" = "quiet"): string {
+  const why =
+    reason === "fresh"
+      ? `den: the developer is starting this session fresh, so this conversation ` +
+        `ends now and a new one picks up from your handover alone. If it is ` +
+        `already current, leave it as it is. Otherwise bring your handover at ${notepad} up to `
+      : `den: this session has gone quiet. Bring your handover at ${notepad} up to `;
   return (
-    `den: this session has gone quiet. Bring your handover at ${notepad} up to ` +
+    why +
     `date with where the work stands right now, following the handover rules in ` +
     `your instructions: rewrite the developer's four sections and the session ` +
     `notes in place, and leave everything else in the file alone. If you were ` +
@@ -973,6 +979,9 @@ class DenSession {
   /** When den last ran an idle handover for this pane, and whether one is
    * running now. */
   lastHandoverAt = 0;
+  /** When the last handover fork that succeeded started; a fork may leave a
+   * current notepad unwritten, so its mtime alone would ask again. */
+  handoverSavedAt = 0;
   handoverRunning = false;
   /** The notepad mtime keepTicket last checked. */
   ticketCheckedMtime = 0;
@@ -1320,12 +1329,13 @@ class SessionManager {
    * It may only read and edit the notepad. A failure is logged, the pane is
    * left as it was, and the promise resolves false.
    */
-  private runIdleHandover(s: DenSession): Promise<boolean> {
+  private runIdleHandover(s: DenSession, reason: "quiet" | "fresh" = "quiet"): Promise<boolean> {
     const id = s.claudeSessionId;
     if (!id || !hasSession(id)) return Promise.resolve(true); // nothing said in the pane yet
     const notepad = notepadPath(s.groupId);
     s.handoverRunning = true;
-    s.lastHandoverAt = Date.now();
+    const startedAt = Date.now();
+    s.lastHandoverAt = startedAt;
     return new Promise((resolve) => execFile(
       "claude",
       [
@@ -1336,12 +1346,13 @@ class SessionManager {
         "--add-dir", PROGRESS_DIR,
         "--allowedTools", "Read", `Edit(//${notepad.replace(/^\/+/, "")})`,
         "--append-system-prompt", progressInstruction(notepad),
-        "--", idleHandoverPrompt(notepad),
+        "--", idleHandoverPrompt(notepad, reason),
       ],
       { cwd: s.cwd, timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024 },
       (err) => {
         s.handoverRunning = false;
         if (err) logWarn("idleHandover", err);
+        else s.handoverSavedAt = startedAt;
         resolve(!err);
       },
     ));
@@ -1416,14 +1427,8 @@ class SessionManager {
     void Promise.all(
       panes.map(async ({ s, entry }) => {
         try {
-          let notepadMtime = 0;
-          try {
-            notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
-          } catch {
-            // no notepad yet
-          }
           // A review's or ticket look's notepad is its review or ticket, not a handover.
-          if (!entry.noHandover && !s.handoverRunning && notepadMtime < s.lastOutputAt - NOTEPAD_FRESH_MS) {
+          if (!entry.noHandover && !s.handoverRunning && this.handoverBehind(s)) {
             entry.stage = "handover";
             if (!(await this.runIdleHandover(s))) entry.handoverFailed = true;
           }
@@ -1446,6 +1451,20 @@ class SessionManager {
       round.finishedAt = Date.now();
     });
     return round;
+  }
+
+  /** Has the pane's conversation moved on since its notepad was last written?
+   * The transcript's mtime covers an exited pane, whose output time is gone
+   * after a den restart. */
+  private handoverBehind(s: DenSession): boolean {
+    let notepadMtime = 0;
+    try {
+      notepadMtime = statSync(notepadPath(s.groupId)).mtimeMs;
+    } catch {
+      // no notepad yet
+    }
+    const lastActivity = Math.max(s.lastOutputAt, s.claudeSessionId ? sessionMtime(s.claudeSessionId) : 0);
+    return Math.max(notepadMtime, s.handoverSavedAt) < lastActivity - NOTEPAD_FRESH_MS;
   }
 
   /** The latest clock out or nap round, running or finished; null before the first. */
@@ -1842,10 +1861,20 @@ class SessionManager {
   /** End a workspace pane's conversation and start a new one that picks up
    * from its handover (#43), so a chat that has run for days stops reloading
    * its whole context. The old conversation stays in the Resume list. Null if
-   * the pane has no handover to pick up from. */
-  async restartFresh(id: string): Promise<SessionMeta | null> {
+   * the pane has no handover to pick up from.
+   * `saveHandover`: first have a fork of the conversation bring a handover
+   * that's behind up to date, and leave the pane as it is if that fails
+   * ("handover_failed"), since the new conversation knows only the handover. */
+  async restartFresh(
+    id: string,
+    opts: { saveHandover?: boolean } = {},
+  ): Promise<SessionMeta | null | "handover_failed"> {
     const s = this.sessions.get(id);
     if (!s || !canStartFresh(s)) return null;
+    if (opts.saveHandover) {
+      while (s.handoverRunning) await new Promise((r) => setTimeout(r, 500));
+      if (this.handoverBehind(s) && !(await this.runIdleHandover(s, "fresh"))) return "handover_failed";
+    }
     if (!(await this.stopPane(s))) return s.meta();
     // A pinned id with no transcript starts a new conversation (chooseResume).
     s.claudeSessionId = randomUUID();

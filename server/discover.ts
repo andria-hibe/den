@@ -133,15 +133,21 @@ function allTranscripts(): { fp: string; id: string; mtime: number }[] {
 
 /** Does `claude --resume <id>` have a conversation to resume? */
 export function hasSession(id: string): boolean {
-  if (!id || !existsSync(PROJECTS)) return false;
+  return sessionMtime(id) > 0;
+}
+
+/** When conversation `id`'s transcript was last written; 0 if there is none. */
+export function sessionMtime(id: string): number {
+  if (!id || !existsSync(PROJECTS)) return 0;
   for (const dir of readdirSync(PROJECTS)) {
     try {
-      if (existsSync(join(PROJECTS, dir, `${id}.jsonl`))) return true;
+      const file = join(PROJECTS, dir, `${id}.jsonl`);
+      if (existsSync(file)) return statSync(file).mtimeMs;
     } catch {
       // skip unreadable dir
     }
   }
-  return false;
+  return 0;
 }
 
 /** The newest resumable session recorded in this cwd: a best guess for a pane
