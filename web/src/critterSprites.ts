@@ -286,7 +286,7 @@ export interface CrewMember {
 /** The Manager and its workers, in the order the crew strip shows them. */
 export const CREW: CrewMember[] = [
   { kind: "fox", name: "Fox", job: "Plans your day with you and passes your answers to sessions", model: "Opus", built: true },
-  { kind: "tanuki", name: "Tanuki", job: "Sweeps your Linear inbox and GitHub notifications", model: "Sonnet", built: true },
+  { kind: "tanuki", name: "Tanuki", job: "Sweeps your Linear inbox and GitHub notifications, and spots team PRs that look like easy approvals", model: "Sonnet", built: true },
   { kind: "raccoon", name: "Raccoon", job: "Digs through failing CI and spots the same failure on other PRs", model: "Haiku", built: true },
   { kind: "hedgehog", name: "Hedgehog", job: "Tucks sessions in at clock out by refreshing each handover", model: "the session's own model", built: true },
   { kind: "mouse", name: "Field mouse", job: "Rations the week's tokens: the pace chip in the top bar", model: "plain code, no model", built: true },

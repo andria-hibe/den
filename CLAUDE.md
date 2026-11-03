@@ -718,6 +718,15 @@ developer's day across the other sessions instead of them being the glue.
   (Haiku, reads failed logs with `gh run view --log-failed`, says flake or
   real and whether a fix landed on the base; never reruns). Kits, my-PR and
   review panes get raccoon too, for their own red CI.
+  The digest also has `## Team PRs to pick up` (`getTeamReviewPrs`:
+  `review-requested:@me -user-review-requested:@me`, a request to the
+  developer's team only, minus drafts, their own, ones they reviewed, and
+  APPROVED; then pure `pickupPrs` drops failing CI and PRs a session is on,
+  by branch or number). Tanuki picks the likely easy approvals (at most
+  five `gh pr diff` reads, allowed in `buildManagerPermissions`) and Fox
+  lists them last in today.md under `## Easy approvals to pick up`: plain
+  bullets, no checkbox, outside the ten items, never tagging the developer
+  (filters suggested by Fox, 2026-11-03).
 
 ## Features (all built + committed on `master`)
 

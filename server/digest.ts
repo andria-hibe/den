@@ -4,7 +4,7 @@
 // secondary rate limit before.
 import { SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import type { Pace } from "../shared/pace.ts";
-import type { GhNotification, OpenThread, PrBuckets, PullRequest } from "./github.ts";
+import type { GhNotification, OpenThread, PrBuckets, PullRequest, TeamPr } from "./github.ts";
 import type { LinearData, LinearNotification } from "./linear.ts";
 import type { StackStatus } from "./stack.ts";
 
@@ -32,6 +32,17 @@ export interface DigestInput {
   inbox: { linear: LinearNotification[] | null; github: GhNotification[] | null };
   /** Open review threads per authored PR; null where GitHub didn't answer. */
   reviewThreads?: { pr: number; threads: OpenThread[] | null }[] | null;
+  /** PRs asking the developer's team, not them, for a review, already
+   * through `pickupPrs`; null when GitHub didn't answer. */
+  teamPrs?: TeamPr[] | null;
+}
+
+/** Team PRs worth offering the developer to pick up: not failing CI, and not
+ * one a den session is already on (by branch or PR number). */
+export function pickupPrs(prs: TeamPr[], sessions: { branch: string | null; pr: number | null }[]): TeamPr[] {
+  const branches = new Set(sessions.map((s) => s.branch).filter(Boolean));
+  const numbers = new Set(sessions.map((s) => s.pr).filter(Boolean));
+  return prs.filter((p) => p.checks !== "failing" && !branches.has(p.branch) && !numbers.has(p.number));
 }
 
 /** Checks failing on more than one of the developer's PRs: the same failure
@@ -123,6 +134,28 @@ export function buildDigest(d: DigestInput): string {
       for (const f of shared) out.push(`- ${f.check}: ${f.prs.map((n) => `#${n}`).join(", ")}`);
       out.push("");
     }
+  }
+
+  if (d.teamPrs !== undefined) {
+    out.push(
+      "## Team PRs to pick up",
+      "",
+      "Open PRs asking my team, not me, for a review. Already left out: drafts, ones I wrote or reviewed, approved ones, failing CI, and ones a session is on.",
+      "",
+    );
+    if (!d.teamPrs) out.push("- (GitHub didn't answer)");
+    else if (!d.teamPrs.length) out.push("- none");
+    for (const p of d.teamPrs ?? []) {
+      const bits = [
+        p.author.startsWith("dependabot") ? "dependabot" : `by ${p.author}`,
+        `+${p.additions}/-${p.deletions} in ${p.files} file${p.files === 1 ? "" : "s"}`,
+        `CI ${p.checks}`,
+        `${p.approvals} approval${p.approvals === 1 ? "" : "s"}`,
+        p.review === "changes_requested" ? "changes requested" : null,
+      ].filter(Boolean);
+      out.push(`- #${p.number} ${p.title} (${p.repo}, ${p.url}) - ${bits.join(", ")}`);
+    }
+    out.push("");
   }
 
   out.push("## Inbox", "", "Linear, unread:");

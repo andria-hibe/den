@@ -14,9 +14,10 @@ export function managerRefreshPrompt(now: Date): string {
   const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return (
     `Refresh my day. It's ${time}. den has just rewritten the digest. Ask tanuki, your inbox ` +
-    `subagent, to go through its Inbox section, then go through the Today list against the ` +
-    `digest and what tanuki found: tick what's done, add what's new and needs me, and drop ` +
-    `what no longer applies. Read the list first and keep the boxes I ticked. Tell me in a few ` +
+    `subagent, to go through its Inbox section and pick easy approvals from its Team PRs ` +
+    `section, then go through the Today list against the digest and what tanuki found: tick ` +
+    `what's done, add what's new and needs me, drop what no longer applies, and rewrite ` +
+    `Easy approvals to pick up. Read the list first and keep the boxes I ticked. Tell me in a few ` +
     `lines what changed, then carry on with me from where we were. I can ask for this any ` +
     `time, so keep it quick.`
   );

@@ -231,6 +231,7 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string) {
         `Read(${root(DATA_DIR)}/**)`,
         "Bash(gh pr view:*)",
         "Bash(gh pr checks:*)",
+        "Bash(gh pr diff:*)",
         "Bash(git log:*)",
         "Bash(git status:*)",
       ],
@@ -525,7 +526,8 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `asks you to start: every session with the developer's part of its ` +
     `handover, the developer's pull requests and reviews with CI and review ` +
     `state, their Linear tickets and unread inbox count, and the week's token ` +
-    `use. Read it first, then send tanuki to sort its Inbox section and, when ` +
+    `use. Read it first, then send tanuki to sort its Inbox section and pick ` +
+    `the likely easy approvals from its Team PRs to pick up section and, when ` +
     `any of the developer's PRs has failing checks, raccoon to read those ` +
     `logs, both at once, and fold what they report into the list. The ` +
     `digest's session names are the names ` +
@@ -537,7 +539,7 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `Then write the day's list to ${today}, replacing yesterday's, in exactly ` +
     `this shape:\n` +
     `# Today, <weekday> <day> <month>\n` +
-    `## Decide\n## Unblock others\n## Continue\n## FYI\n` +
+    `## Decide\n## Unblock others\n## Continue\n## FYI\n## Easy approvals to pick up\n` +
     `Under each heading, one item per line as "- [ ] <one line>" followed by ` +
     `"(session: <session name>)" when it belongs to one, and at most two ` +
     `indented lines of detail: the options and your recommendation. Decide is ` +
@@ -546,7 +548,14 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `replies people are waiting on. Continue is for work in progress and its ` +
     `next step. FYI is for anything else worth knowing. Leave out what a ` +
     `session is already handling and what needs nobody. Rank by what unblocks ` +
-    `the most, and keep the whole list to about ten items. Then say in the ` +
+    `the most, and keep the whole list to about ten items. Easy approvals to ` +
+    `pick up is tanuki's picks, as plain "- [#<number> <title>](<url>): <why ` +
+    `it looks easy>" bullets (den links only that form) with no checkbox and ` +
+    `no session, outside the ten; "none ` +
+    `today" when there are none. They are for the developer to look at if ` +
+    `they want: never request their review, assign anyone, approve, comment, ` +
+    `or @mention them for one, and move one into Unblock others only when ` +
+    `they say they're taking it. Then say in the ` +
     `terminal how many items there are and present the first one.\n` +
     `DURING THE DAY. The developer can tick items in den's Today view too, so ` +
     `read ${today} before you change it and keep their ticks. Keep ${today} ` +

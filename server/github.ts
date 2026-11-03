@@ -752,3 +752,68 @@ export async function getNotifications(since: Date): Promise<GhNotification[]> {
     updatedAt: r.updated_at,
   }));
 }
+
+/** An open PR that asks a team the developer is in for a review, but not the
+ * developer by name: what the digest offers as PRs to pick up. */
+export interface TeamPr {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  branch: string;
+  additions: number;
+  deletions: number;
+  files: number;
+  approvals: number;
+  review: ReviewState;
+  checks: CheckState;
+}
+
+// Drafts and PRs the developer wrote or already reviewed are never theirs to pick up.
+const TEAM_PR_QUERY =
+  "is:pr is:open draft:false review-requested:@me -user-review-requested:@me -author:@me -reviewed-by:@me";
+
+export async function getTeamReviewPrs(): Promise<TeamPr[]> {
+  const query =
+    `query{search(type:ISSUE,first:${SEARCH_LIMIT},query:"${TEAM_PR_QUERY}"){issueCount nodes{` +
+    `... on PullRequest{number title url headRefName additions deletions changedFiles reviewDecision ` +
+    `author{login} repository{nameWithOwner} reviews(states:APPROVED){totalCount}}}}}`;
+  type Node = {
+    number?: number; title: string; url: string; headRefName: string;
+    additions: number; deletions: number; changedFiles: number; reviewDecision: string | null;
+    author: { login: string } | null; repository: { nameWithOwner: string }; reviews: { totalCount: number };
+  };
+  const found = new Map<string, Node>();
+  // See searchPrs: GitHub's search sometimes answers short.
+  for (let attempt = 1; attempt <= SEARCH_ATTEMPTS; attempt++) {
+    const out = await gh(["api", "graphql", "-f", `query=${query}`]);
+    const search = (JSON.parse(out) as { data: { search: { issueCount: number; nodes: (Node | null)[] } } }).data.search;
+    for (const n of search.nodes) if (n?.number) found.set(`${n.repository.nameWithOwner}#${n.number}`, n);
+    if (found.size >= Math.min(search.issueCount, SEARCH_LIMIT)) break;
+  }
+  // APPROVED means it has the approvals the repo's rules ask for.
+  const open = [...found.values()].filter((n) => n.reviewDecision !== "APPROVED");
+  return mapLimit(open, 4, async (n) => {
+    let checks: CheckState = "none";
+    try {
+      checks = summarizeChecks(await fetchChecks(n.repository.nameWithOwner, n.number as number)).state;
+    } catch (err) {
+      logWarn(`github.checks pr#${n.number}`, err);
+    }
+    return {
+      repo: n.repository.nameWithOwner,
+      number: n.number as number,
+      title: n.title,
+      url: n.url,
+      author: n.author?.login ?? "?",
+      branch: n.headRefName,
+      additions: n.additions,
+      deletions: n.deletions,
+      files: n.changedFiles,
+      approvals: n.reviews.totalCount,
+      review: reviewFrom(n.reviewDecision),
+      checks,
+    };
+  });
+}

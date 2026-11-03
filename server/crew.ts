@@ -101,6 +101,15 @@ const tanukiPrompt = (digest: string) =>
   `doesn't tell you. Return only the items that need them or are worth ` +
   `knowing, one line each with its link, marked Decide, Unblock others, or ` +
   `FYI.\n` +
+  `Then go through the digest's Team PRs to pick up section: PRs that ask the ` +
+  `developer's team, not them, for a review, already without drafts, ` +
+  `approved ones, failing CI, and ones a session is on. Pick the likely easy ` +
+  `approvals: small, focused, nothing risky (migrations, auth, money, ` +
+  `deletions), dependabot bumps of dev dependencies. Size and CI settle most; ` +
+  `read the diff with \`gh pr diff <n> --repo <repo>\` for at most five PRs ` +
+  `when they don't. Return them under "Easy approvals", one line each with ` +
+  `its link and why it looks easy, or "none". Never request a review, ` +
+  `assign, approve, or comment on any of them.\n` +
   `The digest is den's own live read of GitHub and Linear, rewritten just ` +
   `before you are asked: treat it as current and don't caveat it. Only if ` +
   `the time at its top is more than 30 minutes ago, say so in one line and ` +
@@ -189,7 +198,8 @@ export function managerAgents(fable: boolean, digest: string): Record<string, Ag
     tanuki: {
       description:
         "Tanuki, the inbox keeper. Sorts the digest's Inbox section (Linear and GitHub) " +
-        "into what needs the developer, what's worth knowing, and what to drop.",
+        "into what needs the developer, what's worth knowing, and what to drop, and picks " +
+        "likely easy approvals from its Team PRs to pick up section.",
       prompt: tanukiPrompt(digest),
       model: "sonnet",
     },

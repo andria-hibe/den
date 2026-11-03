@@ -6,7 +6,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
-import { buildDigest } from "./digest.ts";
+import { buildDigest, pickupPrs } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
@@ -17,6 +17,7 @@ import {
   getNotifications,
   getPrDetail,
   getPrDiff,
+  getTeamReviewPrs,
   openReviewThreads,
   isValidRepo,
   isValidNodeId,
@@ -927,11 +928,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const writeDigest = async () => {
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
-    const [prs, linear, linearInbox, githubInbox] = await Promise.all([
+    const [prs, linear, linearInbox, githubInbox, teamPrs] = await Promise.all([
       bounded(prCache.get(false), null),
       hasKey() ? bounded(linearCache.get(false), null) : Promise.resolve(null),
       hasKey() ? bounded(getInboxNotifications(), null) : Promise.resolve(null),
       bounded(getNotifications(new Date(Date.now() - 24 * 3_600_000)), null),
+      bounded(getTeamReviewPrs(), null),
     ]);
     // Two at a time, since a burst of GitHub calls has hit its secondary rate
     // limit before; a PR still unfetched at the bound reads as not answered.
@@ -946,16 +948,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const limits = readLimits();
     const week = limits?.week;
     mkdirSync(MANAGER_DIR, { recursive: true });
+    const digestSessions = sessions.digestSessions();
     writeFileSync(
       DIGEST_PATH,
       buildDigest({
         now: Date.now(),
-        sessions: sessions.digestSessions(),
+        sessions: digestSessions,
         prs,
         linear,
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
         inbox: { linear: linearInbox, github: githubInbox },
         reviewThreads: reviewThreads ?? null,
+        teamPrs: teamPrs && pickupPrs(teamPrs, digestSessions),
       }),
     );
   };

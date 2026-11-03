@@ -228,7 +228,8 @@ export function crewAskPrompt(helper: CrewHelper, pane: CrewPane): CrewAsk {
             `Ask tanuki, your inbox subagent, to go through my inbox now. den has just rewritten ` +
             `the digest, so its Inbox section is current, including the open review threads on my ` +
             `PRs. Tell me what needs me, which PRs have work to do now and which session should do ` +
-            `it, and what's worth knowing, and add anything that needs me to the Today list.`,
+            `it, and what's worth knowing, and add anything that needs me to the Today list. Have ` +
+            `it pick easy approvals from the Team PRs section too, for Easy approvals to pick up.`,
           submit: true,
           digest: true,
         };
