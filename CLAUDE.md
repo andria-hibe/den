@@ -563,8 +563,10 @@ window's start (reset minus 7 days): `early` for the first 10% of the week,
 `ahead` past the even line + 3 points, and when the limit runs out at the
 rate so far if that's before the reset. The hover lists the panes with the
 largest context, the first to start fresh. Each Claude pane's header also
-has the field mouse's **context chip** (`ContextChip`: % of the context
-window, peach from 60%, pink from 80%), from `context_window` in the same
+has the field mouse's **context chip** (`ContextChip`: tokens in context,
+the bar % of the window; peach from 200k or 60%, pink from 400k or 80%,
+`CONTEXT_FILLING_TOKENS`/`CONTEXT_FULL_TOKENS`, andria's pick 2026-11-03,
+since on a 1M window peach only came at 600k), from `context_window` in the same
 status line file (`readPaneContext` in `limits.ts`, `meta().context`),
 ignored while the file's `session_id` isn't the pane's current
 conversation.
