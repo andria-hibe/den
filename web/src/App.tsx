@@ -16,7 +16,7 @@ import { CrewButtons } from "./CrewButtons.tsx";
 import { HoverTip } from "./HoverTip.tsx";
 import { FreshStartButton } from "./FreshStartButton.tsx";
 import { ContextChip } from "./ContextChip.tsx";
-import { Fox } from "./Fox.tsx";
+import { Fox, SleepingFox } from "./Fox.tsx";
 import { PixelFox } from "./PixelFox.tsx";
 import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentJson, usePersistentNumber, usePersistentString } from "./usePersistent.ts";
@@ -123,6 +123,11 @@ export function App() {
     setClockingOut(false);
     if (!tuckRunning) ackTuck();
   }, [tuckRunning, ackTuck]);
+  // The day's start ends last night's round on the server, which wakes the status fox.
+  const startMyDay = async () => {
+    await startDay();
+    tuck.recheck();
+  };
   const nap = async () => {
     try {
       tuck.watch((await api<{ round: ClockOutRound }>("/api/manager/nap", { method: "POST" })).round);
@@ -141,10 +146,12 @@ export function App() {
     prCount: prs.length,
     linearNotifs: work.linearNotifs,
     urgentTickets: work.issues.filter(isUrgentUnstarted).length,
+    tuckedIn: tuck.round?.kind === "clockout" && !!tuck.round.finishedAt && tuckFailed === 0,
   };
   const statusPose = deriveFoxPose(foxInput);
   const reasons = foxReasons(foxInput);
-  const statusTitle = reasons.length ? `something needs you: ${reasons.join(", ")}` : STATUS_TITLE[statusPose];
+  const statusTitle =
+    statusPose === "alert" ? `something needs you: ${reasons.join(", ")}` : STATUS_TITLE[statusPose];
   const [foxPopOpen, setFoxPopOpen] = useState(false);
   const foxPopRef = useRef<HTMLSpanElement>(null);
   // Last element the arrow-key roving focus landed on (survives re-renders).
@@ -730,7 +737,7 @@ export function App() {
                 💤 nap
               </button>
               {manager?.status !== "running" ? (
-                <button className="btn topbar-day" onClick={startDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
+                <button className="btn topbar-day" onClick={startMyDay} title="Start my day: Fox reads every session, your PRs, and Linear, and makes today's list">
                   ☀ start
                 </button>
               ) : (
@@ -749,7 +756,7 @@ export function App() {
             aria-expanded={foxPopOpen}
             onClick={() => setFoxPopOpen((o) => !o)}
           >
-            <Fox pose={statusPose} size={38} />
+            {statusPose === "sleep" ? <SleepingFox size={38} /> : <Fox pose={statusPose} size={38} />}
           </button>
           {foxPopOpen && (
             <div className="fox-pop" role="dialog" aria-label="den's foxes">
@@ -762,12 +769,7 @@ export function App() {
                   >
                     <div className="fox-pop-stage">
                       {pose === "sleep" ? (
-                        <span className="sleep-fox">
-                          <Fox pose="sleep" size={52} className="fox-bob" />
-                          <span className="zzz z1">z</span>
-                          <span className="zzz z2">z</span>
-                          <span className="zzz z3">z</span>
-                        </span>
+                        <SleepingFox size={52} />
                       ) : (
                         <Fox pose={pose} size={52} />
                       )}
@@ -834,19 +836,14 @@ export function App() {
       <main className="panel term-wrap" data-nav-center tabIndex={-1}>
         {!active ? (
           <div className="empty-terminal">
-            <div className="sleep-fox">
-              <Fox pose="sleep" size={150} className="fox-bob" />
-              <span className="zzz z1">z</span>
-              <span className="zzz z2">z</span>
-              <span className="zzz z3">z</span>
-            </div>
+            <SleepingFox size={150} as="div" />
             <div className="placeholder">the den is quiet — start a session 🌙</div>
           </div>
         ) : active.view === "manager" ? (
           <TodayView
             key={active.id}
             foxRunning={active.status === "running"}
-            onStartDay={startDay}
+            onStartDay={startMyDay}
             onRefresh={async () => {
               try {
                 await api("/api/manager/refresh", { method: "POST" });

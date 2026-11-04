@@ -397,6 +397,25 @@ body {
 }
 .fox-pop .zzz.z2 { font-size: 16px; }
 .fox-pop .zzz.z3 { font-size: 20px; }
+/* The topbar's status fox after clock out: smaller still, to stay inside the bar. */
+/* Darker than the lilac z's, with a light halo: lilac vanished on the pastel bar,
+   which stays light in both themes. */
+.status-fox .zzz {
+  top: 0;
+  right: 0;
+  font-size: 9px;
+  color: #7a5aa8;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.9);
+  animation-name: z-drift-tiny;
+}
+.status-fox .zzz.z2 { font-size: 11px; }
+.status-fox .zzz.z3 { font-size: 13px; }
+@keyframes z-drift-tiny {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-8deg); }
+  18% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translate(6px, -12px) rotate(8deg); }
+}
 @keyframes z-drift-mini {
   0% { opacity: 0; transform: translate(0, 0) rotate(-8deg); }
   18% { opacity: 1; }

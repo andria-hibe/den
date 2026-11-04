@@ -1482,8 +1482,10 @@ class SessionManager {
   }
 
   /** Start my day: bring back last night's clocked-out panes, on fresh
-   * conversations picking up from their handovers where they keep one. */
+   * conversations picking up from their handovers where they keep one, and
+   * drop the finished round, whose clean clock out keeps the status fox asleep. */
   async wakeClockedOut(): Promise<void> {
+    if (this.round?.finishedAt) this.round = null;
     for (const id of readClockedOut()) {
       const s = this.sessions.get(id);
       if (!s || s.status !== "exited" || s.view === "manager") continue;

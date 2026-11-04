@@ -776,7 +776,11 @@ developer's day across the other sessions instead of them being the glue.
   failing its CI does NOT alert, and a review-requested PR that's **already
   approved** no longer alerts. The pose is derived (in `App.tsx`) from three
   inputs — `prNeedsMe` + `prCount` + `linearNotifs` + `urgentTickets` — not set inline. Else `happy`
-  (open PRs) / `sit` (none). Sleeping fox in the empty state; walking fox in
+  (open PRs) / `sit` (none). It sleeps (`tuckedIn`, over everything else)
+  once Hedgehog's clock out round finishes with nothing failed, until Start
+  my day (`wakeClockedOut` drops the finished round; App's `startMyDay`
+  re-fetches it); a nap doesn't count. Sleeping fox (`SleepingFox` in
+  `Fox.tsx`, with its z's) also in the empty state; walking fox in
   loading rows (`.loading-row`) — PR/Linear fetches, and the PR review while
   Claude is writing it. That last one is gated on a review having actually been
   *requested* (`requested` in `PrReviewView`, set by the auto-paste or the "review

@@ -72,3 +72,15 @@ export function Fox({
     />
   );
 }
+
+/** The sleeping fox with its drifting z's; the surrounding CSS sizes the z's. */
+export function SleepingFox({ size, as: Tag = "span" }: { size: number; as?: "span" | "div" }) {
+  return (
+    <Tag className="sleep-fox">
+      <Fox pose="sleep" size={size} className="fox-bob" />
+      <span className="zzz z1">z</span>
+      <span className="zzz z2">z</span>
+      <span className="zzz z3">z</span>
+    </Tag>
+  );
+}

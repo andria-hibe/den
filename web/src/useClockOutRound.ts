@@ -56,6 +56,7 @@ export function useClockOutRound() {
     setPolling(true);
   }, []);
   const ack = useCallback(() => setUnseen(false), []);
+  const recheck = useCallback(() => setPolling(true), []);
 
-  return { round, unseen, watch, ack };
+  return { round, unseen, watch, ack, recheck };
 }

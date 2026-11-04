@@ -20,6 +20,12 @@ describe("deriveFoxPose", () => {
     );
   });
 
+  it("sleeps once Hedgehog has tucked everyone in, even if something needs me", () => {
+    expect(
+      deriveFoxPose({ prNeedsMe: true, prCount: 3, linearNotifs: 2, urgentTickets: 0, tuckedIn: true }),
+    ).toBe("sleep");
+  });
+
   it("sits when there is nothing to show", () => {
     expect(deriveFoxPose({ prNeedsMe: false, prCount: 0, linearNotifs: 0, urgentTickets: 0 })).toBe(
       "sit",

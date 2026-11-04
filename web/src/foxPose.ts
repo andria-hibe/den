@@ -16,11 +16,14 @@ export interface FoxInput {
   linearNotifs: number;
   /** Assigned tickets that are urgent and not started. */
   urgentTickets: number;
+  /** Hedgehog's clock out finished cleanly and the day hasn't started again. */
+  tuckedIn?: boolean;
 }
 
 // The topbar fox's pose, derived rather than set inline so every attention
-// source counts. `sleep` and `walk` are for the empty state and loading rows.
+// source counts. `walk` is for loading rows; `sleep` is also the empty state.
 export function deriveFoxPose(input: FoxInput): FoxPose {
+  if (input.tuckedIn) return "sleep";
   if (foxReasons(input).length > 0) return "alert";
   if (input.prCount > 0) return "happy";
   return "sit";
@@ -49,7 +52,7 @@ export const FOX_POSES: { pose: FoxPose; label: string; note: string }[] = [
   { pose: "happy", label: "Happy", note: "all your PRs look healthy" },
   { pose: "alert", label: "Alert", note: "a PR, a review, an urgent ticket, or Linear needs you" },
   { pose: "walk", label: "Walk", note: "busy — shown while loading" },
-  { pose: "sleep", label: "Sleep", note: "empty — the den is quiet" },
+  { pose: "sleep", label: "Sleep", note: "everyone's tucked in for the night, or the den is quiet" },
 ];
 
 export const STATUS_TITLE: Record<FoxPose, string> = {
@@ -57,6 +60,6 @@ export const STATUS_TITLE: Record<FoxPose, string> = {
   alert:
     "something needs you — a PR to fix, a review you owe, an urgent ticket nobody has started, or Linear notifications",
   sit: "no open PRs right now",
-  sleep: "",
+  sleep: "all tucked in for the night: start my day wakes the den",
   walk: "",
 };
