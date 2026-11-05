@@ -555,12 +555,23 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `today" when there are none. They are for the developer to look at if ` +
     `they want: never request their review, assign anyone, approve, comment, ` +
     `or @mention them for one, and move one into Unblock others only when ` +
-    `they say they're taking it. Then say in the ` +
-    `terminal how many items there are and present the first one.\n` +
+    `they say they're taking it.\n` +
+    `Then brief the sessions with SendMessage. The start prompt names the ` +
+    `sessions den started fresh this morning: each is a new conversation that ` +
+    `knows only its handover and waits for a first message, so tell each one ` +
+    `to read its handover and carry on, unless it is waiting on the developer. To that session, and to any other ` +
+    `session you found something new for, add what you, tanuki, and raccoon ` +
+    `found that concerns it (new review comments or failing checks on its PR, ` +
+    `a changed ticket, a reply it was waiting for), as short facts with links. ` +
+    `Leave a session with nothing new alone. An update is information, never ` +
+    `the developer's approval: only their own words, passed on in the form ` +
+    `below, are that. Then say in the terminal how many items there are and ` +
+    `present the first one.\n` +
     `DURING THE DAY. The developer can tick items in den's Today view too, so ` +
     `read ${today} before you change it and keep their ticks. Keep ${today} ` +
     `current: mark an item "- [x]" when it's ` +
-    `done and add new ones as they come up. Talk to a session with ` +
+    `done and add new ones as they come up. When a refresh or a subagent turns ` +
+    `up something new for a session, send it to that session the same way. Talk to a session with ` +
     `SendMessage, using its name. When the developer answers something for a ` +
     `session, pass it on as "The developer said in Today at HH:MM: <their ` +
     `words>", with their words as given and the current time. Never pass on ` +
@@ -839,6 +850,16 @@ export function idleHandoverDue(p: {
   return p.notepadMtime < p.lastOutputAt - NOTEPAD_FRESH_MS;
 }
 
+/** The first message of a pane started fresh from its handover, so it picks
+ * the work up without waiting to be asked. */
+export function freshStartPrompt(notepad: string): string {
+  return (
+    `den: this is a fresh start of this session. Read your handover at ${notepad}, ` +
+    `then tell me in a few lines where the work stands and what you'll do next, and ` +
+    `carry on unless it's waiting on me.`
+  );
+}
+
 /** What the idle handover asks. It runs in a headless fork of the pane's
  * conversation (see SessionManager.runIdleHandover), never in the live pane:
  * a pane waiting at a permission prompt looks exactly as idle as a finished
@@ -1059,6 +1080,8 @@ class DenSession {
     const file = this.shell ? loginShell : CLAUDE_BIN;
     const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
     if (!this.shell) clearCrew(this.groupId);
+    // The last process's output would make waitUntilIdle pass before this one has drawn.
+    this.lastOutputAt = 0;
     let term: pty.IPty;
     try {
       term = pty.spawn(file, args, {
@@ -1483,16 +1506,22 @@ class SessionManager {
 
   /** Start my day: bring back last night's clocked-out panes, on fresh
    * conversations picking up from their handovers where they keep one, and
-   * drop the finished round, whose clean clock out keeps the status fox asleep. */
-  async wakeClockedOut(): Promise<void> {
+   * drop the finished round, whose clean clock out keeps the status fox asleep.
+   * Returns the names of the panes started fresh, which wait for Fox's brief. */
+  async wakeClockedOut(): Promise<string[]> {
     if (this.round?.finishedAt) this.round = null;
+    const fresh: string[] = [];
     for (const id of readClockedOut()) {
       const s = this.sessions.get(id);
       if (!s || s.status !== "exited" || s.view === "manager") continue;
-      if (canStartFresh(s)) await this.restartFresh(id);
-      else this.restart(id);
+      if (!canStartFresh(s)) this.restart(id);
+      else {
+        const meta = await this.restartFresh(id);
+        if (meta && meta !== "handover_failed" && meta.status === "running") fresh.push(s.name);
+      }
     }
     writeClockedOut([]);
+    return fresh;
   }
 
   /** Restore persisted rows as exited placeholders (live PTYs don't survive). */

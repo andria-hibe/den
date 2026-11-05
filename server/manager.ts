@@ -1,11 +1,16 @@
 // The prompt "Start my day" submits to the Manager pane (#46). Its rules live
 // in managerInstruction; this only says what to do now.
 
-export function managerStartPrompt(now: Date): string {
+/** `fresh`: the sessions den just started fresh, which wait for Fox's brief. */
+export function managerStartPrompt(now: Date, fresh: string[] = []): string {
   const day = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const woke = fresh.length
+    ? ` den started these sessions fresh from their handovers, and they're waiting for your ` +
+      `brief: ${fresh.map((n) => `"${n.replaceAll('"', "'")}"`).join(", ")}.`
+    : "";
   return (
     `Start my day. It's ${day}. den has just refreshed the digest: read it, ` +
-    `write today's list, then take me through it one item at a time.`
+    `write today's list, brief the sessions, then take me through the list one item at a time.${woke}`
   );
 }
 
@@ -17,7 +22,8 @@ export function managerRefreshPrompt(now: Date): string {
     `subagent, to go through its Inbox section and pick easy approvals from its Team PRs ` +
     `section, then go through the Today list against the digest and what tanuki found: tick ` +
     `what's done, add what's new and needs me, drop what no longer applies, and rewrite ` +
-    `Easy approvals to pick up. Read the list first and keep the boxes I ticked. Tell me in a few ` +
+    `Easy approvals to pick up. Read the list first and keep the boxes I ticked. Send each ` +
+    `session anything new you found for it. Tell me in a few ` +
     `lines what changed, then carry on with me from where we were. I can ask for this any ` +
     `time, so keep it quick.`
   );

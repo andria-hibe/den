@@ -549,7 +549,13 @@ running with a `handover_failed` 409 if that fails; Start my day's wakes
 skip it, since clock out just wrote the handovers. Only panes `canStartFresh`
 (`shared/handover.ts`: a workspace main with its handover on). Route:
 `POST /api/sessions/:id/restart` with `{ fresh: true }`; UI: the header's
-`FreshStartButton` (inline confirm when running). A plain restart still
+`FreshStartButton` (confirm in a `ConfirmCard` under the button, like
+`OwnPrToggle`'s: inline confirm text in the never-shrinking `.term-actions`
+pushed its buttons off screen). The route then pastes and submits
+`freshStartPrompt` (read the handover, say where it stands, carry on) once
+the new conversation is up, so it doesn't sit waiting; `spawn()` zeroes
+`lastOutputAt` so that paste's `waitUntilIdle` waits for the new process
+to draw. Start my day's wakes don't send it: Fox briefs those (below). A plain restart still
 resumes the long conversation, so this is what makes ending chats save
 tokens. The handover instruction also asks for when PR/CI/review state was
 last checked and, on a stacked branch, the stack in merge order (issue 44).
@@ -581,7 +587,12 @@ developer's day across the other sessions instead of them being the glue.
   `prCache`, Linear from `linearCache`, the week's `weekPace`; GitHub and
   Linear bounded at 10s), then `startManager` (create, or `restartFresh` if
   exited) and pastes + submits `managerStartPrompt` (`server/manager.ts`).
-  den's code gathers the facts so Fox never re-polls GitHub. While Fox
+  den's code gathers the facts so Fox never re-polls GitHub. The start
+  prompt names the panes `wakeClockedOut` started fresh, and Fox briefs
+  them with `SendMessage` (read your handover, plus what it, tanuki, and
+  raccoon found for that session) instead of den pasting a prompt, so each
+  wakes with the day's news; refresh and the day pass on new findings the
+  same way, never worded as the developer's approval. While Fox
   runs, the Today header's button is **refresh** instead (`POST
   /api/manager/refresh`: rewrite the digest, then paste + submit
   `managerRefreshPrompt`: tanuki sweeps the inbox, Fox updates the list,

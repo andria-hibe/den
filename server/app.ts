@@ -5,7 +5,7 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
+import { sessions, isValidGroupId, freshStartPrompt, notepadPath, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
 import { buildDigest, pickupPrs } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
@@ -514,6 +514,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   app.post("/api/sessions/:id/restart", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { fresh } = (req.body ?? {}) as { fresh?: boolean };
+    const session = sessions.get(id);
+    const chatBefore = session?.claudeSessionId;
     const meta = fresh === true ? await sessions.restartFresh(id, { saveHandover: true }) : sessions.restart(id);
     if (meta === "handover_failed") {
       reply.code(409);
@@ -522,6 +524,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (!meta) {
       reply.code(409);
       return { error: "cannot_restart" };
+    }
+    // A pane that wouldn't stop keeps its old chat, which mustn't get this prompt.
+    if (fresh === true && session && session.claudeSessionId !== chatBefore && meta.status === "running") {
+      void paste(session, freshStartPrompt(notepadPath(session.groupId)), true).catch((e) =>
+        logWarn("fresh start prompt", e),
+      );
     }
     return meta;
   });
@@ -966,14 +974,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.post("/api/manager/start", async (_req, reply) => {
     await writeDigest();
-    await sessions.wakeClockedOut();
+    const fresh = await sessions.wakeClockedOut();
     const manager = await sessions.startManager();
     if (!manager || manager.status !== "running") {
       reply.code(500);
       return { error: "manager_not_started" };
     }
     // Answered before the paste, which waits for the pane to finish drawing.
-    void deliverStart(manager, managerStartPrompt(new Date()));
+    void deliverStart(manager, managerStartPrompt(new Date(), fresh));
     return manager.meta();
   });
 

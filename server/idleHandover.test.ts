@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, idleHandoverDue, idleHandoverPrompt, isAscii } from "./sessions.ts";
+import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, freshStartPrompt, idleHandoverDue, idleHandoverPrompt, isAscii } from "./sessions.ts";
 
 const NOW = 10_000_000_000;
 const due = (over: Partial<Parameters<typeof idleHandoverDue>[0]> = {}) =>
@@ -47,7 +47,11 @@ describe("idleHandoverDue", () => {
 describe("idleHandoverPrompt", () => {
   const text = idleHandoverPrompt("/Users/x/.den/progress/g.md");
   it("is ASCII and names the notepad", () => {
-    for (const t of [text, idleHandoverPrompt("/Users/x/.den/progress/g.md", "fresh")]) {
+    for (const t of [
+      text,
+      idleHandoverPrompt("/Users/x/.den/progress/g.md", "fresh"),
+      freshStartPrompt("/Users/x/.den/progress/g.md"),
+    ]) {
       expect(isAscii(t)).toBe(true);
       expect(t).toContain("/Users/x/.den/progress/g.md");
     }
