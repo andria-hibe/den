@@ -49,14 +49,6 @@ function writeThreads(groupId: string, threads: LineThreads): void {
   renameSync(`${file}.tmp`, file);
 }
 
-export function removeThreads(groupId: string): void {
-  try {
-    writeThreads(groupId, {});
-  } catch {
-    // nothing to clear
-  }
-}
-
 /** The system prompt for a line question. Plain ASCII, like every prompt den writes. */
 export function lineAskInstruction(p: { pr: number | null; diffPath: string; guidePath: string }): string {
   return (
@@ -81,7 +73,18 @@ export function lineAskPrompt(t: { file: string; side: "old" | "new"; line: numb
   );
 }
 
-const READ_ONLY = ["Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)", "Bash(git diff:*)"];
+// Not git log, show, or diff: their --output flag writes a file.
+const READ_ONLY = ["Read", "Grep", "Glob", "Bash(git blame:*)"];
+/** A backstop under the instruction: it runs in a colleague's checkout, and
+ * the developer's own permission mode (auto, for the maintainer) would
+ * otherwise let it write. */
+const NEVER = ["Edit", "Write", "NotebookEdit", "Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr:*)", "Bash(gh api:*)"];
+
+/** Lines with a question still being answered: a second ask would resume a
+ * conversation that has no transcript yet. */
+const answering = new Set<string>();
+
+export class StillAnswering extends Error {}
 
 /** Ask, or follow up on, the question at one line. Resolves with the thread
  * once Claude has answered (or with an error message in its place). */
@@ -90,8 +93,10 @@ export function askLine(
   at: { file: string; side: "old" | "new"; line: number; quote: string; hunk: string },
   question: string,
 ): Promise<LineThread> {
-  const threads = readThreads(ctx.groupId);
   const key = threadKey(at.file, at.side, at.line);
+  if (answering.has(`${ctx.groupId}:${key}`)) return Promise.reject(new StillAnswering());
+  answering.add(`${ctx.groupId}:${key}`);
+  const threads = readThreads(ctx.groupId);
   const existing = threads[key];
   const thread: LineThread = existing ?? { ...at, claudeSessionId: randomUUID(), messages: [] };
   const first = !existing;
@@ -105,12 +110,15 @@ export function askLine(
     "--model", "sonnet",
     "--effort", "low",
     "--add-dir", REVIEW_DIR,
+    "--permission-mode", "default",
     "--allowedTools", ...READ_ONLY,
+    "--disallowedTools", ...NEVER,
     "--append-system-prompt", lineAskInstruction(ctx),
     "--", first ? lineAskPrompt(at, question) : question,
   ];
   return new Promise((resolve) => {
     execFile("claude", args, { cwd: ctx.cwd, timeout: 3 * 60_000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+      answering.delete(`${ctx.groupId}:${key}`);
       const text = err ? "Couldn't get an answer this time; try again." : stdout.trim() || "(no answer)";
       if (err) logWarn("line ask", err);
       // Re-read: another line may have been asked about meanwhile.

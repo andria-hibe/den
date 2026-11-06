@@ -420,7 +420,7 @@ export function NewSessionDialog({
             </div>
             <div className="new-folder">
               <input
-                placeholder="branch name, e.g. andria/fast-1234-thing"
+                placeholder="branch name, e.g. me/abc-123-thing"
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
                 onKeyDown={(e) =>

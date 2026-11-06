@@ -3,12 +3,12 @@ import { churnFromGuide, isChurnPath } from "./churn.ts";
 
 describe("isChurnPath", () => {
   it("spots lockfiles, snapshots, and generated code", () => {
-    for (const p of ["package-lock.json", "apps/rails/Gemfile.lock", "pnpm-lock.yaml", "src/__snapshots__/a.test.ts.snap", "src/__generated__/graphql.ts", "apps/rails/db/schema.rb", "x/app.min.js"]) {
+    for (const p of ["package-lock.json", "app/Gemfile.lock", "pnpm-lock.yaml", "src/__snapshots__/a.test.ts.snap", "src/__generated__/graphql.ts", "apps/rails/db/schema.rb", "x/app.min.js"]) {
       expect(isChurnPath(p)).toBe(true);
     }
   });
   it("leaves source alone", () => {
-    for (const p of ["apps/api/src/plugins/auth.ts", "lib/generator.rb", "src/gen.ts", "package.json"]) {
+    for (const p of ["src/plugins/auth.ts", "lib/generator.rb", "src/gen.ts", "package.json"]) {
       expect(isChurnPath(p)).toBe(false);
     }
   });

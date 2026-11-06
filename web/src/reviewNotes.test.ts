@@ -3,8 +3,8 @@ import { parseReview, matchFile } from "./reviewNotes.ts";
 
 const FILES = ["web/src/App.tsx", "server/git.ts", "server/sessions.ts"];
 const SNAKE = [
-  "apps/hasura/tests/queries/query_notification_subscriptions.test.ts",
-  "apps/rails/db/migrate/20260805025238_add_notification_auto_subscribe_feature_flag.rb",
+  "db/tests/queries/query_user_settings.test.ts",
+  "db/migrate/20200101000000_add_user_settings_flag.rb",
 ];
 
 describe("matchFile", () => {
@@ -27,7 +27,7 @@ describe("matchFile", () => {
   });
   it("keeps underscores in a path (they are not emphasis here)", () => {
     expect(matchFile(SNAKE[0], SNAKE)).toBe(SNAKE[0]);
-    expect(matchFile("query_notification_subscriptions.test.ts", SNAKE)).toBe(SNAKE[0]);
+    expect(matchFile("query_user_settings.test.ts", SNAKE)).toBe(SNAKE[0]);
     expect(matchFile(`**${SNAKE[1]}**`, SNAKE)).toBe(SNAKE[1]);
   });
   it("still strips matched emphasis and a File: prefix", () => {
@@ -85,7 +85,7 @@ describe("parseReview", () => {
 
   it("puts everything in overall when no file headings are used", () => {
     const md = "Just prose about the PR.";
-    expect(parseReview(md, FILES)).toEqual({ overall: md, byFile: {} });
+    expect(parseReview(md, FILES)).toEqual({ overall: md, byFile: {}, checked: "" });
   });
 
   it("drops a file heading with no body", () => {
@@ -117,6 +117,14 @@ describe("parseReview", () => {
   });
 
   it("handles an empty / unwritten notepad", () => {
-    expect(parseReview("", FILES)).toEqual({ overall: "", byFile: {} });
+    expect(parseReview("", FILES)).toEqual({ overall: "", byFile: {}, checked: "" });
+  });
+});
+
+describe("the Checked section", () => {
+  it("is kept apart, not filed under the file before it", () => {
+    const r = parseReview("Good.\n\n## a.ts\n\n- a.ts:1 bad\n\n## Checked\n\n- badger: npm test, 12 passed", ["a.ts"]);
+    expect(r.byFile["a.ts"]).toBe("- a.ts:1 bad");
+    expect(r.checked).toBe("- badger: npm test, 12 passed");
   });
 });

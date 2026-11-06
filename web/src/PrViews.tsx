@@ -9,10 +9,11 @@ import { Splitter, clamp } from "./Splitter.tsx";
 import { usePersistentNumber, usePersistentString } from "./usePersistent.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { PostReviewDialog, ThreadActions } from "./GitHubPost.tsx";
+import { CheckResultsButton, DeepReviewButton } from "./CheckResults.tsx";
 import { buildReviewPost } from "./reviewPost.ts";
 import { churnFromGuide, isChurnPath } from "./churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
-import { autoReviewPrompt, guidePrompt, notePrompt, reviewPrompt } from "./prompts.ts";
+import { autoReviewPrompt, guidePrompt, notePrompt, refreshReviewPrompt, reviewPrompt } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
 function usePrDetail(repo: string, number: number) {
@@ -127,7 +128,7 @@ function InlineComments({
                 {n.body && <Md text={n.body} />}
                 {/* Under a thread's last comment: reply to it, or resolve it. */}
                 {!n.resolved && notes[i + 1]?.threadId !== n.threadId && (
-                  <ThreadActions repo={detail.repo} number={detail.number} note={n} onChanged={onChanged} />
+                  <ThreadActions repo={detail.repo} number={detail.number} note={n} onChanged={onChanged} viewer={detail.viewer} />
                 )}
               </div>
             ))}
@@ -173,6 +174,8 @@ export function PrReviewView({
 }) {
   const { detail, reload } = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
+  // Bumped to fetch the diff again once a review is caught up with new commits.
+  const [diffVersion, setDiffVersion] = useState(0);
   const [review, setReview] = useState<string>("");
   const [guide, setGuide] = useState<string>("");
   // Asked for but not landed yet: the only state where a walking fox is
@@ -198,7 +201,7 @@ export function PrReviewView({
   const [posting, setPosting] = useState(false);
 
   const files = useMemo(() => diffFiles(diff), [diff]);
-  const { overall, byFile } = useMemo(() => parseReview(review, files), [review, files]);
+  const { overall, byFile, checked } = useMemo(() => parseReview(review, files), [review, files]);
   const guideChurn = useMemo(() => churnFromGuide(parseGuide(guide, files).sections), [guide, files]);
   const startCollapsed = (f: string) => isChurnPath(f) || guideChurn.has(f);
   // Both tabs render the notes column, so they share this state.
@@ -210,7 +213,7 @@ export function PrReviewView({
     )
       .then((d) => setDiff(d.diff ?? ""))
       .catch(() => {});
-  }, [repo, number]);
+  }, [repo, number, diffVersion]);
 
   // Poll the review and the guide on one timer, so each fills in as it's written.
   useEffect(() => {
@@ -256,6 +259,42 @@ export function PrReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReview]);
 
+  // Whether the PR has new commits since the guide and review were written.
+  const written = !!(review.trim() || guide.trim());
+  const [stale, setStale] = useState(false);
+  const [catchingUp, setCatchingUp] = useState(false);
+  useEffect(() => {
+    if (!written) return;
+    let stop = false;
+    const check = () =>
+      api<{ stale: boolean }>(`/api/sessions/${sessionId}/review-stale`)
+        .then((d) => !stop && setStale(d.stale))
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 5 * 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [sessionId, written]);
+  const catchUp = async () => {
+    setCatchingUp(true);
+    try {
+      await api(`/api/sessions/${sessionId}/review-diff/refresh`, { method: "POST" });
+      await api(`/api/sessions/${sessionId}/paste`, {
+        method: "POST",
+        body: JSON.stringify({ text: refreshReviewPrompt(number, repo), submit: true }),
+      });
+      setStale(false);
+      setRequested(true);
+      setDiffVersion((v) => v + 1);
+    } catch {
+      // the banner stays, so it can be tried again
+    } finally {
+      setCatchingUp(false);
+    }
+  };
+
   const tabs: { id: typeof tab; label: string; title?: string }[] = [
     ...(work ? [{ id: "handover" as const, label: "Handover" }] : []),
     {
@@ -293,6 +332,14 @@ export function PrReviewView({
             ))}
           </div>
         </div>
+        {stale && (
+          <div className="review-stale">
+            This PR has new commits since the guide and review were written.
+            <button className="btn btn-ghost-outline" disabled={catchingUp} onClick={catchUp}>
+              {catchingUp ? "asking..." : "update them"}
+            </button>
+          </div>
+        )}
         {shown === "handover" && work ? (
           <div className="pr-tab-fill">{work.handover}</div>
         ) : shown === "terminal" && work ? (
@@ -333,6 +380,8 @@ export function PrReviewView({
                   submit
                   onSent={() => setRequested(true)}
                 />
+                <DeepReviewButton sessionId={sessionId} onStarted={() => setRequested(true)} />
+                <CheckResultsButton sessionId={sessionId} poll />
                 {review.trim() && (
                   <button
                     className="btn btn-ghost-outline"
@@ -352,7 +401,15 @@ export function PrReviewView({
                 />
               )}
               {overall ? (
-                <Md text={overall} />
+                <>
+                  <Md text={overall} sources />
+                  {checked && (
+                    <details className="review-checked">
+                      <summary>What was checked (stays in den)</summary>
+                      <Md text={checked} sources />
+                    </details>
+                  )}
+                </>
               ) : requested ? (
                 <div className="loading-row">
                   <Fox pose="walk" size={22} /> reviewing the diff… the general

@@ -23,7 +23,7 @@ export interface SessionRow {
   // --- Session context (restores the rail after a restart) ---
   /** Git branch captured when the session started. */
   branch: string | null;
-  /** Linear ticket identifier this session is for (e.g. "FAST-6115"). */
+  /** Linear ticket identifier this session is for (e.g. "ABC-123"). */
   ticket: string | null;
   /** Lightweight "just looking" ticket viewer session. */
   look: 0 | 1;

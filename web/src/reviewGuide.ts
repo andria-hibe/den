@@ -5,12 +5,23 @@
 
 import { looksLikePath, matchFile } from "./reviewNotes.ts";
 
+export type NoteTone = "explains" | "look closely" | "risk";
+
+/** A guide note pinned to one line: context, a judgment call, or a likely bug. */
+export interface GuideNote {
+  tone: NoteTone;
+  file: string;
+  line: number;
+  text: string;
+}
+
 export interface GuideSection {
   title: string;
-  /** The section's prose, minus the file list. */
+  /** The section's prose, minus the file list and notes. */
   body: string;
   /** The diff paths this section groups, in diff order. */
   files: string[];
+  notes: GuideNote[];
 }
 
 export interface ParsedGuide {
@@ -19,7 +30,14 @@ export interface ParsedGuide {
   sections: GuideSection[];
   /** Changed files no section claimed, in diff order. */
   leftover: string[];
+  /** Files more than one section named (the first keeps them). */
+  twice: string[];
+  /** Paths a Files line named that aren't in the diff. */
+  unknown: string[];
 }
+
+/** "- risk: path:12 `code` - text", the guide's line notes. */
+const NOTE_LINE = /^\s*[-*+]\s+(risk|look closely|explains?)\s*:\s*`?([^\s`:]+):(\d+)`?\s*[-:]?\s*(.*)$/i;
 
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*$/;
 const FENCE = /^ {0,3}(?:```|~~~)/;
@@ -39,13 +57,14 @@ function cleanTitle(text: string): string {
 
 /** The diff paths in a `Files:` line or one of its bullets. Tokens are matched
  * against the diff, so prose drops out on its own. */
-function pathsIn(text: string, files: string[]): string[] {
+function pathsIn(text: string, files: string[], unknown?: string[]): string[] {
   const out: string[] = [];
   for (const raw of text.split(/[,;]+|\s+/)) {
-    const tok = raw.replace(/^[("'[]+|[)"'\].]+$/g, "");
+    const tok = raw.replace(/^[("'[`]+|[)"'\].`]+$/g, "");
     if (tok.length < 3) continue;
     const f = matchFile(tok, files);
     if (f) out.push(f);
+    else if (unknown && looksLikePath(tok)) unknown.push(tok);
   }
   return out;
 }
@@ -64,7 +83,8 @@ function pathsInProse(body: string, files: string[]): string[] {
 
 export function parseGuide(md: string, files: string[]): ParsedGuide {
   const introLines: string[] = [];
-  const raw: { title: string; lines: string[]; files: string[] }[] = [];
+  const raw: { title: string; lines: string[]; files: string[]; notes: GuideNote[] }[] = [];
+  const unknown: string[] = [];
   let cur: (typeof raw)[number] | null = null;
   let fenced = false;
   let inFiles = false;
@@ -84,7 +104,7 @@ export function parseGuide(md: string, files: string[]): ParsedGuide {
       // Claude sometimes falls back to the review's `## <path>` shape; treat
       // such a heading as a one-file section rather than losing the grouping.
       const asFile = matchFile(title, files);
-      cur = { title, lines: [], files: asFile ? [asFile] : [] };
+      cur = { title, lines: [], files: asFile ? [asFile] : [], notes: [] };
       raw.push(cur);
       inFiles = false;
       continue;
@@ -94,15 +114,23 @@ export function parseGuide(md: string, files: string[]): ParsedGuide {
         cur.lines.push(line);
         continue;
       }
+      const note = NOTE_LINE.exec(line);
+      const noteFile = note && matchFile(note[2], files);
+      if (note && noteFile) {
+        const tone = note[1].toLowerCase().startsWith("explain") ? "explains" : (note[1].toLowerCase() as NoteTone);
+        cur.notes.push({ tone, file: noteFile, line: Number(note[3]), text: note[4].trim() });
+        inFiles = false;
+        continue;
+      }
       const fl = FILES_LINE.exec(line);
       if (fl) {
-        cur.files.push(...pathsIn(fl[1], files));
+        cur.files.push(...pathsIn(fl[1], files, unknown));
         inFiles = true;
         continue;
       }
       const b = inFiles ? BULLET.exec(line) : null;
       if (b) {
-        cur.files.push(...pathsIn(b[1], files));
+        cur.files.push(...pathsIn(b[1], files, unknown));
         continue;
       }
       // Blank lines inside a file list are just spacing; anything else is prose
@@ -118,20 +146,24 @@ export function parseGuide(md: string, files: string[]): ParsedGuide {
   // First section to claim a file keeps it, so a diff is never rendered twice.
   const order = new Map(files.map((f, i) => [f, i]));
   const claimed = new Set<string>();
+  const twice = new Set<string>();
   const sections: GuideSection[] = [];
   for (const s of raw) {
     const body = s.lines.join("\n").trim();
     const named = s.files.length ? s.files : pathsInProse(body, files);
+    for (const f of new Set(named)) if (claimed.has(f)) twice.add(f);
     const mine = [...new Set(named)].filter((f) => !claimed.has(f));
     for (const f of mine) claimed.add(f);
     if (!body && mine.length === 0) continue;
     mine.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-    sections.push({ title: s.title, body, files: mine });
+    sections.push({ title: s.title, body, files: mine, notes: s.notes });
   }
 
   return {
     intro: introLines.join("\n").trim(),
     sections,
     leftover: files.filter((f) => !claimed.has(f)),
+    twice: [...twice],
+    unknown: [...new Set(unknown)],
   };
 }

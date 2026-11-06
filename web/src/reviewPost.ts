@@ -3,6 +3,7 @@
 // file's name. GitHub rejects the whole review if one inline comment sits
 // outside the diff, so each line is checked against the diff first.
 import { diffForFiles, lineNumbers } from "./DiffView.tsx";
+import { stripSource } from "./reviewNotes.ts";
 import type { ReviewComment } from "../../server/github.ts";
 
 export interface ReviewPost {
@@ -43,13 +44,29 @@ export function bulletLine(text: string): number | null {
   return word ? Number(word[1]) : null;
 }
 
-/** New-side line numbers present in `file`'s part of the diff. */
-export function linesInDiff(diff: string, file: string): Set<number> {
+/** New-side lines present in `file`'s part of the diff, by number. */
+export function linesInDiff(diff: string, file: string): Map<number, string> {
   const lines = diffForFiles(diff, [file]).split("\n");
   const nos = lineNumbers(lines);
-  const out = new Set<number>();
-  for (const n of nos) if (n.new !== null) out.add(n.new);
+  const out = new Map<number, string>();
+  nos.forEach((n, i) => {
+    if (n.new !== null) out.set(n.new, lines[i].slice(1));
+  });
   return out;
+}
+
+/** The line a bullet is about, put right when its number drifted: the code it
+ * quotes (the first code span) wins over the number, as long as that code is
+ * on exactly one line of the file's diff. */
+export function anchorLine(item: string, inDiff: Map<number, string>): number | null {
+  const line = bulletLine(item);
+  // The span right after "path:line" quotes the line; a later span is usually
+  // about some other code, so it only counts when the number isn't in the diff.
+  const right = /^[`*_]*[^\s:`]*:\d+(?:-\d+)?`?\s*`([^`]{4,})`/.exec(item)?.[1].trim();
+  const quote = right ?? (line !== null && inDiff.has(line) ? undefined : /`([^`]{4,})`/.exec(item)?.[1].trim());
+  if (!quote || (line !== null && inDiff.get(line)?.includes(quote))) return line;
+  const hits = [...inDiff].filter(([, text]) => text.includes(quote));
+  return hits.length === 1 ? hits[0][0] : line;
 }
 
 export function buildReviewPost(
@@ -59,13 +76,17 @@ export function buildReviewPost(
 ): ReviewPost {
   const comments: ReviewComment[] = [];
   const bodyParts: string[] = [];
-  if (overall.trim()) bodyParts.push(overall.trim());
+  if (overall.trim()) bodyParts.push(stripSource(overall.trim()));
   for (const [path, md] of Object.entries(byFile)) {
     const inDiff = linesInDiff(diff, path);
     const leftover: string[] = [];
-    for (const item of splitBullets(md)) {
-      const line = bulletLine(item);
-      if (line !== null && inDiff.has(line)) comments.push({ path, line, body: item });
+    for (const raw of splitBullets(md)) {
+      const item = stripSource(raw);
+      const line = anchorLine(item, inDiff);
+      const moved = line !== null && line !== bulletLine(item);
+      // The text says the line it's posted on, not the one the review guessed.
+      const body = moved ? item.replace(/^([`*_]*[^\s:`]*:)\d+(?:-\d+)?/, `$1${line}`) : item;
+      if (line !== null && inDiff.has(line)) comments.push({ path, line, body });
       else leftover.push(`- ${item}`);
     }
     if (leftover.length) bodyParts.push(`**${path}**\n\n${leftover.join("\n")}`);

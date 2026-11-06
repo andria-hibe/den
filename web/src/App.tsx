@@ -4,6 +4,7 @@ import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
 import { UpdateButton } from "./UpdateButton.tsx";
+import { ThemeToggle } from "./ThemeToggle.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
@@ -822,6 +823,7 @@ export function App() {
             </>
           )}
         <UpdateButton onError={setErrMsg} />
+        <ThemeToggle />
         <LedgerChip mouse />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button

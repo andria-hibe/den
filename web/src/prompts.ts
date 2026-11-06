@@ -41,8 +41,24 @@ export function reviewPrompt(number: number, repo: string, owned = false): strin
     `**Summary**, a line each on the **Ticket**, **Consistency**, and **Intent** ` +
     `checks your instructions list, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
     `heading per file you have comments on, with the exact path as it appears in ` +
-    `the diff, and your comments on that file as bullets citing line numbers. Skip ` +
-    `files you have nothing to say about. If it all looks solid, say so briefly.`
+    `the diff, and your comments on that file as bullets citing line numbers, each ` +
+    `ending with its source tag, then a \`## Checked\` section, as your instructions ` +
+    `describe. Skip files you have nothing to say about. If it all looks solid, say ` +
+    `so briefly.`
+  );
+}
+
+/** When the PR has moved on since the guide and review were written: den has
+ * already saved the new diff over the old one. */
+export function refreshReviewPrompt(number: number, repo: string): string {
+  return (
+    `Pull request #${number} (${repo}) has new commits since you wrote the guide ` +
+    `and review. den has saved the new full diff over the old one at the same path. ` +
+    `Bring the checked-out branch up to date with the PR (pull it; don't commit), ` +
+    `then update the guide and the review for what changed: review the new changes ` +
+    `the same way, drop findings the new commits fixed, and keep what still holds. ` +
+    `Keep the source tags and the Checked section current. Say in a line or two ` +
+    `what changed in your verdict.`
   );
 }
 

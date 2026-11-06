@@ -47,3 +47,11 @@ describe("renderMarkdown", () => {
     );
   });
 });
+
+describe("untrusted markdown", () => {
+  it("can't break out of a link's href", () => {
+    const html = renderMarkdown('[docs](https://a.example/"onmouseover="alert(1)"x)');
+    expect(html).not.toMatch(/"onmouseover=/);
+    expect(html).not.toContain('"x"');
+  });
+});

@@ -6,7 +6,7 @@ const KEY_SETTING = "linear_api_key";
 // --- Types exposed to the web app -------------------------------------------
 
 export interface LinearIssue {
-  identifier: string; // e.g. "FAST-5979"
+  identifier: string; // e.g. "ABC-123"
   title: string;
   url: string;
   priority: number; // 0 none, 1 urgent, 2 high, 3 medium, 4 low
@@ -16,7 +16,7 @@ export interface LinearIssue {
   state: { name: string; type: string; color: string };
   project?: string;
   updatedAt: string;
-  /** Lowercased identifier, for matching PR branch hints (e.g. "fast-5979"). */
+  /** Lowercased identifier, for matching PR branch hints (e.g. "abc-123"). */
   ticketHint: string;
 }
 
@@ -192,7 +192,7 @@ interface RawComment {
   botActor?: { name?: string } | null;
 }
 
-/** Comments on a single issue (by identifier, e.g. "FAST-6115"), oldest first. */
+/** Comments on a single issue (by identifier, e.g. "ABC-123"), oldest first. */
 /** A ticket's sub-issues, for finding work already done under them. */
 export async function getSubIssues(
   identifier: string,

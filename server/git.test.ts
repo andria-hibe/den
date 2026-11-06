@@ -3,8 +3,8 @@ import { baseCandidates, isDenWorktree, isValidBranch, losesWork, parseWorktrees
 
 describe("isValidBranch", () => {
   it("accepts normal branch names", () => {
-    expect(isValidBranch("fast-6115-fix-thing")).toBe(true);
-    expect(isValidBranch("andria/fast-6115")).toBe(true);
+    expect(isValidBranch("abc-123-fix-thing")).toBe(true);
+    expect(isValidBranch("andria/abc-123")).toBe(true);
     expect(isValidBranch("release/1.2.x")).toBe(true);
   });
 
@@ -35,11 +35,11 @@ describe("parseWorktrees", () => {
     "HEAD 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
     "branch refs/heads/master",
     "",
-    "worktree /Users/a/Documents/work/runn/.claude-worktrees/fast-6115",
+    "worktree /Users/a/Documents/work/app/.claude-worktrees/abc-123",
     "HEAD 0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a",
-    "branch refs/heads/andria/fast-6115",
+    "branch refs/heads/andria/abc-123",
     "",
-    "worktree /Users/a/Documents/work/runn/.claude-worktrees/pr-20662",
+    "worktree /Users/a/Documents/work/app/.claude-worktrees/pr-123",
     "HEAD abcdef01234567890abcdef01234567890abcdef",
     "detached",
     "",
@@ -53,7 +53,7 @@ describe("parseWorktrees", () => {
       branch: "master",
       head: "1a2b3c4",
     });
-    expect(trees[1].branch).toBe("andria/fast-6115");
+    expect(trees[1].branch).toBe("andria/abc-123");
   });
 
   it("marks only the first entry as the repo's own checkout", () => {

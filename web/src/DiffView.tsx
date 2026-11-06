@@ -1,10 +1,14 @@
 import { Fragment, useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.ts";
+import { sourceChips } from "./reviewNotes.ts";
 import { highlightLines, languageFor } from "./highlight.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { fileReviewPrompt } from "./prompts.ts";
 import { LineThreadView, threadKey, useLineThreads, type LineAt } from "./LineAsk.tsx";
 import type { LineThreads } from "../../server/lineAsk.ts";
+import type { GuideNote } from "./reviewGuide.ts";
+
+const TONE_LABEL = { explains: "explains", "look closely": "look closely", risk: "risk" } as const;
 
 interface FileBlock {
   file: string | null;
@@ -164,6 +168,7 @@ function DiffFileBlock({
   collapsed,
   onToggle,
   threads,
+  marks,
 }: {
   block: FileBlock;
   note?: string;
@@ -174,6 +179,8 @@ function DiffFileBlock({
   onToggle: () => void;
   /** Questions asked at lines of this diff; absent where asking isn't offered. */
   threads?: LineThreads;
+  /** The reading guide's notes on this file, by new-side line. */
+  marks?: Map<number, GuideNote[]>;
 }) {
   const b = block;
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -203,7 +210,7 @@ function DiffFileBlock({
         {note ? (
           <div
             className="md diff-note-md"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note) }}
+            dangerouslySetInnerHTML={{ __html: sourceChips(renderMarkdown(note)) }}
           />
         ) : noteState === "waiting" ? (
           // One walking fox per file would be a stampede of canvases; the
@@ -244,6 +251,13 @@ function DiffFileBlock({
                   onAsk={key ? () => toggle(key) : undefined}
                   asked={!!(key && threads?.[key])}
                 />
+                {nums[i].new !== null &&
+                  marks?.get(nums[i].new!)?.map((m, k) => (
+                    <div key={k} className={`guide-mark ${m.tone.replace(" ", "-")}`}>
+                      <span className="guide-mark-tone">{TONE_LABEL[m.tone]}</span>{" "}
+                      <span className="md-inline" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }} />
+                    </div>
+                  ))}
                 {key && at && open.has(key) && (
                   <LineThreadView sessionId={sessionId!} at={at} thread={threads?.[key]} onClose={() => toggle(key)} />
                 )}
@@ -322,6 +336,7 @@ export function DiffView({
   prNumber,
   startCollapsed,
   ask = false,
+  guideNotes,
 }: {
   diff: string;
   /** The review's comments per file (markdown), shown in the left column. */
@@ -338,9 +353,20 @@ export function DiffView({
   startCollapsed?: (file: string) => boolean;
   /** Offer "ask about this line" (a review pane's diffs). */
   ask?: boolean;
+  /** The reading guide's line notes, shown under their lines. */
+  guideNotes?: GuideNote[];
 }) {
   const blocks = useMemo(() => parseFiles(diff), [diff]);
   const threads = useLineThreads(ask ? sessionId : undefined);
+  const marksByFile = useMemo(() => {
+    const out = new Map<string, Map<number, GuideNote[]>>();
+    for (const n of guideNotes ?? []) {
+      const byLine = out.get(n.file) ?? new Map<number, GuideNote[]>();
+      byLine.set(n.line, [...(byLine.get(n.line) ?? []), n]);
+      out.set(n.file, byLine);
+    }
+    return out;
+  }, [guideNotes]);
   // Files the reader folded or unfolded, overriding the default.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   if (!diff.trim()) return <div className="placeholder">No diff.</div>;
@@ -379,6 +405,7 @@ export function DiffView({
             collapsed={collapsed}
             onToggle={() => b.file && setToggled((t) => ({ ...t, [b.file!]: !collapsed }))}
             threads={ask && sessionId ? threads : undefined}
+            marks={b.file ? marksByFile.get(b.file) : undefined}
           />
         );
       })}

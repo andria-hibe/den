@@ -16,6 +16,13 @@ import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
 import { compactions, contextSize } from "./usage.ts";
 import { mergeHooks, readTurn, removeTurn, turnHooks, watchTurns, type Turn } from "./turnState.ts";
+import { CHECKS_DIR, checkResultPath } from "./doneCheck.ts";
+
+/** The directory panes save check results to, made on first use. */
+function ensureChecksDir(): string {
+  mkdirSync(CHECKS_DIR, { recursive: true });
+  return CHECKS_DIR;
+}
 import { RECENT_MS, assess, burners, currentWatch, noteReading, setWatch, type Watch } from "./fieldMouse.ts";
 import { createHash } from "node:crypto";
 import { setupHint } from "./apprun.ts";
@@ -24,7 +31,7 @@ import {
 } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
 import { waitingChangeMessage } from "./manager.ts";
-import { activeCrew, clearCrew, crewHooks } from "./crewActivity.ts";
+import { activeCrew, clearCrew, crewHooks, removeCrewRuns } from "./crewActivity.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
 import { repoBaseName } from "./git.ts";
 import { workDir } from "./fs.ts";
@@ -178,11 +185,24 @@ function writeClockedOut(ids: string[]): void {
  * compaction while the developer is away (it spends tokens with nobody
  * watching; a stale conversation is started fresh from its handover
  * instead), and the hooks den listens to. Look panes get no inbox or crew. */
-function paneSettings(groupId: string, with_: { inbox?: boolean; crew?: boolean } = {}) {
+function paneSettings(
+  groupId: string,
+  with_: { inbox?: boolean; crew?: boolean } = {},
+  base: { permissions: { deny: string[]; allow: string[]; ask?: string[] } } = { permissions: { deny: [], allow: [] } },
+) {
   const { inbox = true, crew = true } = with_;
+  const p = base.permissions;
   return {
     ...statusLineSettings(groupId),
     idleCompaction: false,
+    // Every pane: a public den issue or comment needs the developer's yes,
+    // whatever the pane's mode, and den's database (the Linear key, saved
+    // scrollback) is never read.
+    permissions: {
+      ...p,
+      deny: [...p.deny, `Read(//${join(DATA_DIR, "den.db").replace(/^\/+/, "")}*)`],
+      ask: [...(p.ask ?? []), "Bash(gh issue create:*)", "Bash(gh issue comment:*)", "Bash(gh issue edit:*)"],
+    },
     hooks: mergeHooks(turnHooks(groupId), inbox ? inboxHooks(groupId) : {}, crew ? crewHooks(groupId) : {}),
   };
 }
@@ -409,7 +429,7 @@ export interface SessionMeta {
   ticketHint: string | null;
   /** The session rang the bell while unwatched — it wants your attention. */
   attention: boolean;
-  /** Linear ticket this workspace is for (identifier, e.g. "FAST-6115"). */
+  /** Linear ticket this workspace is for (identifier, e.g. "ABC-123"). */
   ticket: string | null;
   /** A lightweight "just looking" session: ticket viewer + one Claude pane. */
   look: boolean;
@@ -1387,6 +1407,7 @@ class SessionManager {
     return [
       "--settings", JSON.stringify(paneSettings(groupId)),
       "--add-dir", PROGRESS_DIR,
+      "--add-dir", ensureChecksDir(),
       "--agents", JSON.stringify(kitAgents(fableHasRoom())),
       // Beaver, the clean-up workspace: its audit is mechanical, and the
       // developer approving its plan is the safety step, so Opus isn't needed.
@@ -1409,6 +1430,7 @@ class SessionManager {
     if (s.view === "mypr") {
       return [
         "--settings", JSON.stringify(paneSettings(s.groupId)),
+        "--add-dir", ensureChecksDir(),
         "--agents", JSON.stringify(kitAgents(fableHasRoom())),
         "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
       ];
@@ -1447,6 +1469,7 @@ class SessionManager {
       ...(s.owned ? [] : ["--permission-mode", "default"]),
       "--add-dir", PROGRESS_DIR,
       "--add-dir", REVIEW_DIR,
+      "--add-dir", ensureChecksDir(),
       "--agents", JSON.stringify(s.owned ? kitAgents(fableHasRoom()) : reviewAgents()),
       "--append-system-prompt", hint ? `${prompt}\n${hint}` : prompt,
     ];
@@ -1462,8 +1485,7 @@ class SessionManager {
       managerSettingsPath,
       JSON.stringify(
         {
-          ...buildManagerPermissions(TODAY_PATH, notepad),
-          ...paneSettings(s.groupId),
+          ...paneSettings(s.groupId, {}, buildManagerPermissions(TODAY_PATH, notepad)),
         },
         null,
         2,
@@ -1711,9 +1733,12 @@ class SessionManager {
       rmSync(ticketCopyPath(groupId), { force: true });
       rmSync(join(PROMPTS_DIR, `${groupId}.json`), { force: true });
       removeTurn(groupId);
+      rmSync(checkResultPath(groupId), { force: true });
+      removeCrewRuns(groupId);
       rmSync(join(REVIEW_DIR, `${groupId}.lines.json`), { force: true });
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
+      rmSync(reviewDiffPath(groupId).replace(/\.diff$/, ".head"), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
       rmSync(reviewNotesPath(groupId), { force: true });
@@ -1729,6 +1754,34 @@ class SessionManager {
   }
 
   // --- PR-review guardrails ---
+
+  /** The diff a review pane's guide and review were written against. */
+  readReviewDiff(groupId: string): string {
+    try {
+      return readFileSync(reviewDiffPath(groupId), "utf8");
+    } catch {
+      return "";
+    }
+  }
+
+  /** Replace it, when the developer asks for the review to catch up with new commits. */
+  writeReviewDiff(groupId: string, diff: string): void {
+    this.ensureReviewDiff(groupId, diff);
+  }
+
+  /** The PR head commit the saved diff was taken at; empty if not recorded. */
+  readReviewHead(groupId: string): string {
+    try {
+      return readFileSync(reviewDiffPath(groupId).replace(/\.diff$/, ".head"), "utf8").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  writeReviewHead(groupId: string, sha: string): void {
+    mkdirSync(REVIEW_DIR, { recursive: true });
+    writeFileSync(reviewDiffPath(groupId).replace(/\.diff$/, ".head"), sha);
+  }
 
   /** Write the PR's diff to a file the review session can read, so the whole
    * change is in front of it without a `gh pr diff` round-trip. Pass `diff` on
@@ -1790,8 +1843,7 @@ class SessionManager {
   private ensureReviewPerms(groupId: string, owned: boolean): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
     const settings = {
-      ...buildReviewPermissions(reviewNotesPath(groupId), reviewGuidePath(groupId), owned, notepadPath(groupId)),
-      ...paneSettings(groupId),
+      ...paneSettings(groupId, {}, buildReviewPermissions(reviewNotesPath(groupId), reviewGuidePath(groupId), owned, notepadPath(groupId), checkResultPath(groupId))),
     };
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));

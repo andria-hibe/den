@@ -8,6 +8,33 @@ export interface ParsedReview {
   overall: string;
   /** Per-file comments, keyed by the path as it appears in the diff. */
   byFile: Record<string, string>;
+  /** The "## Checked" section: what each pass and helper ran and didn't
+   * cover. Shown in den, never posted. */
+  checked: string;
+}
+
+/** The heading of the review's "what was checked" section. */
+const CHECKED = /^(checked|what was checked)$/i;
+
+/** A bullet's source tag, as reviewInstruction asks for it: "[hare]",
+ * "[code-review, verified]". */
+export const SOURCE_TAG = /\s*\[(code-review|owl|badger|hare|wolf|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\]\s*$/i;
+
+/** A bullet without its source tag, for posting to GitHub. */
+export function stripSource(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.replace(SOURCE_TAG, ""))
+    .join("\n");
+}
+
+/** Rendered review HTML with each source tag drawn as a chip. */
+export function sourceChips(html: string): string {
+  return html.replace(
+    /\s*\[(code-review|owl|badger|hare|wolf|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\](?=\s*(<\/li>|<\/p>|<br|$))/gi,
+    (_, src: string, verified?: string) =>
+      ` <span class="src-chip${verified ? " verified" : ""}" title="${verified ? "Found and confirmed by " : "Found by "}${src}">${src}${verified ? " ✓" : ""}</span>`,
+  );
 }
 
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*$/;
@@ -17,7 +44,7 @@ const GENERIC = /^(overall|overview|summary|general|review)(\s+(review|summary|n
 
 /** Peel matched emphasis wrappers (`**x**`, `_x_`, …) off a heading. Only
  * *paired* markers go — stripping `_` wholesale would mangle the many real paths
- * that contain one (`query_notification_subscriptions.test.ts`), and a path that
+ * that contain one (`query_user_settings.test.ts`), and a path that
  * doesn't match its file lands in the previous file's column. */
 function stripEmphasis(text: string): string {
   let s = text.trim();
@@ -68,6 +95,7 @@ export function parseReview(md: string, files: string[]): ParsedReview {
   // Sections about paths that aren't in this diff — kept, but shown with the
   // general review rather than misfiled under whichever file came before.
   const orphanLines: string[] = [];
+  const checkedLines: string[] = [];
   let bucket = overallLines;
   let fenced = false;
 
@@ -77,9 +105,18 @@ export function parseReview(md: string, files: string[]): ParsedReview {
       bucket.push(line);
       continue;
     }
+    // A bold "**Checked**" line, the way a review writes its other labels.
+    if (!fenced && /^\s*\*\*(checked|what was checked):?\*\*:?\s*$/i.test(line)) {
+      bucket = checkedLines;
+      continue;
+    }
     const m = fenced ? null : HEADING.exec(line);
     if (m) {
       const text = normalize(m[2]);
+      if (CHECKED.test(text)) {
+        bucket = checkedLines;
+        continue;
+      }
       const file = matchFile(text, files);
       if (file) {
         bucket = fileLines.get(file) ?? [];
@@ -107,5 +144,5 @@ export function parseReview(md: string, files: string[]): ParsedReview {
   }
   const orphans = orphanLines.join("\n").trim();
   const overall = [overallLines.join("\n").trim(), orphans].filter(Boolean).join("\n\n");
-  return { overall, byFile };
+  return { overall, byFile, checked: checkedLines.join("\n").trim() };
 }

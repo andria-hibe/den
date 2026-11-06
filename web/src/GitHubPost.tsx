@@ -111,13 +111,18 @@ export function ThreadActions({
   number,
   note,
   onChanged,
+  viewer,
 }: {
   repo: string;
   number: number;
   /** Any comment of the thread; carries its threadId and replyTo. */
   note: PrReviewNote;
   onChanged: () => void;
+  /** The developer's login: only a thread they or a bot opened is theirs to
+   * resolve, since a reviewer resolves their own threads. */
+  viewer?: string;
 }) {
+  const canResolve = !!note.openedByBot || (!!viewer && note.openedBy === viewer);
   const [mode, setMode] = useState<"idle" | "reply" | "resolve">("idle");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -189,10 +194,15 @@ export function ThreadActions({
               ↩ reply
             </button>
           )}
-          {note.threadId && (
+          {note.threadId && canResolve && (
             <button className="btn btn-ghost-outline" onClick={() => setMode("resolve")}>
               ✓ resolve
             </button>
+          )}
+          {note.threadId && !canResolve && note.openedBy && (
+            <span className="thread-owner" title="The person who opened a thread resolves it">
+              {note.openedBy} resolves this one
+            </span>
           )}
         </div>
       )}

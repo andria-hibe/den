@@ -5,7 +5,7 @@ const FILES = [
   "server/scheduler.ts",
   "server/scheduler.test.ts",
   "web/src/App.tsx",
-  "web/src/query_notification_subscriptions.test.ts",
+  "web/src/query_user_settings.test.ts",
   "package-lock.json",
 ];
 
@@ -58,7 +58,7 @@ describe("parseGuide", () => {
   });
 
   it("reports the files no section grouped", () => {
-    expect(g.leftover).toEqual(["web/src/query_notification_subscriptions.test.ts"]);
+    expect(g.leftover).toEqual(["web/src/query_user_settings.test.ts"]);
   });
 
   it("orders a section's files the way the diff does", () => {
@@ -88,11 +88,11 @@ describe("parseGuide", () => {
 
   it("does not let a snake_case path be mangled by emphasis stripping", () => {
     const out = parseGuide(
-      "## Tests\nwhy\nFiles: web/src/query_notification_subscriptions.test.ts",
+      "## Tests\nwhy\nFiles: web/src/query_user_settings.test.ts",
       FILES,
     );
     expect(out.sections[0].files).toEqual([
-      "web/src/query_notification_subscriptions.test.ts",
+      "web/src/query_user_settings.test.ts",
     ]);
   });
 
@@ -145,5 +145,28 @@ describe("parseGuide", () => {
     const out = parseGuide("## Risks\nthe cache can go stale.\n", FILES);
     expect(out.sections[0].files).toEqual([]);
     expect(out.sections[0].body).toContain("stale");
+  });
+});
+
+describe("guide notes and coverage", () => {
+  it("pins tone notes to lines and counts files named twice or unknown", () => {
+    const md = [
+      "Adds a cache.",
+      "## Core",
+      "Why.",
+      "Files: a.ts, gone.ts",
+      "- risk: a.ts:12 `x = y` - can be null here",
+      "- look closely: a.ts:3 - naming",
+      "## Again",
+      "Files: a.ts, b.ts",
+    ].join("\n");
+    const g = parseGuide(md, ["a.ts", "b.ts"]);
+    expect(g.sections[0].notes).toEqual([
+      { tone: "risk", file: "a.ts", line: 12, text: "`x = y` - can be null here" },
+      { tone: "look closely", file: "a.ts", line: 3, text: "naming" },
+    ]);
+    expect(g.sections[0].body).toBe("Why.");
+    expect(g.twice).toEqual(["a.ts"]);
+    expect(g.unknown).toEqual(["gone.ts"]);
   });
 });

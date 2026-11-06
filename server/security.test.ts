@@ -43,3 +43,12 @@ describe("isLocalRequest", () => {
     expect(isLocalRequest({ host: "127.0.0.1:4321", origin: "null" })).toBe(false);
   });
 });
+
+describe("den's own page only", () => {
+  it("refuses another local page, such as an app started from a PR", () => {
+    const h = (origin: string) => ({ host: "127.0.0.1:50008", origin });
+    expect(isLocalRequest(h("http://127.0.0.1:50008"), 50008)).toBe(true);
+    expect(isLocalRequest(h("http://localhost:3000"), 50008)).toBe(false);
+    expect(isLocalRequest(h("http://localhost:5173"), 50008, ["http://localhost:5173"])).toBe(true);
+  });
+});

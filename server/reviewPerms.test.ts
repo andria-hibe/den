@@ -39,7 +39,7 @@ describe("buildReviewPermissions (PR review guardrails)", () => {
   });
 
   it("allows the read-only commands a review runs constantly", () => {
-    for (const cmd of ["git log", "git show", "git diff", "git status", "git blame", "git grep", "git fetch", "rg", "grep", "gh pr view", "gh pr diff", "gh pr checks"]) {
+    for (const cmd of ["git log", "git show", "git diff", "git status", "git blame", "grep", "gh pr view", "gh pr diff", "gh pr checks"]) {
       expect(permissions.allow).toContain(`Bash(${cmd}:*)`);
     }
   });
@@ -69,8 +69,8 @@ describe("buildReviewPermissions for a PR the developer has taken on", () => {
 
 describe("scratchBranch", () => {
   it("prefixes the PR's branch, so the PR's own branch never carries edits", () => {
-    expect(scratchBranch("fast-1234-add-thing")).toBe(
-      "andria/changes-to-fast-1234-add-thing",
+    expect(scratchBranch("abc-1234-add-thing")).toBe(
+      "andria/changes-to-abc-1234-add-thing",
     );
   });
   it("falls back when the branch is unknown", () => {

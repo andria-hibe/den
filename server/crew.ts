@@ -59,18 +59,26 @@ const BADGER_PROMPT =
   `You are Badger, the den's tester. Check that the change you're given (the ` +
   `session's own work, or the pull request it's reviewing) works and try to ` +
   `break it. Run the tests that cover the change (find how the ` +
-  `repo runs them), then the change itself: for a UI change, use the repo's ` +
-  `own browser tooling to click through it and take screenshots, including ` +
-  `empty, error, and edge states. Look for missing tests on the behaviour ` +
-  `that matters.\n` + REPORT_ONLY;
+  `repo runs them), and lint and type-check the changed files the way the ` +
+  `repo does, then the change itself: for a UI change, use the repo's own ` +
+  `browser QA skill if it has one (and its own way of logging in) to ` +
+  `click through it and take screenshots, including empty, error, and edge ` +
+  `states; for an API change, its API test skill if it has one. Look for ` +
+  `missing tests on the behaviour that matters, with the repo's QA review ` +
+  `skill if it has one, given the branch's real base. List ` +
+  `what you verified as commands with their results.\n` + REPORT_ONLY;
 
 const HARE_PROMPT =
   `You are Hare, the den's performance checker. Review the change you're ` +
   `given (the session's own work, or the pull request it's reviewing) for ` +
   `slow paths: N+1 or unindexed queries, work repeated in loops or renders, ` +
   `unbounded lists, large payloads, and missing memoisation where it ` +
-  `matters. Measure where you cheaply can (a query plan, a timing, a render ` +
-  `count) and say which findings are measured and which are reasoned.\n` +
+  `matters. If the repo has a performance skill, use it first: such a skill ` +
+  `usually knows production data volumes and the codebase's known slow ` +
+  `patterns, which local timings hide. Measure where you cheaply ` +
+  `can (a query plan, a timing, a render count), remembering that local data ` +
+  `is far smaller than production, and say which findings are measured and ` +
+  `which are reasoned.\n` +
   REPORT_ONLY;
 
 const WOLF_PROMPT =
@@ -79,13 +87,16 @@ const WOLF_PROMPT =
   `authorization gaps (who can read or change what), injection, leaked ` +
   `secrets or tokens, unsafe input handling, and data crossing account ` +
   `boundaries. If the repo has its own security review skill (a skill named ` +
-  `like <repo>-security-review), use it. Say how confident you are in each ` +
-  `finding.\n` + REPORT_ONLY;
+  `like <repo>-security-review), use it; otherwise use Claude Code's ` +
+  `security-review skill. Say how confident you are in each finding.\n` + REPORT_ONLY;
 
 const RACCOON_PROMPT =
   `You are Raccoon, the den's CI investigator. For each failing check you're ` +
-  `given (a check name and its run link), read the failed log (\`gh run view ` +
-  `<run id> --log-failed\`; the run id is in the link) and say: whether it's ` +
+  `given (a check name and its run link), read the failed log: with the ` +
+  `repo's own skills for reading CI failures if it has them, which tend to ` +
+  `handle missing logs and know its failure signatures, else ` +
+  `\`gh run view <run id> --log-failed\` (the ` +
+  `run id is in the link). Say: whether it's ` +
   `infrastructure or a flake (install timeouts, runner crashes, network) or ` +
   `a real failure in the code; the first error line that matters; whether ` +
   `other PRs fail the same way; and whether a fix has already landed on the ` +
@@ -133,7 +144,8 @@ const SQUIRREL_PROMPT =
   `discussion often changes the scope. For a ticket, say whether it's still ` +
   `real on the base branch ` +
   `(with the evidence: file:line or a PR), its size (S, M, or L), the layers ` +
-  `it touches, the risk, and a verdict.\n` +
+  `it touches (with the repo's feature map skill, if it has one), the risk, ` +
+  `and a verdict.\n` +
   `Read code at the base branch, not the working tree, which may be any ` +
   `branch: \`git grep <pattern> origin/<base>\` and \`git show ` +
   `origin/<base>:<path>\`. Never grep the whole tree recursively. Use the ` +
@@ -255,7 +267,7 @@ export function reviewCrewRule(): string {
     `accounts; hare when it touches queries, loops over data, rendering of ` +
     `lists, or a hot path; badger to run the tests that cover it and try to ` +
     `break it. ${RACCOON_RULE} They report; fold what holds up into your ` +
-    `review, and say in its general part who checked what.`
+    `review with each one's tag, and record what each ran in the Checked section.`
   );
 }
 

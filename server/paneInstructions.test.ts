@@ -53,11 +53,11 @@ describe("myPrInstruction", () => {
 });
 
 describe("lookInstruction", () => {
-  const text = lookInstruction("FAST-1234", "Fix the thing", NOTEPAD);
+  const text = lookInstruction("ABC-1234", "Fix the thing", NOTEPAD);
 
   it("names the ticket and points at the saved description", () => {
     expect(isAscii(text)).toBe(true);
-    expect(text).toContain("FAST-1234: Fix the thing");
+    expect(text).toContain("ABC-1234: Fix the thing");
     expect(text).toContain(NOTEPAD);
     expect(text).toContain("don't edit it");
   });

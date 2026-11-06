@@ -3,7 +3,7 @@ import { highlightLines, languageFor, splitHighlighted } from "./highlight.ts";
 
 describe("languageFor", () => {
   it("maps the work repo's file types", () => {
-    expect(languageFor("apps/api/src/plugins/auth.ts")).toBe("typescript");
+    expect(languageFor("src/plugins/auth.ts")).toBe("typescript");
     expect(languageFor("a/Planner.tsx")).toBe("typescript");
     expect(languageFor("app/models/person.rb")).toBe("ruby");
     expect(languageFor("app/views/x.html.erb")).toBe("erb");

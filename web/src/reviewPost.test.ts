@@ -33,7 +33,7 @@ describe("splitBullets", () => {
 
 describe("linesInDiff", () => {
   it("lists the new-side lines the hunk covers", () => {
-    expect([...linesInDiff(DIFF, "server/git.ts")]).toEqual([10, 11, 12, 13]);
+    expect([...linesInDiff(DIFF, "server/git.ts").keys()]).toEqual([10, 11, 12, 13]);
   });
 });
 
@@ -60,3 +60,19 @@ describe("buildReviewPost", () => {
     );
   });
 });
+
+describe("posting den's review markup", () => {
+  it("drops source tags and moves a comment to the line its quoted code is on", () => {
+    const post = buildReviewPost(
+      "Overall fine. [ticket]",
+      { "server/git.ts": "- server/git.ts:10 `const c = 4;` - unused. [hare, verified]" },
+      DIFF,
+    );
+    expect(post.body).toBe("Overall fine.");
+    expect(post.comments).toEqual([{ path: "server/git.ts", line: 12, body: "server/git.ts:12 `const c = 4;` - unused." }]);
+    // A later code span is about other code: the right number stays.
+    const other = buildReviewPost("", { "server/git.ts": "- server/git.ts:10 - see where `const c = 4;` is set" }, DIFF);
+    expect(other.comments[0].line).toBe(10);
+  });
+});
+

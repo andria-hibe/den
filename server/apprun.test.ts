@@ -18,19 +18,19 @@ describe("extractPort", () => {
 });
 
 describe("parseRunnStatus", () => {
-  const running = `Project: runn-a48821.runn.localhost
-Branch: andria/fast-6133
-App: https://runn-a48821.runn.localhost:5103
-Hasura: https://runn-a48821.runn.localhost:8182
+  const running = `Project: proj-a1.example.localhost
+Branch: me/abc-123
+App: https://proj-a1.example.localhost:5601
+Admin: https://proj-a1.example.localhost:5602
 Ports file: /Users/x/Documents/work/runn/.runn/project.env
 $ docker compose ps --all
 NAME                          IMAGE       STATUS
-runn_runn-a48821-app-1        img         Up 12 hours (healthy)
-runn_runn-a48821-postgres-1   pgvector    Up 14 hours (healthy)`;
+runn_proj-a1-app-1        img         Up 12 hours (healthy)
+runn_proj-a1-postgres-1   img    Up 14 hours (healthy)`;
 
   it("reads the app URL and detects a healthy app container", () => {
     const r = parseRunnStatus(running);
-    expect(r.url).toBe("https://runn-a48821.runn.localhost:5103");
+    expect(r.url).toBe("https://proj-a1.example.localhost:5601");
     expect(r.running).toBe(true);
   });
 
@@ -39,12 +39,12 @@ runn_runn-a48821-postgres-1   pgvector    Up 14 hours (healthy)`;
     const r = parseRunnStatus(stopped);
     expect(r.running).toBe(false);
     // still surfaces the URL so we can offer to open once it's up
-    expect(r.url).toBe("https://runn-a48821.runn.localhost:5103");
+    expect(r.url).toBe("https://proj-a1.example.localhost:5601");
   });
 
   it("only the postgres/redis containers up is not 'running'", () => {
-    const noApp = `App: https://x.localhost:5103
-runn_x-postgres-1   pgvector   Up 14 hours (healthy)
+    const noApp = `App: https://x.localhost:5601
+runn_x-postgres-1   img   Up 14 hours (healthy)
 runn_x-redis-1      redis      Up 14 hours`;
     expect(parseRunnStatus(noApp).running).toBe(false);
   });
@@ -59,17 +59,17 @@ describe("literalIncludes", () => {
       "",
       "services/*/dist/",
       "app/javascript/src/**/__generated__/",
-      "services/prisma/prisma-generated/",
+      "services/db/generated/",
       "!keep.me",
       "../escape",
     ].join("\n");
-    expect(literalIncludes(text)).toEqual([".env", ".env.local", "services/prisma/prisma-generated"]);
+    expect(literalIncludes(text)).toEqual([".env", ".env.local", "services/db/generated"]);
   });
 });
 
 describe("parseRunnStatus containersUp", () => {
   const out = [
-    "App: https://x.runn.localhost:5103",
+    "App: https://x.example.localhost:5601",
     "NAME                         IMAGE   COMMAND   SERVICE   CREATED   STATUS",
     "runn_x-api-1                 img     \"x\"       api       3 days    Up 3 days (healthy)",
     "runn_x-app-1                 img     \"x\"       app       3 days    Exited (1) 2 hours ago",
@@ -90,17 +90,17 @@ describe("parseRunnStatus containersUp", () => {
 
 describe("runnPortProblem", () => {
   const ps = [
-    "runn_a\trunn_a-edge-1\t80/tcp, 127.0.0.1:3104-3105->3104-3105/tcp, 127.0.0.1:5102->5102/tcp",
+    "runn_a\trunn_a-edge-1\t80/tcp, 127.0.0.1:4100-4101->4100-4101/tcp, 127.0.0.1:5600->5600/tcp",
     "runn_b\trunn_b-app-1\t",
     "runn_c\trunn_c-edge-1\t80/tcp, 443/tcp, 2019/tcp",
   ].join("\n");
   const containers = parseDockerPs(ps);
 
   it("flags another stack serving this checkout's port, and an edge with no ports", () => {
-    expect(containers[0].ports).toEqual([3104, 3105, 5102]);
-    expect(runnPortProblem("runn_a", 5102, containers)).toBeNull();
-    expect(runnPortProblem("runn_b", 5102, containers)).toContain("another stack (runn_a)");
-    expect(runnPortProblem("runn_c", 5103, containers)).toContain("publishes no ports");
+    expect(containers[0].ports).toEqual([4100, 4101, 5600]);
+    expect(runnPortProblem("runn_a", 5600, containers)).toBeNull();
+    expect(runnPortProblem("runn_b", 5600, containers)).toContain("another stack (runn_a)");
+    expect(runnPortProblem("runn_c", 5601, containers)).toContain("publishes no ports");
     expect(runnPortProblem("runn_a", 5101, containers)).toContain("names port 5101");
   });
 });

@@ -64,9 +64,9 @@ describe("reviewFrom", () => {
 
 describe("parseTicketHint", () => {
   it("pulls fast-NNNN out of a branch name", () => {
-    expect(parseTicketHint("jordan-fast-5979-stretch")).toBe("fast-5979");
+    expect(parseTicketHint("someone-abc-42-stretch")).toBe("abc-42");
     // Lowercased so it matches LinearIssue.ticketHint without case games.
-    expect(parseTicketHint("FAST-6115")).toBe("fast-6115");
+    expect(parseTicketHint("ABC-123")).toBe("abc-123");
   });
   it("returns undefined without a ticket", () => {
     expect(parseTicketHint("main")).toBeUndefined();
@@ -99,7 +99,7 @@ describe("authoredAttention (your own PRs)", () => {
 describe("isValidRepo (owner/name slug)", () => {
   it("accepts well-formed nameWithOwner slugs", () => {
     expect(isValidRepo("owner/repo")).toBe(true);
-    expect(isValidRepo("Runn-Fast/runn")).toBe(true);
+    expect(isValidRepo("acme/app")).toBe(true);
     expect(isValidRepo("a.b_c/d.e_f")).toBe(true);
   });
   it("rejects malformed or injection-shaped values", () => {

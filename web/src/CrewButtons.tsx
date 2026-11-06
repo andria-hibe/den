@@ -3,6 +3,8 @@ import { api } from "./api.ts";
 import { Critter } from "./Critter.tsx";
 import { CREW } from "./critterSprites.ts";
 import { crewAskPrompt, crewFor, type CrewHelper, type CrewPane } from "./prompts.ts";
+import { CheckResultsButton } from "./CheckResults.tsx";
+import { CrewRuns } from "./CrewRuns.tsx";
 
 /** How long a helper asked from the card shows as on its way before the pane
  * has started it: a pane from before the crew hooks never reports one. */
@@ -165,7 +167,11 @@ export function CrewButtons({
         ))}
       </button>
       {open && (
-        <div className="crew-card" ref={card} style={{ top: open.top, right: open.right }}>
+        <div
+          className="crew-card"
+          ref={card}
+          style={{ top: open.top, right: open.right, maxHeight: `calc(100vh - ${open.top + 12}px)`, overflowY: "auto" }}
+        >
           {helpers.map((h) => {
             const member = CREW.find((c) => c.kind === h);
             const brief = !crewAskPrompt(h, pane).submit;
@@ -209,6 +215,12 @@ export function CrewButtons({
               </button>
             </div>
           )}
+          {pane === "kit" && (
+            <div className="crew-card-results">
+              <CheckResultsButton sessionId={sessionId} />
+            </div>
+          )}
+          <CrewRuns sessionId={sessionId} />
           {!running && <div className="crew-card-note">Restart the session to ask its helpers.</div>}
         </div>
       )}

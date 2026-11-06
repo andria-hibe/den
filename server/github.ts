@@ -41,7 +41,7 @@ export interface PullRequest {
   /** The checks failing on the latest run, by name, with their run pages. */
   failingChecks?: { name: string; link?: string }[];
   review: ReviewState;
-  /** Ticket id parsed from the branch (e.g. "fast-5979"). */
+  /** Ticket id parsed from the branch (e.g. "abc-123"). */
   ticketHint?: string;
   /** True for your own PRs (authored), false for others' (review-requested). */
   isMine: boolean;
@@ -207,9 +207,9 @@ export interface CheckRow {
  * Sourced from `gh pr checks` rather than `gh pr view --json statusCheckRollup`
  * on purpose: the rollup lists **every** check run including superseded ones, so
  * a re-run that has since gone green still carries its old FAILURE row and the
- * PR reads as failing forever (seen on Runn-Fast/runn#20662: 116 rollup rows vs
+ * PR reads as failing forever (seen on a real PR: 116 rollup rows vs
  * 99 real checks, one stale "Validate PR title" failure). It is also capped at
- * ~100 contexts, which runn PRs sit right at. `gh pr checks` is deduped to the
+ * ~100 contexts, which a big repo's PRs can sit right at. `gh pr checks` is deduped to the
  * latest run per check and uncapped.
  *
  * `skipping`/`cancel` don't count either way; an unrecognized bucket is
@@ -266,7 +266,7 @@ export function reviewFrom(decision: string | null): ReviewState {
   }
 }
 
-// Branch names look like "jordan-fast-5979-stretch-...". Lowercased to match
+// Branch names look like "someone-abc-123-stretch-...". Lowercased to match
 // LinearIssue.ticketHint, so hints compare directly.
 export function parseTicketHint(branch?: string | null): string | undefined {
   const m = branch?.match(/([a-z]+-\d+)/i);
@@ -438,6 +438,9 @@ export interface PrReviewNote {
   threadId?: string;
   replyTo?: number;
   first?: boolean;
+  /** Inline comments only: who opened the thread, and whether that was a bot. */
+  openedBy?: string;
+  openedByBot?: boolean;
 }
 export interface PrDetail {
   number: number;
@@ -450,6 +453,8 @@ export interface PrDetail {
   reviews: PrReviewNote[];
   comments: PrReviewNote[];
   reviewComments: PrReviewNote[]; // inline, line-level comments on the diff
+  /** The developer's GitHub login. */
+  viewer: string;
 }
 
 export async function getPrDetail(repo: string, number: number): Promise<PrDetail> {
@@ -494,6 +499,7 @@ export async function getPrDetail(repo: string, number: number): Promise<PrDetai
       at: c.createdAt,
     })),
     reviewComments,
+    viewer: me,
   };
 }
 
@@ -504,11 +510,11 @@ const REVIEW_THREADS_QUERY =
   `query($owner:String!,$name:String!,$number:Int!){` +
   `repository(owner:$owner,name:$name){pullRequest(number:$number){` +
   `reviewThreads(first:100){nodes{id isResolved isOutdated ` +
-  `comments(first:50){nodes{databaseId author{login} body path line originalLine diffHunk createdAt}}}}}}}`;
+  `comments(first:50){nodes{databaseId author{login __typename} body path line originalLine diffHunk createdAt}}}}}}}`;
 
 interface RawThreadComment {
   databaseId?: number | null;
-  author?: { login: string } | null;
+  author?: { login: string; __typename?: string } | null;
   body: string;
   path?: string | null;
   line?: number | null;
@@ -553,12 +559,15 @@ async function getReviewComments(
     const notes: PrReviewNote[] = [];
     for (const t of threads) {
       const root = t.comments?.nodes?.[0]?.databaseId ?? undefined;
+      const opener = t.comments?.nodes?.[0]?.author;
       for (const [i, c] of (t.comments?.nodes ?? []).entries()) {
         if (!c.body) continue;
         notes.push({
           threadId: t.id ?? undefined,
           replyTo: root,
           first: i === 0,
+          openedBy: opener?.login,
+          openedByBot: opener?.__typename === "Bot",
           author: c.author?.login ?? "?",
           body: c.body,
           path: c.path ?? undefined,
@@ -691,6 +700,27 @@ export async function resolveThread(threadId: string): Promise<void> {
 /** A GraphQL node id as GitHub issues them (e.g. PRRT_kwDOABC123). */
 export function isValidNodeId(id: string): boolean {
   return /^[A-Za-z0-9_=-]{4,128}$/.test(id);
+}
+
+/** The commit a PR's branch points at, or null when GitHub doesn't answer. */
+export async function getPrHead(repo: string, number: number): Promise<string | null> {
+  try {
+    const out = await gh(["pr", "view", String(number), "--repo", repo, "--json", "headRefOid"]);
+    return (JSON.parse(out) as { headRefOid?: string }).headRefOid ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The branch a PR merges into, or null when GitHub doesn't answer. */
+export async function getPrBase(repo: string | null, number: number | null): Promise<string | null> {
+  if (!repo || !number) return null;
+  try {
+    const out = await gh(["pr", "view", String(number), "--repo", repo, "--json", "baseRefName"]);
+    return (JSON.parse(out) as { baseRefName?: string }).baseRefName ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getPrDiff(repo: string, number: number): Promise<string> {

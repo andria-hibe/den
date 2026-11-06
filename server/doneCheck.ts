@@ -1,15 +1,21 @@
-// den's done check: a Claude Code workflow (the Workflow tool) that a kit
-// runs before it calls its work done. It scopes the change, sends badger and
-// owl (plus hare or wolf when the change needs them) at once, and has a
-// skeptic try to refute each serious finding, so the kit gets one ranked,
-// checked report instead of calling each helper and merging their answers.
-// The helpers are the pane's own subagents (kitAgents in crew.ts).
+// den's checks: one Claude Code workflow (the Workflow tool) with two modes.
+// The done check, which a kit runs before it calls its work done, sends
+// badger and owl (plus hare or wolf when the change needs them); the deep
+// review, which a review pane runs on a colleague's PR, sends a code-review
+// pass, a ticket check, and badger, hare, or wolf. Either way a skeptic then
+// tries to refute each serious finding, so the pane gets one ranked, checked
+// report with each finding's source instead of merging helpers' answers.
+// The helpers are the pane's own subagents (kitAgents / reviewAgents in crew.ts).
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "./dataDir.ts";
 import { logWarn } from "./log.ts";
 
-export const DONE_CHECK_PATH = join(DATA_DIR, "workflows", "done-check.js");
+export const DONE_CHECK_PATH = join(DATA_DIR, "workflows", "den-check.js");
+
+/** Where a pane saves the object a check returned, for den to show. */
+export const CHECKS_DIR = join(DATA_DIR, "checks");
+export const checkResultPath = (groupId: string) => join(CHECKS_DIR, `${groupId}.json`);
 
 /** Serious findings double-checked per run; the rest come back unverified.
  * Keeps a run to about ten agents. The script takes no more than twice this. */
@@ -18,9 +24,9 @@ export const DONE_CHECK_MAX_VERIFY = 5;
 // Plain JavaScript for the Workflow tool, which can't use Date.now() or
 // Math.random(). No template literals, so it can sit in String.raw.
 export const DONE_CHECK_SCRIPT = String.raw`export const meta = {
-  name: 'den-done-check',
-  description: "den's done check: badger and owl, plus hare or wolf when the change needs them, with each serious finding double-checked",
-  whenToUse: 'Before a den session says a piece of work is done',
+  name: 'den-check',
+  description: "den's check of a change: the crew reviews it in parallel and a skeptic double-checks each serious finding",
+  whenToUse: "A den session's done check (mode done) or deep review of a pull request (mode review)",
   phases: [
     { title: 'Scope', detail: 'what changed, and which helpers it needs' },
     { title: 'Check', detail: 'the helpers review the change' },
@@ -29,6 +35,7 @@ export const DONE_CHECK_SCRIPT = String.raw`export const meta = {
 }
 
 const base = (args && args.base) || ''
+const reviewing = !!(args && args.mode === 'review')
 // The pane fills args, so a raised limit is still bounded.
 const MAX_VERIFY = Math.min((args && args.maxVerify) || ${DONE_CHECK_MAX_VERIFY}, ${DONE_CHECK_MAX_VERIFY * 2})
 
@@ -75,11 +82,16 @@ const VERDICT = {
 
 phase('Scope')
 const scope = await agent(
-  'Work out what this branch changes, for a check before it is called done. ' +
+  (reviewing
+    ? "Work out what this pull request changes, for a review of a colleague's work. "
+    : 'Work out what this branch changes, for a check before it is called done. ') +
     (base
       ? 'Its base is ' + base + '. '
       : 'Find its base: the pull request base (gh pr view --json baseRefName) if there is a PR, else the branch it was made from or the repo default branch. ') +
-    'Read git diff <base>...HEAD and any uncommitted changes. Return the base you used, a two-line summary, ' +
+    (reviewing
+      ? 'Read git diff <base>...HEAD only: ignore the working tree, which may hold a local experiment. '
+      : 'Read git diff <base>...HEAD and any uncommitted changes. ') +
+    'Return the base you used, a two-line summary, ' +
     'the changed files, and whether the change touches performance (queries, loops over data, list rendering, ' +
     'hot paths) or security (auth, permissions, secrets, user input, data shared across accounts), with one ' +
     'line on why for each. Read only: change nothing.',
@@ -89,14 +101,36 @@ if (!scope) return { error: 'Could not work out what the branch changes.' }
 if (!scope.files.length) return { base: scope.base, summary: 'Nothing changed against ' + scope.base + '.', crew: [], confirmed: [], unverified: [], refuted: [] }
 
 const subject =
-  'the change on this branch against ' + scope.base + ', uncommitted changes included (' +
+  (reviewing ? "the pull request's change" : 'the change on this branch') + ' against ' + scope.base +
+  (reviewing ? '' : ', uncommitted changes included') + ' (' +
   scope.files.length + ' files: ' + scope.files.slice(0, 40).join(', ') + '). What it does: ' + scope.summary
-const crew = [
-  { name: 'badger', ask: 'Check ' + subject + '\nRun the tests that cover it and try to break it.' },
-  { name: 'owl', ask: 'Review ' + subject },
-]
-if (scope.performance) crew.push({ name: 'hare', ask: 'Check ' + subject + '\nfor slow paths. Why it may matter: ' + (scope.performanceWhy || '') })
-if (scope.security) crew.push({ name: 'wolf', ask: 'Review ' + subject + '\nfor security. Why it may matter: ' + (scope.securityWhy || '') })
+// "source" is the tag the finding carries in the review; "agentType" the pane's subagent, if any.
+const crew = reviewing
+  ? [
+      {
+        name: 'code-review',
+        ask:
+          'Review ' + subject + '\nRun Claude Code' + "'" + 's code-review skill at high effort on it (never with --comment or ' +
+          '--fix), then cover what its scope misses: design, tests, naming, missing cases, and whether it follows the ' +
+          "codebase's existing patterns and shared helpers. Use the repo's QA review skill too if it has one, against " +
+          'this base. Change nothing.',
+      },
+      {
+        name: 'ticket',
+        ask:
+          "Find this pull request's Linear ticket (its id is usually in the branch name, the title, or the " +
+          'description) and read it, comments included, with your Linear tools, changing nothing. Check ' + subject +
+          '\nagainst it: report each requirement or acceptance criterion it does not meet, and anything it does that ' +
+          "the ticket doesn't ask for. If you can't find or read the ticket, say so in what you could not check.",
+      },
+      { name: 'badger', agentType: 'badger', ask: 'Check ' + subject + '\nRun the tests that cover it and try to break it.' },
+    ]
+  : [
+      { name: 'badger', agentType: 'badger', ask: 'Check ' + subject + '\nRun the tests that cover it and try to break it.' },
+      { name: 'owl', agentType: 'owl', ask: 'Review ' + subject },
+    ]
+if (scope.performance) crew.push({ name: 'hare', agentType: 'hare', ask: 'Check ' + subject + '\nfor slow paths. Why it may matter: ' + (scope.performanceWhy || '') })
+if (scope.security) crew.push({ name: 'wolf', agentType: 'wolf', ask: 'Review ' + subject + '\nfor security. Why it may matter: ' + (scope.securityWhy || '') })
 log('Checking with ' + crew.map((c) => c.name).join(', '))
 
 const RETURN =
@@ -107,7 +141,9 @@ const RETURN =
 // Every helper's findings first (a barrier), so the double-checks go to the
 // most serious ones rather than to whichever helper finished first.
 const reports = await parallel(
-  crew.map((c) => () => agent(c.ask + RETURN, { label: c.name, phase: 'Check', agentType: c.name, schema: FINDINGS })),
+  crew.map((c) => () =>
+    agent(c.ask + RETURN, Object.assign({ label: c.name, phase: 'Check', schema: FINDINGS }, c.agentType ? { agentType: c.agentType } : {})),
+  ),
 )
 const RANK = { high: 0, medium: 1, low: 2 }
 const byRank = (a, b) => RANK[a.severity] - RANK[b.severity]
@@ -151,19 +187,81 @@ return {
 }
 `;
 
+/** A check result as a pane saved it, kept to the shape the results view
+ * draws, or null when it isn't one: the model writes the file by hand. */
+export function validCheckResult(x: unknown): Record<string, unknown> | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const o = x as Record<string, unknown>;
+  const str = (v: unknown, max = 4000) => (typeof v === "string" ? v.slice(0, max) : undefined);
+  const finding = (f: unknown) => {
+    if (!f || typeof f !== "object") return null;
+    const r = f as Record<string, unknown>;
+    const severity = r.severity === "high" || r.severity === "medium" || r.severity === "low" ? r.severity : "low";
+    const v = r.verdict as Record<string, unknown> | null | undefined;
+    return {
+      severity,
+      where: str(r.where, 300) ?? "",
+      problem: str(r.problem) ?? "",
+      fix: str(r.fix) ?? "",
+      evidence: str(r.evidence),
+      from: str(r.from, 40) ?? "?",
+      verdict: v && typeof v === "object" ? { refuted: v.refuted === true, reason: str(v.reason) ?? "" } : null,
+      capped: r.capped === true,
+      verifyFailed: r.verifyFailed === true,
+    };
+  };
+  const findings = (v: unknown) => (Array.isArray(v) ? v.slice(0, 100).map(finding).filter(Boolean) : []);
+  const crew = Array.isArray(o.crew)
+    ? o.crew.slice(0, 20).flatMap((c) => {
+        if (!c || typeof c !== "object") return [];
+        const r = c as Record<string, unknown>;
+        return [{ name: str(r.name, 40) ?? "?", failed: r.failed === true, checked: str(r.checked) ?? "", notChecked: str(r.notChecked) ?? "" }];
+      })
+    : [];
+  return {
+    base: str(o.base, 200),
+    summary: str(o.summary),
+    error: str(o.error),
+    crew,
+    confirmed: findings(o.confirmed),
+    unverified: findings(o.unverified),
+    refuted: findings(o.refuted),
+  };
+}
+
 /** What den pastes into a kit to run the done check. The developer's click
  * is the ask: a session runs a workflow only when asked to. */
-export function doneCheckPrompt(base: string | null, scriptPath = DONE_CHECK_PATH): string {
-  const baseArg = base ? `"${base.replaceAll('"', "")}"` : `"<the branch this one is based on>"`;
+export function doneCheckPrompt(base: string | null, resultPath: string, scriptPath = DONE_CHECK_PATH): string {
   return (
     `Run den's done check on your work now: call the Workflow tool with scriptPath ` +
-    `"${scriptPath}" and args {"base": ${baseArg}}. When it returns, fix what it ` +
-    `confirmed, worst first, and judge its unverified findings yourself. If it ` +
-    `returned an error or a helper failed, say so: that part wasn't checked. Then ` +
+    `"${scriptPath}" and args {"base": ${baseArg(base)}}. When it returns, save the ` +
+    `object it returned, as JSON, to ${resultPath}, where den shows it. Then fix ` +
+    `what it confirmed, worst first, and judge its unverified findings yourself. If ` +
+    `it returned an error or a helper failed, say so: that part wasn't checked. Then ` +
     `say in your handover who checked what, and tell me in a few lines what it found ` +
-    `and what you changed.`
+    `and what you changed. If the PR description has a testing section, draft its ` +
+    `list of what was verified (commands and results) from what the check ran.`
   );
 }
+
+/** What den pastes into a review pane for a deep review of the PR. */
+export function deepReviewPrompt(base: string | null, resultPath: string, scriptPath = DONE_CHECK_PATH): string {
+  return (
+    `Run den's deep review of this pull request now: call the Workflow tool with ` +
+    `scriptPath "${scriptPath}" and args {"mode": "review", "base": ${baseArg(base)}}. ` +
+    `It runs a code-review pass, a ticket check, and the crew in parallel, then has a ` +
+    `skeptic try to refute each serious finding. When it returns, save the object it ` +
+    `returned, as JSON, to ${resultPath}, where den shows it. Then write the review ` +
+    `file from it as your instructions describe: each confirmed finding as a bullet ` +
+    `with its source tag marked verified (its "from" field, as in [ticket, verified]), ` +
+    `the unverified ones only if you judge them real after reading the code, no ` +
+    `refuted ones, and the Checked section from what each helper checked and ` +
+    `couldn't. Write the reading guide first if there isn't one yet.`
+  );
+}
+
+const baseArg = (base: string | null) =>
+  base ? `"${base.replaceAll('"', "")}"` : `"<the branch this one is based on>"`;
 
 /** Write the script where panes can run it by path, when it has changed. */
 export function ensureDoneCheckScript(): void {

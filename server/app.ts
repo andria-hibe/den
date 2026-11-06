@@ -3,10 +3,11 @@ import { promisify } from "node:util";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { DATA_DIR } from "./dataDir.ts";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, notepadPath, reviewDiffPath, reviewGuidePath } from "./sessions.ts";
-import { askLine, readThreads } from "./lineAsk.ts";
+import { StillAnswering, askLine, readThreads } from "./lineAsk.ts";
 import { worksLikeWorkspace } from "../shared/handover.ts";
 import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { freshStartPrompt } from "./instructions.ts";
@@ -21,6 +22,8 @@ import {
   getNotifications,
   getPrDetail,
   getPrDiff,
+  getPrBase,
+  getPrHead,
   getTeamReviewPrs,
   openReviewThreads,
   isValidRepo,
@@ -49,7 +52,8 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir, baseBranchOverride, denRepo } from "./fs.ts";
 import { buildUpdate, installUpdate, updateLogTail, updateStatus } from "./denUpdate.ts";
-import { doneCheckPrompt, ensureDoneCheckScript } from "./doneCheck.ts";
+import { checkResultPath, deepReviewPrompt, doneCheckPrompt, ensureDoneCheckScript, validCheckResult } from "./doneCheck.ts";
+import { crewRuns } from "./crewActivity.ts";
 import { currentWatch } from "./fieldMouse.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
@@ -65,6 +69,26 @@ import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
+
+/** The Vite dev server's page (`npm run dev`), allowed to call den only
+ * when den isn't serving its own UI. */
+const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  // React's style attributes are inline styles.
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws://127.0.0.1:* ws://localhost:*",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+/** How much of a PR's diff a review pane is handed. */
+const REVIEW_DIFF_CAP = 200_000;
 
 /** Others' PRs whose open review threads go in the digest: one GitHub call each. */
 const MAX_OTHERS_THREADS = 10;
@@ -136,6 +160,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const host = opts.host ?? "127.0.0.1";
   const webDir = opts.webDir ?? process.env.DEN_WEB_DIR;
 
+  // Only the developer reads den's data: the Linear key and saved scrollback
+  // are in it, and other local accounts share the staff group.
+  try {
+    chmodSync(DATA_DIR, 0o700);
+  } catch (err) {
+    logWarn("data dir mode", err);
+  }
   sessions.hydrate();
   ensureDoneCheckScript();
 
@@ -144,10 +175,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // Before any handler, so it covers the terminal WebSocket upgrade too (a GET
   // that hits this hook first): a page you're browsing can't reach den.
+  // Without its own UI to serve (`npm run dev`), den's page comes from Vite.
+  const devOrigins = webDir && existsSync(webDir) ? [] : DEV_ORIGINS;
   app.addHook("onRequest", async (req, reply) => {
-    if (!isLocalRequest(req.headers)) {
+    if (!isLocalRequest(req.headers, req.socket.localPort, devOrigins)) {
       reply.code(403).send({ error: "forbidden" });
     }
+  });
+  // den renders other people's text (PRs, tickets, reviews): no inline or
+  // foreign script may run even if some markup slips through.
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (String(reply.getHeader("content-type") ?? "").startsWith("text/html")) reply.header("content-security-policy", CSP);
+    return payload;
   });
 
   app.get("/api/health", async () => ({ ok: true }));
@@ -382,7 +421,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       // round-trip of its own.
       if (body.view === "review") {
         try {
-          body.reviewDiff = (await getPrDiff(body.prRepo, pr)).slice(0, 200_000);
+          body.reviewDiff = (await getPrDiff(body.prRepo, pr)).slice(0, REVIEW_DIFF_CAP);
         } catch (err) {
           logWarn("github.diff(review)", err);
         }
@@ -626,8 +665,53 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     ensureDoneCheckScript();
     const base = session.meta().stack?.parent ?? null;
-    const ready = await paste(session, doneCheckPrompt(base), true);
+    const ready = await paste(session, doneCheckPrompt(base, checkResultPath(session.groupId)), true);
     return { ok: true, ready };
+  });
+
+  // The Review tab's deep review: the same workflow in review mode.
+  app.post("/api/sessions/:id/deep-review", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    if (!session || session.status !== "running" || session.view !== "review") {
+      reply.code(409);
+      return { error: "not_running", message: "Start the review session to run a deep review." };
+    }
+    const watch = currentWatch();
+    if (watch.level === "tight" && !(req.body as { force?: boolean } | null)?.force) {
+      reply.code(409);
+      return { error: "tokens_tight", message: `The field mouse says tokens are tight: ${watch.alerts.find((a) => a.level === "tight")?.message ?? ""}` };
+    }
+    ensureDoneCheckScript();
+    const base = (await getPrBase(session.prRepo, session.pr)) ?? null;
+    const ready = await paste(session, deepReviewPrompt(base, checkResultPath(session.groupId)), true);
+    return { ok: true, ready };
+  });
+
+  // What each helper a pane called was asked, ran, and reported.
+  app.get("/api/sessions/:id/crew-runs", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    return { runs: crewRuns(session.groupId) };
+  });
+
+  // The last check a pane saved (done check or deep review), for den to show.
+  app.get("/api/sessions/:id/check-result", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    try {
+      const file = checkResultPath(session.groupId);
+      const result = validCheckResult(JSON.parse(readFileSync(file, "utf8")));
+      if (!result) logWarn("check result", new Error("not a check result"));
+      return { result, at: result ? statSync(file).mtimeMs : null };
+    } catch {
+      return { result: null, at: null };
+    }
   });
 
   // Which shell tab den launched each workspace's app in (#28), by group.
@@ -877,7 +961,39 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true };
   });
 
-  // Read-only from the client: only the review session writes the review and the guide.
+  // Whether the PR has moved on since its guide and review were written, and
+  // catching the saved diff up when the developer asks for a refresh.
+  const reviewOf = (id: string) => {
+    const s = sessions.get(id);
+    return s && s.view === "review" && s.pr && s.prRepo ? { s, pr: s.pr, repo: s.prRepo } : null;
+  };
+  // One small call (the head commit) rather than the whole diff: every open
+  // review checks on a timer, and GitHub's secondary rate limit has bitten before.
+  app.get("/api/sessions/:id/review-stale", async (req, reply) => {
+    const r = reviewOf((req.params as { id: string }).id);
+    if (!r) {
+      reply.code(404);
+      return { error: "not_a_review" };
+    }
+    const head = await getPrHead(r.repo, r.pr);
+    if (!head) return { stale: false };
+    const saved = sessions.readReviewHead(r.s.groupId);
+    // A review from before den recorded heads starts from the head it sees first.
+    if (!saved) sessions.writeReviewHead(r.s.groupId, head);
+    return { stale: !!saved && saved !== head };
+  });
+  app.post("/api/sessions/:id/review-diff/refresh", async (req, reply) => {
+    const r = reviewOf((req.params as { id: string }).id);
+    if (!r) {
+      reply.code(404);
+      return { error: "not_a_review" };
+    }
+    const [diff, head] = await Promise.all([getPrDiff(r.repo, r.pr), getPrHead(r.repo, r.pr)]);
+    sessions.writeReviewDiff(r.s.groupId, diff.slice(0, REVIEW_DIFF_CAP));
+    if (head) sessions.writeReviewHead(r.s.groupId, head);
+    return { ok: true };
+  });
+
   // Questions about one line of a PR under review, each its own small chat.
   app.get("/api/sessions/:id/line-threads", async (req, reply) => {
     const session = sessions.get((req.params as { id: string }).id);
@@ -905,14 +1021,21 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(400);
       return { error: "bad_request" };
     }
-    const thread = await askLine(
-      { groupId: session.groupId, cwd: session.cwd, pr: session.pr ?? null, diffPath: reviewDiffPath(session.groupId), guidePath: reviewGuidePath(session.groupId) },
-      { file, side, line, quote, hunk },
-      question,
-    );
-    return { thread };
+    try {
+      const thread = await askLine(
+        { groupId: session.groupId, cwd: session.cwd, pr: session.pr ?? null, diffPath: reviewDiffPath(session.groupId), guidePath: reviewGuidePath(session.groupId) },
+        { file, side, line, quote, hunk },
+        question,
+      );
+      return { thread };
+    } catch (err) {
+      if (!(err instanceof StillAnswering)) throw err;
+      reply.code(409);
+      return { error: "still_answering", message: "Still answering the last question on this line." };
+    }
   });
 
+  // Read-only from the client: only the review session writes the review and the guide.
   app.get("/api/review/notes/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
     if (!isValidGroupId(groupId)) {

@@ -12,6 +12,7 @@ import {
   guidePrompt,
   hunkRanges,
   lineAnswerPrompt,
+  refreshReviewPrompt,
   notePrompt,
   reviewPrompt,
   ticketBrief,
@@ -21,16 +22,16 @@ import {
 } from "./prompts.ts";
 
 const ISSUE: LinearIssue = {
-  identifier: "FAST-1234",
+  identifier: "ABC-1234",
   title: "Fix the thing",
-  url: "https://linear.app/x/issue/FAST-1234",
+  url: "https://linear.app/x/issue/ABC-1234",
   priority: 2,
   priorityLabel: "High",
-  branchName: "andria/fast-1234-fix-the-thing",
+  branchName: "andria/abc-1234-fix-the-thing",
   description: "It breaks.",
   state: { name: "Todo", type: "unstarted", color: "#fff" },
   updatedAt: "2026-09-01T00:00:00Z",
-  ticketHint: "fast-1234",
+  ticketHint: "abc-1234",
 };
 
 const FILE_LINES = [
@@ -57,8 +58,9 @@ describe("paste prompts", () => {
     ticketNotesSeed: ticketNotesSeed(ISSUE),
     ticketPrompt: ticketPrompt(ISSUE),
     denPrompt: denPrompt(),
-    cleanupWithSkill: cleanupPrompt("runn-cleanup"),
+    cleanupWithSkill: cleanupPrompt("team-cleanup"),
     cleanupGeneric: cleanupPrompt(null),
+    refreshReview: refreshReviewPrompt(42, "o/r"),
     lineAnswer: lineAnswerPrompt("server/git.ts", 12, "Q: why?\nA: because."),
     ...Object.fromEntries(
       (["kit", "review", "manager"] as const).flatMap((pane) =>
@@ -131,7 +133,7 @@ describe("denPrompt", () => {
 describe("ticketNotesSeed", () => {
   it("opens on the empty handover, with the ticket below it", () => {
     const seed = ticketNotesSeed(ISSUE);
-    expect(seed.startsWith("# FAST-1234: Fix the thing\n\n## Where it stands")).toBe(true);
+    expect(seed.startsWith("# ABC-1234: Fix the thing\n\n## Where it stands")).toBe(true);
     expect(seed.indexOf("## Waiting on you")).toBeLessThan(seed.indexOf("## Session notes"));
     expect(seed.indexOf("## Session notes")).toBeLessThan(seed.indexOf("## Ticket"));
     expect(seed).toContain("It breaks.");
@@ -153,8 +155,8 @@ describe("ticketNotesSeed", () => {
 
 describe("cleanupPrompt", () => {
   it("names the skill and keeps den's approval gate", () => {
-    const text = cleanupPrompt("runn-cleanup");
-    expect(text).toContain("Use the runn-cleanup skill");
+    const text = cleanupPrompt("team-cleanup");
+    expect(text).toContain("Use the team-cleanup skill");
     expect(text).toContain("change nothing until I approve it");
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DONE_CHECK_MAX_VERIFY, DONE_CHECK_SCRIPT, doneCheckPrompt } from "./doneCheck.ts";
+import { DONE_CHECK_MAX_VERIFY, DONE_CHECK_SCRIPT, deepReviewPrompt, doneCheckPrompt, validCheckResult } from "./doneCheck.ts";
 import { isAscii } from "../shared/ascii.ts";
 
 type Opts = { label?: string; agentType?: string; schema?: unknown };
@@ -46,8 +46,37 @@ describe("done check workflow", () => {
     expect(out.unverified.some((f: { severity: string }) => f.severity === "low")).toBe(true);
   });
 
+  it("reviews a pull request with a code-review pass, a ticket check, and badger", async () => {
+    const labels: string[] = [];
+    const out = await run(
+      (_p, o) => {
+        if (o.label === "scope") return { base: "development", summary: "s", files: ["a.ts"], performance: false, security: false };
+        if (!o.label!.startsWith("verify")) {
+          labels.push(`${o.label}${o.agentType ? `/${o.agentType}` : ""}`);
+          return { findings: o.label === "ticket" ? [{ severity: "medium", where: "a.ts:1", problem: "p", fix: "f" }] : [], checked: "c" };
+        }
+        return { refuted: false, reason: "r" };
+      },
+      { mode: "review", base: "development" },
+    );
+    expect(labels.sort()).toEqual(["badger/badger", "code-review", "ticket"]);
+    expect(out.confirmed[0].from).toBe("ticket");
+  });
+
   it("is plain ASCII", () => {
     expect(isAscii(DONE_CHECK_SCRIPT)).toBe(true);
-    expect(isAscii(doneCheckPrompt("main"))).toBe(true);
+    expect(isAscii(doneCheckPrompt("main", "/r.json"))).toBe(true);
+    expect(isAscii(deepReviewPrompt("main", "/r.json"))).toBe(true);
+  });
+});
+
+describe("a saved check result", () => {
+  it("is drawn only in the shape the view expects", () => {
+    expect(validCheckResult("none")).toBeNull();
+    const r = validCheckResult({ confirmed: "none", crew: {}, error: { x: 1 }, refuted: [{ severity: "odd", where: 3 }] })!;
+    expect(r.confirmed).toEqual([]);
+    expect(r.crew).toEqual([]);
+    expect(r.error).toBeUndefined();
+    expect((r.refuted as { severity: string; where: string }[])[0]).toMatchObject({ severity: "low", where: "" });
   });
 });

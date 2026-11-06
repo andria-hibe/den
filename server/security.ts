@@ -39,14 +39,31 @@ function originIsLoopback(origin: string): boolean {
   }
 }
 
+/** An Origin's port, filling in the scheme's default. */
+function originPort(origin: string): number | null {
+  try {
+    const u = new URL(origin);
+    return Number(u.port || (u.protocol === "https:" ? 443 : 80));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * True if a request is safe to serve: a loopback Host and, when an Origin is
- * present, a loopback Origin (see the top of this file).
+ * present, a loopback Origin (see the top of this file). Given `ownPort`, the
+ * Origin must also be den's own page (that port) or one of `devOrigins` (the
+ * Vite dev server): any other local page, such as a PR's app started with
+ * "run" or a dev server, is another site and must not drive den.
  */
-export function isLocalRequest(headers: {
-  origin?: string;
-  host?: string;
-}): boolean {
+export function isLocalRequest(
+  headers: {
+    origin?: string;
+    host?: string;
+  },
+  ownPort?: number,
+  devOrigins: string[] = [],
+): boolean {
   const host = headers.host;
   if (!host) return false; // HTTP/1.1 requires Host; absence is suspicious.
   const hostname = hostnameOf(host);
@@ -54,6 +71,9 @@ export function isLocalRequest(headers: {
 
   const origin = headers.origin;
   if (origin && !originIsLoopback(origin)) return false;
+  if (origin && ownPort !== undefined && originPort(origin) !== ownPort && !devOrigins.includes(origin.toLowerCase())) {
+    return false;
+  }
 
   return true;
 }

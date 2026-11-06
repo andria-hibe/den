@@ -1,7 +1,14 @@
 // Minimal, safe markdown -> HTML (headings, lists, bold/italic/code, links).
-// Content is HTML-escaped first, so rendered output can't inject markup.
-function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Content is HTML-escaped first, so rendered output can't inject markup. The
+// rendered text is often someone else's (a PR description, a ticket, a review
+// comment), so quotes are escaped too: a link's URL goes into an attribute.
+export function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function inline(s: string) {
