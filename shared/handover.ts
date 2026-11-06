@@ -29,6 +29,17 @@ export function isHandover(md: string): boolean {
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
+/** How long a handover can get, ticket aside, before den asks the session to
+ * trim it: every fresh start and every Fox digest pays to read it. */
+export const HANDOVER_LONG_CHARS = 12_000;
+
+/** A notepad's length without its ticket section, which isn't the
+ * session's to trim. */
+export function handoverLength(notepad: string, ticket: string): number {
+  const t = ticket.trim();
+  return t && squash(notepad).includes(squash(t)) ? Math.max(0, notepad.length - t.length) : notepad.length;
+}
+
 /** The notepad with the ticket section put back at the end, or null when the
  * ticket is still there. Whitespace is ignored when comparing, so a session
  * that reflows the file doesn't get a second copy (#39). */

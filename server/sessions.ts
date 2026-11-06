@@ -8,7 +8,8 @@ import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import {
-  HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, canStartFresh, lineChanges, restoreTicket,
+  HANDOVER_HEADINGS, HANDOVER_LONG_CHARS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, canStartFresh, handoverLength,
+  lineChanges, restoreTicket,
   ticketDescription, waitingItems, worksLikeWorkspace,
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
@@ -350,7 +351,8 @@ export function progressInstruction(file: string): string {
     `since it goes stale as soon as someone else pushes. On a stacked branch, ` +
     `list the stack's branches and PRs in merge order. Keep ` +
     `it current rather than historical, but keep decisions and their reasons ` +
-    `until they stop mattering.\n` +
+    `until they stop mattering. Keep the whole handover, ticket aside, under ` +
+    `about ${HANDOVER_LONG_CHARS.toLocaleString("en-US")} characters: every fresh start reads it.\n` +
     `Leave everything below the session notes (such as the ticket) as it is. If ` +
     `the file holds an older running log instead, fold it into this shape. The ` +
     `file is shown to the developer in a side notepad; don't mention it in your ` +
@@ -891,11 +893,23 @@ export function idleHandoverDue(p: {
 
 /** The first message of a pane started fresh from its handover, so it picks
  * the work up without waiting to be asked. */
-export function freshStartPrompt(notepad: string): string {
+/** `long`: the handover's length when it is past HANDOVER_LONG_CHARS. */
+export function freshStartPrompt(notepad: string, long: number | null = null): string {
   return (
     `den: this is a fresh start of this session. Read your handover at ${notepad}, ` +
     `then tell me in a few lines where the work stands and what you'll do next, and ` +
-    `carry on unless it's waiting on me.`
+    `carry on unless it's waiting on me.${long ? ` Once you've read it, ${trimRequest(long)}` : ""}`
+  );
+}
+
+/** Asks a session to cut a long handover down. */
+function trimRequest(long: number): string {
+  return (
+    `trim the handover: it is about ${Math.round(long / 1000)}k characters, and ` +
+    `every fresh start and every Fox digest pays to read it. Keep what the next ` +
+    `session needs (where things stand, open decisions and their reasons, ` +
+    `gotchas, the exact next step), fold finished work into a line each, and ` +
+    `drop detail that git history or the PR already holds.`
   );
 }
 
@@ -904,7 +918,7 @@ export function freshStartPrompt(notepad: string): string {
  * a pane waiting at a permission prompt looks exactly as idle as a finished
  * one, and typing into it would answer the prompt, or send a draft the
  * developer left in the input box. */
-export function idleHandoverPrompt(notepad: string, reason: "quiet" | "fresh" = "quiet"): string {
+export function idleHandoverPrompt(notepad: string, reason: "quiet" | "fresh" = "quiet", long: number | null = null): string {
   const why =
     reason === "fresh"
       ? `den: the developer is starting this session fresh, so this conversation ` +
@@ -917,7 +931,8 @@ export function idleHandoverPrompt(notepad: string, reason: "quiet" | "fresh" = 
     `your instructions: rewrite the developer's four sections and the session ` +
     `notes in place, and leave everything else in the file alone. If you were ` +
     `waiting on the developer (a question, a permission prompt, a decision), say ` +
-    `so under "Waiting on you". Do not run anything or change any other file. ` +
+    `so under "Waiting on you". ${long ? `Also ${trimRequest(long)} ` : ""}` +
+    `Do not run anything or change any other file. ` +
     `Reply with one word: done.`
   );
 }
@@ -1380,6 +1395,23 @@ class SessionManager {
     }
   }
 
+  /** The handover's length when it is past HANDOVER_LONG_CHARS, else null. */
+  handoverTooLong(groupId: string): number | null {
+    try {
+      const notepad = readFileSync(notepadPath(groupId), "utf8");
+      let ticket = "";
+      try {
+        ticket = readFileSync(ticketCopyPath(groupId), "utf8");
+      } catch {
+        // not a ticket workspace
+      }
+      const n = handoverLength(notepad, ticket);
+      return n > HANDOVER_LONG_CHARS ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Each session's "Waiting on you" as last seen, to tell the Manager what moved. */
   private waitingSeen = new Map<string, string[]>();
 
@@ -1448,7 +1480,7 @@ class SessionManager {
         "--add-dir", PROGRESS_DIR,
         "--allowedTools", "Read", `Edit(//${notepad.replace(/^\/+/, "")})`,
         "--append-system-prompt", progressInstruction(notepad),
-        "--", idleHandoverPrompt(notepad, reason),
+        "--", idleHandoverPrompt(notepad, reason, this.handoverTooLong(s.groupId)),
       ],
       { cwd: s.cwd, timeout: 10 * 60_000, maxBuffer: 4 * 1024 * 1024 },
       (err) => {

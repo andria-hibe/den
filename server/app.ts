@@ -532,7 +532,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // A pane that wouldn't stop keeps its old chat, which mustn't get this prompt.
     if (fresh === true && session && session.claudeSessionId !== chatBefore && meta.status === "running") {
-      void paste(session, freshStartPrompt(notepadPath(session.groupId)), true).catch((e) =>
+      void paste(session, freshStartPrompt(notepadPath(session.groupId), sessions.handoverTooLong(session.groupId)), true).catch((e) =>
         logWarn("fresh start prompt", e),
       );
     }
