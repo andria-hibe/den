@@ -19,6 +19,16 @@ npm run check          # typecheck + lint + test — run before committing
 npm run smoke          # end-to-end: real server + UI in headless Electron (node ABI)
 ```
 
+> **Update den** (topbar "⬆ update", `UpdateButton` + `server/denUpdate.ts`):
+> the installed app knows the commit it was built from (`DEN_BUILD_COMMIT`,
+> stamped by `scripts/build-electron.mjs`; empty for a dirty tree) and
+> offers the checkout's newer commits. "build" runs `npm run pack` in the
+> checkout (refused while it has uncommitted changes) and stages
+> `/Applications/Den.app.new`; "quit and install" runs
+> `scripts/install-den.sh`, which detaches, quits den, swaps, and reopens
+> (refused mid Hedgehog round). Both are the developer's clicks, so the rule
+> below still holds for sessions.
+>
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
 > typecheck, verify, and commit — but leave the ship loop (`npm run pack` →
 > staged copy into `/Applications/Den.app` → reopen) for when they say so. They

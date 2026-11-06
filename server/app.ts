@@ -46,7 +46,8 @@ import {
   hasKey,
   type LinearData,
 } from "./linear.ts";
-import { roots, listDirs, makeDir, isDir, baseBranchOverride } from "./fs.ts";
+import { roots, listDirs, makeDir, isDir, baseBranchOverride, denRepo } from "./fs.ts";
+import { buildUpdate, installUpdate, updateLogTail, updateStatus } from "./denUpdate.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
@@ -1106,6 +1107,38 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   app.get("/api/manager/clockout/round", async () => ({ round: sessions.clockOutRound() }));
+
+  // --- Update den: build its checkout, then swap the bundle in on quit ---
+  // Only the installed app offers it; `npm run app` runs from the checkout.
+  const packaged = () => process.execPath.startsWith("/Applications/Den.app/");
+  app.get("/api/den/update", async () => {
+    const status = updateStatus(denRepo(), packaged());
+    return { ...status, log: status.state === "failed" ? updateLogTail() : "" };
+  });
+  app.post("/api/den/update/build", async (_req, reply) => {
+    const repo = denRepo();
+    if (!repo || !packaged()) {
+      reply.code(409);
+      return { error: "not_available", message: "Only the installed den can update itself." };
+    }
+    const r = buildUpdate(repo);
+    if (r === "started") return { ok: true };
+    reply.code(409);
+    return { error: r, message: r === "dirty" ? "den's checkout has uncommitted changes." : "A build is already running." };
+  });
+  app.post("/api/den/update/install", async (_req, reply) => {
+    const repo = denRepo();
+    const round = sessions.clockOutRound();
+    // Quitting mid-round would cut Hedgehog's handovers off.
+    if (round && !round.finishedAt) {
+      reply.code(409);
+      return { error: "round_running", message: "Hedgehog is still saving handovers; install once it's done." };
+    }
+    const r = repo && packaged() ? installUpdate(repo) : "not_staged";
+    if (r === "started") return { ok: true };
+    reply.code(409);
+    return { error: r, message: "Nothing is built to install yet." };
+  });
 
   // A nap: Hedgehog saves every handover and leaves the panes running.
   app.post("/api/manager/nap", async (_req, reply) => {

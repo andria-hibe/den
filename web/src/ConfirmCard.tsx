@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 /** Where a confirm card opens: under its button, right edges aligned. */
 export type CardAnchor = { top: number; right: number };
@@ -17,14 +17,16 @@ export function ConfirmCard({
   confirmLabel,
   busyLabel,
   busy,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
   at: CardAnchor;
-  message: string;
+  message: ReactNode;
   confirmLabel: string;
   busyLabel: string;
   busy: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -54,7 +56,7 @@ export function ConfirmCard({
         <button className="btn own-pr-btn" disabled={busy} onClick={onCancel}>
           cancel
         </button>
-        <button className="btn btn-primary own-pr-btn" disabled={busy} onClick={onConfirm} autoFocus>
+        <button className="btn btn-primary own-pr-btn" disabled={busy || confirmDisabled} onClick={onConfirm} autoFocus>
           {busy ? busyLabel : confirmLabel}
         </button>
       </div>

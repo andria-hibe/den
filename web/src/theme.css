@@ -2193,6 +2193,21 @@ body {
   justify-content: flex-end;
   gap: 6px;
 }
+.update-commits {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--ink-soft);
+}
+.update-warn {
+  color: var(--pink-deep);
+}
+.update-log {
+  max-height: 140px;
+  overflow: auto;
+  margin: 0;
+  font-size: 10px;
+  white-space: pre-wrap;
+}
 
 /* Error toast */
 .toast {

@@ -3,6 +3,7 @@ import { WorkPanel } from "./WorkPanel.tsx";
 import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
+import { UpdateButton } from "./UpdateButton.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
@@ -806,6 +807,7 @@ export function App() {
               )}
             </>
           )}
+        <UpdateButton onError={setErrMsg} />
         <LedgerChip mouse />
         <span className="status-fox-wrap" ref={foxPopRef}>
           <button
