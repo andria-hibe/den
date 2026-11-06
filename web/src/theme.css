@@ -2501,6 +2501,17 @@ body {
 .ledger-chip.early .ledger-label {
   color: rgba(74, 58, 82, 0.6);
 }
+/* The field mouse's warnings: a spike, then a limit set to run out early. */
+.ledger-chip.mouse-watch .ledger-label {
+  color: #b86a1f;
+}
+.ledger-chip.mouse-tight {
+  outline: 2px solid #c2457a;
+}
+.ledger-chip.mouse-tight .ledger-label {
+  color: #c2457a;
+  font-weight: 700;
+}
 /* Pushes the topbar's right-hand group (start my day, pace, fox) to the edge. */
 .topbar-spacer {
   flex: 1;

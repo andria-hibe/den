@@ -15,6 +15,7 @@ import {
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
 import { compactions, contextSize } from "./usage.ts";
+import { RECENT_MS, assess, burners, currentWatch, noteReading, setWatch, type Watch } from "./fieldMouse.ts";
 import { createHash } from "node:crypto";
 import { setupHint } from "./apprun.ts";
 import {
@@ -825,6 +826,37 @@ class SessionManager {
       const idleTimer = setInterval(() => this.checkIdleHandovers(), Math.min(60_000, idleMs / 2));
       idleTimer.unref?.();
     }
+    const mouseTimer = setInterval(() => this.watchTokens(), 60_000);
+    mouseTimer.unref?.();
+  }
+
+  /** Alerts already passed to the Manager, so each is said once. */
+  private announced = new Set<string>();
+
+  /** The field mouse's round: note the plan's limits, see who is spending,
+   * and tell a running Manager about anything new. */
+  watchTokens(now = Date.now()): Watch {
+    try {
+      const readings = noteReading(readLimits(), now);
+      const panes = [...this.sessions.values()].flatMap((s) =>
+        !s.shell && s.status === "running" && s.claudeSessionId ? [{ id: s.id, name: s.agentName ?? s.name, sessionId: s.claudeSessionId }] : [],
+      );
+      const watch = assess(readings, now, burners(panes, now - RECENT_MS).slice(0, 5));
+      setWatch(watch);
+      const fresh = watch.alerts.filter((a) => !this.announced.has(a.key));
+      const manager = this.manager();
+      if (fresh.length && manager?.status === "running") {
+        const who = watch.burners.length
+          ? ` Spending the most in the last 30 minutes: ${watch.burners.map((b) => `"${b.name}" ${b.share}%`).join(", ")}.`
+          : "";
+        tellPane(manager.groupId, `den's field mouse: ${fresh.map((a) => a.message).join(" ")}${who}`);
+      }
+      for (const a of fresh) this.announced.add(a.key);
+      return watch;
+    } catch (err) {
+      logWarn("field mouse", err);
+      return currentWatch();
+    }
   }
 
   /** Whether any headless handover fork is still writing. */
@@ -876,6 +908,9 @@ class SessionManager {
 
   /** Start an idle handover for every workspace main pane that is due one. */
   private checkIdleHandovers() {
+    // A fork reads the whole conversation; with tokens tight it waits for
+    // clock out, a nap, or a fresh start, which still write the handover.
+    if (currentWatch().level === "tight") return;
     const idleMs = idleHandoverMs();
     const now = Date.now();
     for (const s of this.sessions.values()) {
@@ -1521,7 +1556,7 @@ class SessionManager {
 
   /** The plan's limits, and the running Claude panes by how much context each
    * turn sends, largest first (#45). */
-  usageOverview(): { limits: PlanLimits | null; panes: { id: string; name: string; context: number }[] } {
+  usageOverview(): { limits: PlanLimits | null; panes: { id: string; name: string; context: number }[]; watch: Watch } {
     const panes = [...this.sessions.values()]
       .flatMap((s) =>
         !s.shell && s.status === "running" && s.claudeSessionId
@@ -1530,7 +1565,7 @@ class SessionManager {
       )
       .filter((p) => p.context > 0)
       .sort((a, b) => b.context - a.context);
-    return { limits: readLimits(), panes };
+    return { limits: readLimits(), panes, watch: currentWatch() };
   }
 
   list(): SessionMeta[] {

@@ -610,6 +610,26 @@ status line file (`readPaneContext` in `limits.ts`, `meta().context`),
 ignored while the file's `session_id` isn't the pane's current
 conversation.
 
+**The field mouse watches tokens** (andria, 2026-11-06: "make sure we're
+not going over suddenly"). `server/fieldMouse.ts`, on a 60s server timer
+(`sessions.watchTokens`, so it runs with the window closed): it keeps a
+26h history of the plan's limits (`~/.den/ledger/readings.json`, a reading
+when a pane's status line reports a new one), and pure `assess` flags a
+5-hour window set to run out before it resets at the last half hour's rate
+(`tight`), a week set to run out early (`tight`) or ahead of pace
+(`watch`), and a jump (`WEEK_JUMP` points in an hour, `SESSION_JUMP` in
+half an hour; `watch`). `burners` names who is spending: each running
+pane's transcript plus every subagent and workflow agent under it, read
+incrementally, weighted by API price ratios (`weigh`), as shares of the
+last 30 minutes. New alerts go to a running Fox once each (inbox message;
+Fox tells the developer and suggests what to pause), to a native
+notification and the pace chip (`mouse-watch` / `mouse-tight`, alerts and
+top spenders on hover), and into the digest. While `tight` it also
+manages: no Fable for owl (`fableHasRoom`), no quiet-spell idle handovers
+(clock out, nap, and start fresh still write them), and the done check
+needs a second click (`tokens_tight`; `api()` errors now carry `code`).
+It never stops a session.
+
 **The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
 `view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
 developer's day across the other sessions instead of them being the glue.

@@ -2,6 +2,7 @@
 // subagents (`--agents`), each on the model that fits its job. The art and
 // names live in web/src/critterSprites.ts (CREW); keep the two in step.
 import { readLimits } from "./limits.ts";
+import { currentWatch } from "./fieldMouse.ts";
 import { weekPace } from "../shared/pace.ts";
 
 interface AgentDef {
@@ -253,6 +254,7 @@ export function reviewCrewRule(): string {
 /** Owl may think on Fable unless the week is already ahead of an even pace
  * (or there's no reading yet to tell). */
 export function fableHasRoom(): boolean {
+  if (currentWatch().level === "tight") return false;
   const limits = readLimits();
   const week = limits?.week;
   if (!limits || !week) return false;

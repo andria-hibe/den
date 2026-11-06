@@ -118,15 +118,24 @@ export function CrewButtons({
   };
 
   const [checking, setChecking] = useState(false);
+  // The field mouse's warning when tokens are tight: the run waits for a second click.
+  const [tight, setTight] = useState<string | null>(null);
   const doneCheck = () => {
     setChecking(true);
+    const force = tight !== null;
     const job = (queueBy.get(sessionId) ?? Promise.resolve()).then(() =>
-      api(`/api/sessions/${sessionId}/done-check`, { method: "POST" }),
+      api(`/api/sessions/${sessionId}/done-check`, { method: "POST", body: JSON.stringify({ force }) }),
     );
     queueBy.set(sessionId, job.catch(() => {}));
     job
-      .then(() => setCalled((prev) => ({ ...prev, badger: Date.now(), owl: Date.now() })))
-      .catch((e) => onError((e as Error).message))
+      .then(() => {
+        setTight(null);
+        setCalled((prev) => ({ ...prev, badger: Date.now(), owl: Date.now() }));
+      })
+      .catch((e) => {
+        if ((e as { code?: string }).code === "tokens_tight") setTight((e as Error).message);
+        else onError((e as Error).message);
+      })
       .finally(() => setChecking(false));
   };
 
@@ -189,13 +198,14 @@ export function CrewButtons({
                   Badger and Owl at once, plus Hare or Wolf when the change needs them, with each serious finding
                   double-checked. Up to about ten helpers, so it costs more than one ask.
                 </div>
+                {tight && <div className="crew-card-job update-warn">{tight}</div>}
               </div>
               <button
                 className="btn btn-ghost-outline crew-ask"
                 disabled={!running || checking}
                 onClick={doneCheck}
               >
-                {checking ? "asking..." : "run"}
+                {checking ? "asking..." : tight ? "run anyway" : "run"}
               </button>
             </div>
           )}

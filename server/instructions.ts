@@ -398,7 +398,10 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `involves the developer, so check it with gh pr view once rather than ` +
     `asking them about it. den tells you when a session's "Waiting on you" ` +
     `changes, since the developer often answers in the session itself: tick ` +
-    `what it settled and add what's new. ` +
+    `what it settled and add what's new. den's field mouse tells you when token ` +
+    `use jumps or a limit is set to run out before it resets, naming the ` +
+    `sessions spending the most: tell the developer at the top of your next ` +
+    `reply and suggest what to pause or start fresh. ` +
     `The developer can tick items in den's Today view too, so ` +
     `read ${today} before you change it and keep their ticks. Keep ${today} ` +
     `current: mark an item "- [x]" when it's ` +

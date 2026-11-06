@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { notify } from "./useNotifications.ts";
+import type { Watch } from "../../server/fieldMouse.ts";
 import { api } from "./api.ts";
 import { formatTokens, relTimeAgo } from "./format.ts";
 import { weekPace } from "../../shared/pace.ts";
@@ -8,6 +10,7 @@ import type { PlanLimits } from "../../server/limits.ts";
 interface Overview {
   limits: PlanLimits | null;
   panes: { id: string; name: string; context: number }[];
+  watch: Watch;
 }
 
 const when = (ms: number, weekday: boolean) =>
@@ -38,16 +41,35 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
     };
   }, []);
 
+  // A native notification for each new field mouse alert; the ones already
+  // up when den opens are seeded silently.
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const alerts = data?.watch.alerts ?? [];
+    if (!data) return;
+    if (seen.current) {
+      for (const a of alerts) if (!seen.current.has(a.key)) notify("🐭 Tokens", a.message);
+    }
+    seen.current = new Set(alerts.map((a) => a.key));
+  }, [data]);
+
   const week = data?.limits?.week;
   if (!data?.limits || !week || week.resetsAt <= Date.now()) return null;
   const pace = weekPace(week.usedPercentage, week.resetsAt, data.limits.at);
+  const { watch } = data;
   const lines = [
+    ...watch.alerts.map((a) => `${a.level === "tight" ? "!!" : "!"} ${a.message}`),
+    ...(watch.alerts.length ? [""] : []),
     `This week: ${Math.round(pace.used)}% used (${LABEL[pace.status]}); an even pace would be ${Math.round(pace.expected)}%. Resets ${when(week.resetsAt, true)}.`,
   ];
   if (pace.runsOutAt) lines.push(`At this week's rate it runs out ${when(pace.runsOutAt, true)}.`);
   const session = data.limits.session;
   if (session && session.resetsAt > Date.now()) {
     lines.push(`This 5-hour window: ${Math.round(session.usedPercentage)}%, resets ${when(session.resetsAt, false)}.`);
+  }
+  if (watch.burners.length) {
+    lines.push("", "Spending the most in the last 30 minutes:");
+    for (const b of watch.burners) lines.push(`  ${b.share}%  ${b.name}`);
   }
   if (data.panes.length) {
     lines.push("", "Context sent with each turn (largest first, the first to start fresh):");
@@ -56,7 +78,7 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
   lines.push("", `As of ${relTimeAgo(data.limits.at)}.`);
 
   return (
-    <span className={`ledger-chip ${pace.status}`} title={lines.join("\n")}>
+    <span className={`ledger-chip ${pace.status} mouse-${watch.level}`} title={lines.join("\n")}>
       {mouse && <Critter kind="mouse" size={19} className="ledger-mouse" />}
       {Math.round(pace.used)}%
       <span className="ledger-bar" aria-hidden>
@@ -64,7 +86,13 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
         <span className="ledger-tick" style={{ left: `${pace.expected}%` }} />
       </span>
       {/* Only a warning earns words on the chip; the rest is on hover. */}
-      {pace.status === "ahead" && <span className="ledger-label">ahead</span>}
+      {watch.level === "tight" ? (
+        <span className="ledger-label">tight</span>
+      ) : watch.level === "watch" ? (
+        <span className="ledger-label">{pace.status === "ahead" ? "ahead" : "spike"}</span>
+      ) : (
+        pace.status === "ahead" && <span className="ledger-label">ahead</span>
+      )}
     </span>
   );
 }

@@ -4,6 +4,7 @@
 // secondary rate limit before.
 import { SESSION_NOTES_HEADING } from "../shared/handover.ts";
 import type { Pace } from "../shared/pace.ts";
+import type { Watch } from "./fieldMouse.ts";
 import type { GhNotification, OpenThread, PrBuckets, PullRequest, TeamPr } from "./github.ts";
 import type { LinearData, LinearNotification } from "./linear.ts";
 import type { StackStatus } from "./stack.ts";
@@ -36,6 +37,8 @@ export interface DigestInput {
   prs: PrBuckets | null;
   linear: LinearData | null;
   week: Pace | null;
+  /** The field mouse's latest assessment. */
+  watch?: Watch;
   /** Unread inbox items; null when that source didn't answer. */
   inbox: { linear: LinearNotification[] | null; github: (GhNotification & { requested?: "named" | "team" })[] | null };
   /** Open review threads per authored PR; null where GitHub didn't answer. */
@@ -279,6 +282,10 @@ export function buildDigest(d: DigestInput): string {
       `Week: ${Math.round(d.week.used)}% used, an even pace would be ${Math.round(d.week.expected)}% (${d.week.status}).`,
     );
     if (d.week.runsOutAt) out.push(`At this rate it runs out ${new Date(d.week.runsOutAt).toISOString()}.`);
+  }
+  for (const a of d.watch?.alerts ?? []) out.push(`Field mouse (${a.level}): ${a.message}`);
+  if (d.watch?.burners.length) {
+    out.push(`Spending the most in the last 30 minutes: ${d.watch.burners.map((b) => `${b.name} ${b.share}%`).join(", ")}.`);
   }
   return out.join("\n") + "\n";
 }

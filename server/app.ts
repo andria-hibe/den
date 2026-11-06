@@ -49,6 +49,7 @@ import {
 import { roots, listDirs, makeDir, isDir, baseBranchOverride, denRepo } from "./fs.ts";
 import { buildUpdate, installUpdate, updateLogTail, updateStatus } from "./denUpdate.ts";
 import { doneCheckPrompt, ensureDoneCheckScript } from "./doneCheck.ts";
+import { currentWatch } from "./fieldMouse.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
@@ -617,6 +618,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(409);
       return { error: "not_a_kit", message: "Only a work session can run the done check." };
     }
+    const watch = currentWatch();
+    if (watch.level === "tight" && !(req.body as { force?: boolean } | null)?.force) {
+      reply.code(409);
+      return { error: "tokens_tight", message: `The field mouse says tokens are tight: ${watch.alerts.find((a) => a.level === "tight")?.message ?? ""}` };
+    }
     ensureDoneCheckScript();
     const base = session.meta().stack?.parent ?? null;
     const ready = await paste(session, doneCheckPrompt(base), true);
@@ -1052,6 +1058,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         prs,
         linear,
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
+        watch: sessions.watchTokens(),
         inbox: { linear: linearInbox, github: githubInbox && tagReviewRequests(githubInbox, prs?.reviewRequested ?? null, teamPrs) },
         reviewThreads: reviewThreads ?? null,
         othersThreads,
