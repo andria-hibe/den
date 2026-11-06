@@ -23,11 +23,20 @@ export function ContextChip({ context, canFresh }: { context: PaneContext; canFr
     `Context: ${formatTokens(context.tokens)} of ${formatTokens(context.windowSize)} tokens (${pct}%), as of the last reply.`,
     `Peach from ${formatTokens(CONTEXT_FILLING_TOKENS)}, pink from ${formatTokens(CONTEXT_FULL_TOKENS)}. Near the limit Claude Code compacts the chat, which drops detail.`,
   ];
+  // A lapsed cache makes the next message re-read the whole chat at full
+  // price, which is when a fresh start from the handover is cheapest.
+  const cold = context.cacheExpiresAt !== null && Date.now() > context.cacheExpiresAt && context.recacheTokens >= CONTEXT_FILLING_TOKENS;
+  if (cold) {
+    lines.unshift(
+      `Cold: its prompt cache lapsed at ${new Date(context.cacheExpiresAt!).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, so the next message re-reads about ${formatTokens(context.recacheTokens)} tokens at full price.`,
+    );
+  }
   if (canFresh) lines.push("✦ starts a fresh chat from the handover instead.");
   return (
-    <span className={`ledger-chip context-chip ${level}`} title={lines.join("\n")}>
+    <span className={`ledger-chip context-chip ${level}${cold ? " cold" : ""}`} title={lines.join("\n")}>
       <Critter kind="mouse" size={19} className="ledger-mouse" />
       {formatTokens(context.tokens)}
+      {cold && <span className="ledger-label">cold</span>}
       <span className="ledger-bar" aria-hidden>
         <span className="ledger-fill" style={{ width: `${Math.min(pct, 100)}%` }} />
       </span>

@@ -24,7 +24,9 @@ describe("parseContext", () => {
       session_id: "now",
       context_window: { used_percentage: 62, context_window_size: 200000, total_input_tokens: 124000 },
     });
-    expect(parseContext(json, "now")).toEqual({ usedPercentage: 62, tokens: 124000, windowSize: 200000 });
+    expect(parseContext(json, "now")).toEqual({
+      usedPercentage: 62, tokens: 124000, windowSize: 200000, cacheExpiresAt: null, recacheTokens: 0,
+    });
     // A pane started fresh still has its old conversation's file until it replies.
     expect(parseContext(json, "fresh")).toBeNull();
   });

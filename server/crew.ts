@@ -9,6 +9,10 @@ interface AgentDef {
   description: string;
   prompt: string;
   model: string;
+  /** Overrides the pane's effort while the subagent runs. The mechanical
+   * helpers run at medium; owl and wolf keep the pane's, since their misses
+   * cost the most. */
+  effort?: "low" | "medium" | "high";
 }
 
 const REPORT_ONLY =
@@ -165,6 +169,7 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
         "with screenshots, and tries to break it. Call it before you say a piece of work is done.",
       prompt: BADGER_PROMPT,
       model: "sonnet",
+      effort: "medium",
     },
     hare: {
       description:
@@ -172,6 +177,7 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
         "loops over data, rendering of lists, or anything on a hot path.",
       prompt: HARE_PROMPT,
       model: "sonnet",
+      effort: "medium",
     },
     raccoon,
     wolf: {
@@ -203,6 +209,7 @@ export function managerAgents(fable: boolean, digest: string): Record<string, Ag
         "likely easy approvals from its Team PRs to pick up section.",
       prompt: tanukiPrompt(digest),
       model: "sonnet",
+      effort: "medium",
     },
     raccoon,
     squirrel: {
@@ -214,6 +221,7 @@ export function managerAgents(fable: boolean, digest: string): Record<string, Ag
       // Fox's call: errands mean reading code to judge a ticket, too deep for
       // Haiku, and routine enough that Opus would waste the week.
       model: "sonnet",
+      effort: "medium",
     },
   };
 }

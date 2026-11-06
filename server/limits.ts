@@ -56,13 +56,15 @@ function ownStatusLine(): OwnStatusLine | null {
 export function statusLineSettings(
   groupId: string,
   own: OwnStatusLine | null = ownStatusLine(),
-): { statusLine: { type: "command"; command: string; padding?: number } } {
+): { statusLine: { type: "command"; command: string; padding?: number; refreshInterval: number } } {
   const file = limitsFile(groupId);
   const tmp = `${file}.tmp`;
   const save = `mkdir -p ${quote(LIMITS_DIR)} && cat > ${quote(tmp)} && mv ${quote(tmp)} ${quote(file)}`;
   const command = own ? `${save} && (${own.command}) < ${quote(file)}` : save;
   return {
-    statusLine: { type: "command", command, ...(own?.padding !== undefined ? { padding: own.padding } : {}) },
+    // Status line input arrives only on events, so an idle pane's limits and
+    // cache state would go stale; this re-runs it every 30 seconds.
+    statusLine: { type: "command", command, refreshInterval: 30, ...(own?.padding !== undefined ? { padding: own.padding } : {}) },
   };
 }
 
@@ -127,6 +129,10 @@ export interface PaneContext {
   usedPercentage: number;
   tokens: number;
   windowSize: number;
+  /** When the conversation's prompt cache lapses, epoch ms; null if unknown. */
+  cacheExpiresAt: number | null;
+  /** What the next turn re-reads at full price once the cache has lapsed. */
+  recacheTokens: number;
 }
 
 /** The context reading in a status line's input, or null when it belongs to
@@ -141,6 +147,7 @@ export function parseContext(json: string, sessionId: string | null): PaneContex
         context_window_size?: unknown;
         total_input_tokens?: unknown;
       };
+      prompt_cache?: { expires_at?: unknown; recache_tokens_if_cold?: unknown };
     };
     if (sessionId && d.session_id !== sessionId) return null;
     const cw = d.context_window;
@@ -149,6 +156,8 @@ export function parseContext(json: string, sessionId: string | null): PaneContex
       usedPercentage: cw.used_percentage,
       tokens: typeof cw.total_input_tokens === "number" ? cw.total_input_tokens : 0,
       windowSize: cw.context_window_size,
+      cacheExpiresAt: typeof d.prompt_cache?.expires_at === "number" ? d.prompt_cache.expires_at * 1000 : null,
+      recacheTokens: typeof d.prompt_cache?.recache_tokens_if_cold === "number" ? d.prompt_cache.recache_tokens_if_cold : 0,
     };
   } catch {
     return null;

@@ -389,7 +389,9 @@ export function App() {
     const waiting = s.waiting ?? [];
     const fresh = waiting.length > 0 && seenWaiting[s.id] !== JSON.stringify(waiting);
     const lines = [
-      ...(s.attention ? ["Finished a turn while you were away."] : []),
+      ...(s.attention
+        ? [s.turn?.state === "needs-you" ? `Waiting for you: ${s.turn.message ?? "a permission prompt or a question"}` : "Finished a turn while you were away."]
+        : []),
       ...(fresh ? ["Waiting on you:", ...waiting.map((w) => `- ${w}`)] : []),
     ];
     return lines.length ? lines.join("\n") : null;

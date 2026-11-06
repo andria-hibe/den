@@ -15,6 +15,7 @@ import {
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
 import { compactions, contextSize } from "./usage.ts";
+import { mergeHooks, readTurn, removeTurn, turnHooks, watchTurns, type Turn } from "./turnState.ts";
 import { RECENT_MS, assess, burners, currentWatch, noteReading, setWatch, type Watch } from "./fieldMouse.ts";
 import { createHash } from "node:crypto";
 import { setupHint } from "./apprun.ts";
@@ -173,6 +174,19 @@ function writeClockedOut(ids: string[]): void {
   writeFileSync(clockedOutPath, JSON.stringify(ids));
 }
 
+/** What every Claude pane's --settings carries: den's status line, no
+ * compaction while the developer is away (it spends tokens with nobody
+ * watching; a stale conversation is started fresh from its handover
+ * instead), and the hooks den listens to. Look panes get no inbox or crew. */
+function paneSettings(groupId: string, with_: { inbox?: boolean; crew?: boolean } = {}) {
+  const { inbox = true, crew = true } = with_;
+  return {
+    ...statusLineSettings(groupId),
+    idleCompaction: false,
+    hooks: mergeHooks(turnHooks(groupId), inbox ? inboxHooks(groupId) : {}, crew ? crewHooks(groupId) : {}),
+  };
+}
+
 // The hash of the system prompt each workspace's conversation started with
 // (see DenSession.promptStale).
 const PROMPTS_DIR = join(DATA_DIR, "prompts");
@@ -277,6 +291,8 @@ export interface ClockOutRound {
 export function clockOutBlockers(p: {
   pinned: boolean;
   busy: boolean;
+  /** At a permission prompt or a question: ending it drops what it asked. */
+  needsYou?: boolean;
   merging: boolean;
   staged: boolean;
   ciPending: boolean;
@@ -284,6 +300,7 @@ export function clockOutBlockers(p: {
   const out: string[] = [];
   if (p.pinned) out.push("pinned to stay running");
   if (p.busy) out.push("still working");
+  if (p.needsYou) out.push("waiting on you (a permission prompt or a question)");
   if (p.merging) out.push("a merge or rebase is in progress");
   if (p.staged) out.push("has staged changes");
   if (p.ciPending) out.push("CI is still running on its PR");
@@ -375,6 +392,8 @@ export interface SessionMeta {
   agentName: string | null;
   /** See DenSession.promptStale. */
   promptStale: boolean;
+  /** See DenSession.turn. */
+  turn: { state: Turn["state"]; message: string | null } | null;
   color: string;
   cwd: string;
   shell: boolean;
@@ -443,6 +462,10 @@ interface SessionInit {
  */
 class DenSession {
   term: pty.IPty | null = null;
+  /** Where the pane's turn is, from Claude Code's hooks (turnState.ts);
+   * null for a pane started without them. */
+  turn: Turn | null = null;
+  private spawnedAt = 0;
   /** Claude Code keeps the system prompt a conversation started with, even
    * on resume, until it is compacted: set when den's instructions for this
    * pane have changed since. */
@@ -542,6 +565,8 @@ class DenSession {
     this.agentName = this.shell || n < 0 ? null : (args[n + 1] ?? null);
     if (!this.shell) this.notePrompt(args);
     if (!this.shell) clearCrew(this.groupId);
+    this.turn = null;
+    this.spawnedAt = Date.now();
     // Fox starts each run from a fresh digest; news queued for the last run is stale.
     if (this.view === "manager") removeInbox(this.groupId);
     // The last process's output would make waitUntilIdle pass before this one has drawn.
@@ -617,6 +642,17 @@ class DenSession {
     }
   }
 
+  /** Pick up the turn hooks' latest event; a turn that finishes or stops
+   * for the developer while nobody watches flags the rail. */
+  checkTurn() {
+    if (this.shell || this.status !== "running") return;
+    const t = readTurn(this.groupId, this.claudeSessionId ?? null);
+    if (!t || t.at <= this.spawnedAt || t.at === this.turn?.at) return;
+    const before = this.turn;
+    this.turn = t;
+    if (t.state !== "working" && before?.state !== t.state) this.nudge();
+  }
+
   /** Once a stale conversation compacts, it runs on the current prompt. */
   checkCompacted() {
     if (!this.promptStale || !this.claudeSessionId || !this.pendingHash) return;
@@ -638,7 +674,8 @@ class DenSession {
   private maybeTitle(latest: string) {
     if (this.shell) return;
     const waiting = latest.trimStart().startsWith("\u2733");
-    if (waiting && this.titleBusy && this.listeners.size === 0) this.attention = true;
+    // The title glyph is the fallback for a pane started without turn hooks.
+    if (waiting && this.titleBusy && this.listeners.size === 0 && !this.turn) this.attention = true;
     this.titleBusy = !waiting;
     if (this.titleLocked) return;
     const title = latest.trim().replace(/\s+/g, " ").slice(0, 60);
@@ -719,6 +756,7 @@ class DenSession {
       name: this.name,
       agentName: this.agentName,
       promptStale: this.status === "running" && this.promptStale,
+      turn: this.status === "running" && this.turn ? { state: this.turn.state, message: this.turn.message } : null,
       color: this.color,
       cwd: this.cwd,
       shell: this.shell,
@@ -815,6 +853,7 @@ class SessionManager {
         s.persistScrollback();
         this.keepTicket(s);
         s.checkCompacted();
+        s.checkTurn();
       }
       this.tellManagerWaiting();
     }, SCROLLBACK_FLUSH_MS);
@@ -826,6 +865,9 @@ class SessionManager {
       const idleTimer = setInterval(() => this.checkIdleHandovers(), Math.min(60_000, idleMs / 2));
       idleTimer.unref?.();
     }
+    watchTurns((groupId) => {
+      for (const s of this.sessions.values()) if (s.groupId === groupId) s.checkTurn();
+    });
     const mouseTimer = setInterval(() => this.watchTokens(), 60_000);
     mouseTimer.unref?.();
   }
@@ -990,7 +1032,12 @@ class SessionManager {
           handover: canStartFresh(s),
           reasons: clockOutBlockers({
             pinned: s.keepAlive,
-            busy: !ptyLooksIdle(s.lastOutputAt, now, 20_000),
+            // With turn hooks, "working" is exact; the output check still
+            // catches a turn interrupted without a Stop.
+            busy: s.turn
+              ? s.turn.state === "working" && !ptyLooksIdle(s.lastOutputAt, now, 120_000)
+              : !ptyLooksIdle(s.lastOutputAt, now, 20_000),
+            needsYou: s.turn?.state === "needs-you",
             merging: git.merging,
             staged: git.staged,
             ciPending: !!s.branch && pendingBranches.has(s.branch) && s.view !== "manager",
@@ -1330,7 +1377,7 @@ class SessionManager {
     const hint = setupHint(cwd);
     const prompt = hint ? `${base}\n${hint}` : base;
     return [
-      "--settings", JSON.stringify({ ...statusLineSettings(groupId), hooks: { ...inboxHooks(groupId), ...crewHooks(groupId) } }),
+      "--settings", JSON.stringify(paneSettings(groupId)),
       "--add-dir", PROGRESS_DIR,
       "--agents", JSON.stringify(kitAgents(fableHasRoom())),
       // Beaver, the clean-up workspace: its audit is mechanical, and the
@@ -1350,10 +1397,10 @@ class SessionManager {
     // A review pane's settings file carries the status line too.
     if (s.view === "review") return this.reviewArgs(s, from.diff);
     if (s.view === "manager") return this.managerArgs(s);
-    const settings = ["--settings", JSON.stringify(statusLineSettings(s.groupId))];
+    const settings = ["--settings", JSON.stringify(paneSettings(s.groupId, { inbox: false, crew: false }))];
     if (s.view === "mypr") {
       return [
-        "--settings", JSON.stringify({ ...statusLineSettings(s.groupId), hooks: { ...inboxHooks(s.groupId), ...crewHooks(s.groupId) } }),
+        "--settings", JSON.stringify(paneSettings(s.groupId)),
         "--agents", JSON.stringify(kitAgents(fableHasRoom())),
         "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
       ];
@@ -1408,8 +1455,7 @@ class SessionManager {
       JSON.stringify(
         {
           ...buildManagerPermissions(TODAY_PATH, notepad),
-          ...statusLineSettings(s.groupId),
-          hooks: { ...inboxHooks(s.groupId), ...crewHooks(s.groupId) },
+          ...paneSettings(s.groupId),
         },
         null,
         2,
@@ -1656,6 +1702,7 @@ class SessionManager {
       rmSync(notepad, { force: true });
       rmSync(ticketCopyPath(groupId), { force: true });
       rmSync(join(PROMPTS_DIR, `${groupId}.json`), { force: true });
+      removeTurn(groupId);
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
@@ -1735,8 +1782,7 @@ class SessionManager {
     mkdirSync(REVIEW_DIR, { recursive: true });
     const settings = {
       ...buildReviewPermissions(reviewNotesPath(groupId), reviewGuidePath(groupId), owned, notepadPath(groupId)),
-      ...statusLineSettings(groupId),
-      hooks: { ...inboxHooks(groupId), ...crewHooks(groupId) },
+      ...paneSettings(groupId),
     };
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));

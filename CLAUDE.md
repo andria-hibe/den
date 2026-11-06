@@ -630,6 +630,28 @@ manages: no Fable for owl (`fableHasRoom`), no quiet-spell idle handovers
 needs a second click (`tokens_tight`; `api()` errors now carry `code`).
 It never stops a session.
 
+**Pane settings and turn state** (2026-11-06, from the Claude Code docs
+research). Every Claude pane's `--settings` comes from one builder,
+`paneSettings` in `sessions.ts` (manager and review settings files spread
+it too): den's status line with `refreshInterval: 30` (event-only updates
+left idle panes' limits and cache state stale), `idleCompaction: false`
+(compacting while the developer is away spends tokens with nobody watching;
+den starts stale chats fresh from the handover instead), and `mergeHooks`
+of `turnHooks` + inbox + crew. `server/turnState.ts`: UserPromptSubmit /
+PostToolUse / Stop / Notification (matcher: the needs-you types) save the
+hook input to `~/.den/turn/<groupId>.json`; `watchTurns` (fs.watch) and the
+5s timer call `DenSession.checkTurn`, which flags the rail on a turn that
+finishes or stops for the developer while unwatched, and `meta().turn`
+says which ("Waiting for you: <message>" in the rail tip). Clock out's
+"still working" uses it, plus "waiting on you" as a blocker. The OSC title
+glyph stays as the fallback for panes started without the hooks. Stop was
+verified live in `claude -p`; Notification wasn't (no prompts in -p). The
+crew's routine helpers (badger, hare, tanuki, squirrel) run at
+`effort: "medium"` (`AgentDef.effort`; `--agents` accepts it, verified).
+`ContextChip` marks a chat **cold** when `prompt_cache.expires_at` has
+passed and `recache_tokens_if_cold` is past the peach line: the next
+message re-reads it all at full price, the cheapest moment to start fresh.
+
 **The Manager, Fox** (issue 46, den v2; plan in the issue). One Claude pane,
 `view === "manager"`, named `MANAGER_NAME` ("Fox"), that runs the
 developer's day across the other sessions instead of them being the glue.

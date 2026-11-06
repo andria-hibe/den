@@ -3028,6 +3028,9 @@ body {
 .context-chip.full .ledger-fill {
   background: var(--pink-deep);
 }
+.context-chip.cold .ledger-label {
+  color: #3d7fb8;
+}
 .context-chip.stale-prompt {
   border-color: var(--peach);
   white-space: nowrap;
