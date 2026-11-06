@@ -5,6 +5,7 @@
 // rather than when the limit hits.
 import { existsSync, mkdirSync, openSync, readSync, closeSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { StringDecoder } from "node:string_decoder";
 import { join } from "node:path";
 import { weekPace, type Pace } from "../shared/pace.ts";
 import { DATA_DIR } from "./dataDir.ts";
@@ -91,7 +92,9 @@ export function assess(readings: Reading[], now: number, burners: Burner[] = [])
   // The week: on top of the even-pace check, a sudden jump within the hour.
   if (last.week !== null && last.weekResetsAt && last.weekResetsAt > now) {
     const pace: Pace = weekPace(last.week, last.weekResetsAt, last.at);
-    if (pace.runsOutAt && pace.runsOutAt < last.weekResetsAt) {
+    // weekPace projects a run-out for any use over the even line; only one
+    // past its margin ("ahead") is worth calling tight.
+    if (pace.status === "ahead" && pace.runsOutAt && pace.runsOutAt < last.weekResetsAt) {
       alerts.push({
         key: `week-out:${last.weekResetsAt}`,
         level: "tight",
@@ -194,7 +197,10 @@ export function weigh(u: {
 }
 
 /** Per transcript file: how far it has been read, and its recent turns. */
-const reads = new Map<string, { offset: number; carry: string; turns: Map<string, { at: number; w: number }> }>();
+const reads = new Map<
+  string,
+  { offset: number; carry: string; decoder: StringDecoder; turns: Map<string, { at: number; w: number }> }
+>();
 
 function readNew(file: string, since: number): number {
   let st;
@@ -206,7 +212,7 @@ function readNew(file: string, since: number): number {
   let r = reads.get(file);
   if (!r || st.size < r.offset) {
     // Only the recent part of a big file matters on first sight.
-    r = { offset: Math.max(0, st.size - 4 * 1024 * 1024), carry: "", turns: new Map() };
+    r = { offset: Math.max(0, st.size - 4 * 1024 * 1024), carry: "", decoder: new StringDecoder("utf8"), turns: new Map() };
     reads.set(file, r);
   }
   if (st.size > r.offset) {
@@ -215,7 +221,8 @@ function readNew(file: string, since: number): number {
       const buf = Buffer.alloc(st.size - r.offset);
       readSync(fd, buf, 0, buf.length, r.offset);
       r.offset = st.size;
-      const lines = (r.carry + buf.toString("utf8")).split("\n");
+      // The decoder holds a character split across two reads.
+      const lines = (r.carry + r.decoder.write(buf)).split("\n");
       r.carry = lines.pop() ?? "";
       for (const line of lines) {
         if (!line.includes('"usage"')) continue;

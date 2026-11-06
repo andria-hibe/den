@@ -16,6 +16,8 @@ describe("field mouse", () => {
   it("is quiet when use is steady", () => {
     const w = assess([reading(30, 20, 30), reading(0, 24, 30.5)], now);
     expect(w.level).toBe("ok");
+    // A point over an even week (about 42.9% three days in) isn't tight.
+    expect(assess([reading(0, 24, 44)], now).level).toBe("ok");
   });
 
   it("calls a 5-hour window that will run out before it resets tight, and a sudden week jump a watch", () => {

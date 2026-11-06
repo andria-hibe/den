@@ -843,15 +843,19 @@ class SessionManager {
       );
       const watch = assess(readings, now, burners(panes, now - RECENT_MS).slice(0, 5));
       setWatch(watch);
+      // An alert that clears and comes back is news again.
+      const keys = new Set(watch.alerts.map((a) => a.key));
+      for (const k of this.announced) if (!keys.has(k)) this.announced.delete(k);
       const fresh = watch.alerts.filter((a) => !this.announced.has(a.key));
       const manager = this.manager();
+      // Held until Fox runs, so one started later still hears what stands.
       if (fresh.length && manager?.status === "running") {
         const who = watch.burners.length
           ? ` Spending the most in the last 30 minutes: ${watch.burners.map((b) => `"${b.name}" ${b.share}%`).join(", ")}.`
           : "";
         tellPane(manager.groupId, `den's field mouse: ${fresh.map((a) => a.message).join(" ")}${who}`);
+        for (const a of fresh) this.announced.add(a.key);
       }
-      for (const a of fresh) this.announced.add(a.key);
       return watch;
     } catch (err) {
       logWarn("field mouse", err);
