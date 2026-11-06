@@ -34,11 +34,18 @@ export const CRITTER_PALETTE: Record<string, string> = {
   b: "#7e5743",
   c: "#d9b99c", // beaver muzzle and belly
   n: "#5a4032", // beaver nose and tail
+  U: "#93a6e8", // bowerbird
+  u: "#6f80c8",
+  v: "#c9b8ff", // bowerbird's eye ring
+  z: "#f5e3a1", // bowerbird's beak and feet
+  m: "#b8e6d4", // bowerbird's colour swatch: mint, lemon, sky (and pink)
+  j: "#fff0a8",
+  i: "#b4d8f6",
   X: "#ffb7d5", // kit's scarf: the session's colour in the app (Critter tint)
   Y: "#c5809f", // the scarf's shaded lower row, so it stands off the orange fur
 };
 
-export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "squirrel" | "beaver" | "kit";
+export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "squirrel" | "beaver" | "bowerbird" | "kit";
 
 export const CRITTERS: Record<CritterKind, string[]> = {
   tanuki: [
@@ -145,6 +152,28 @@ export const CRITTERS: Record<CritterKind, string[]> = {
     "..DLLLLLLLLLLD....",
     "...DyyD..DyyD.....",
     "...DDDD..DDDD.....",
+  ],
+  // A bowerbird, which arranges its bower by colour, holding a swatch card.
+  bowerbird: [
+    "..................",
+    ".......DDDD.......",
+    "......DUUUUD......",
+    ".....DUUUUUUD.....",
+    ".....DUvvvUUD.....",
+    ".....DUveeUUDDD...",
+    ".....DUveeUUzzzD..",
+    "....DUUUpUUUDDD...",
+    "...DUUUUUUUUD.....",
+    "..DuUUUUUUwwD.....",
+    "..DuuUUUUwwwUD....",
+    ".DuuuUUUUwwwUDDDDD",
+    ".DuuuuUUUwwwUDDppD",
+    ".DuuuuuUUwwwD.DmmD",
+    "..DuuuuUUwwD..DjjD",
+    "...DDuuuDDD...DiiD",
+    "....DuuD......DDDD",
+    "....DzD.DzD.......",
+    "....DDD.DDD.......",
   ],
   badger: [
     "..................",
@@ -292,6 +321,7 @@ export const CREW: CrewMember[] = [
   { kind: "mouse", name: "Field mouse", job: "Rations the week's tokens: the pace chip in the top bar", model: "plain code, no model", built: true },
   { kind: "badger", name: "Badger", job: "QA: runs the tests, checks the change in the browser with screenshots, and tries to break it", model: "Sonnet", built: true },
   { kind: "hare", name: "Hare", job: "Checks performance: slow queries, wasted renders, heavy loops, with a quick measurement where it can", model: "Sonnet", built: true },
+  { kind: "bowerbird", name: "Bowerbird", job: "Checks design consistency: contrast, design tokens over raw values, spacing, alignment, type and icon sizes, shared components, and the design it was built from", model: "Sonnet", built: true },
   { kind: "wolf", name: "Wolf", job: "Checks security: auth gaps, leaked secrets, injection, using the repo's own security review", model: "Opus", built: true },
   { kind: "beaver", name: "Beaver", job: "Clears merged worktrees, old branches, and idle stacks out of the work repo, once you approve its plan", model: "Sonnet", built: true },
   { kind: "squirrel", name: "Squirrel", job: "Runs Fox's errands: sizes up a Linear project's tickets, matches tickets to PRs, pre-reads a PR, and reports back", model: "Sonnet", built: true },
@@ -310,5 +340,6 @@ export const BUSTS: Partial<Record<CritterKind, [number, number, number, number]
   badger: [1, 12, 0, 17],
   hare: [0, 13, 0, 14],
   wolf: [0, 11, 0, 17],
+  bowerbird: [1, 12, 2, 17],
   beaver: [1, 12, 0, 16],
 };

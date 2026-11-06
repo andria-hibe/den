@@ -32,6 +32,7 @@ import {
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
 import { waitingChangeMessage } from "./manager.ts";
 import { activeCrew, clearCrew, crewHooks, removeCrewRuns } from "./crewActivity.ts";
+import { recordChecks, type CheckSource } from "./checkLog.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
 import { repoBaseName } from "./git.ts";
 import { workDir } from "./fs.ts";
@@ -40,6 +41,7 @@ import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 import { DATA_DIR } from "./dataDir.ts";
+import { paneTheme, themeFromArgs, type PaneTheme } from "./paneTheme.ts";
 import {
   DIGEST_PATH, MANAGER_DIR, MANAGER_NAME, PROGRESS_DIR, TODAY_PATH,
 } from "./paths.ts";
@@ -194,6 +196,7 @@ function paneSettings(
   const p = base.permissions;
   return {
     ...statusLineSettings(groupId),
+    theme: paneTheme(),
     idleCompaction: false,
     // Every pane: a public den issue or comment needs the developer's yes,
     // whatever the pane's mode, and den's database (the Linear key, saved
@@ -412,6 +415,8 @@ export interface SessionMeta {
   agentName: string | null;
   /** See DenSession.promptStale. */
   promptStale: boolean;
+  /** See DenSession.termTheme. */
+  termTheme: PaneTheme | null;
   /** See DenSession.turn. */
   turn: { state: Turn["state"]; message: string | null } | null;
   color: string;
@@ -493,6 +498,9 @@ class DenSession {
    * on resume, until it is compacted: set when den's instructions for this
    * pane have changed since. */
   promptStale = false;
+  /** The theme Claude in this pane started in, which it keeps until it
+   * restarts; null for shells. */
+  termTheme: PaneTheme | null = null;
   /** The resumed conversation's compactions at spawn, to tell when it next
    * compacts and takes up the current prompt. */
   private compactionsAtSpawn = 0;
@@ -587,6 +595,7 @@ class DenSession {
     const n = args.indexOf("-n");
     this.agentName = this.shell || n < 0 ? null : (args[n + 1] ?? null);
     if (!this.shell) this.notePrompt(args);
+    this.termTheme = this.shell ? null : themeFromArgs(args);
     if (!this.shell) clearCrew(this.groupId);
     this.turn = null;
     this.spawnedAt = Date.now();
@@ -605,6 +614,8 @@ class DenSession {
         env: {
           ...process.env,
           TERM: "xterm-256color",
+          // xterm.js draws 24-bit colour, so Claude Code can use its theme as designed.
+          COLORTERM: "truecolor",
           AGENT_BROWSER_SOCKET_DIR: process.env.AGENT_BROWSER_SOCKET_DIR ?? socketDir(this.groupId),
         },
       });
@@ -784,6 +795,7 @@ class DenSession {
       name: this.name,
       agentName: this.agentName,
       promptStale: this.status === "running" && this.promptStale,
+      termTheme: this.termTheme,
       turn: this.status === "running" && this.turn ? { state: this.turn.state, message: this.turn.message } : null,
       color: this.color,
       cwd: this.cwd,
@@ -896,12 +908,34 @@ class SessionManager {
     watchTurns((groupId) => {
       for (const s of this.sessions.values()) if (s.groupId === groupId) s.checkTurn();
     });
-    const mouseTimer = setInterval(() => this.watchTokens(), 60_000);
+    const mouseTimer = setInterval(() => {
+      this.watchTokens();
+      this.recordChecks();
+    }, 60_000);
     mouseTimer.unref?.();
   }
 
   /** Alerts already passed to the Manager, so each is said once. */
   private announced = new Set<string>();
+
+  /** Log the helper runs and check results new since the last round, for
+   * `groupId` only or for every workspace. */
+  recordChecks(groupId?: string): void {
+    const sources: CheckSource[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.shell || s.role !== "main" || (groupId && s.groupId !== groupId)) continue;
+      sources.push({
+        groupId: s.groupId,
+        session: s.agentName ?? s.name,
+        repo: s.prRepo,
+        branch: s.branch,
+        ticket: s.ticket ?? parseTicketHint(s.branch) ?? null,
+        pr: s.pr ? `${s.prRepo ?? ""}#${s.pr}` : null,
+        review: s.view === "review",
+      });
+    }
+    recordChecks(sources);
+  }
 
   /** The field mouse's round: note the plan's limits, see who is spending,
    * and tell a running Manager about anything new. */
@@ -1712,6 +1746,8 @@ class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return false;
     const groupId = s.groupId;
+    // Its runs log and check result go with it.
+    this.recordChecks(groupId);
     let carry: string | null = null;
     for (const other of [...this.sessions.values()]) {
       if (other.groupId === groupId) {

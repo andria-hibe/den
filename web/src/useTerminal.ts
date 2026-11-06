@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import type { ClientMessage, ServerMessage } from "../../server/ws-protocol.ts";
+import { TERM_THEMES, type ThemeName } from "./termThemes.ts";
 
 /** Absolute or ~ paths, as Claude prints them (#41); the lookbehind keeps a
  * URL's own path from matching. */
@@ -31,11 +32,19 @@ export function useTerminal(
   sessionId: string,
   onExit?: () => void,
   onTitle?: (name: string) => void,
+  theme: ThemeName = "dark",
 ) {
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
   const onTitleRef = useRef(onTitle);
   onTitleRef.current = onTitle;
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const termRef = useRef<Terminal | null>(null);
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = TERM_THEMES[theme];
+  }, [theme]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -49,15 +58,11 @@ export function useTerminal(
         'ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Code", monospace',
       fontSize: 13,
       cursorBlink: true,
-      theme: {
-        background: "#2b2233",
-        foreground: "#f3e9f7",
-        cursor: "#ffb7d5",
-        selectionBackground: "#5b4b66",
-      },
+      theme: TERM_THEMES[themeRef.current],
       // OSC 8 hyperlinks, which Claude Code prints for some links.
       linkHandler: { activate: (e, uri) => modClick(e) && openUrl(uri) },
     });
+    termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon((e, uri) => modClick(e) && openUrl(uri)));
@@ -177,6 +182,7 @@ export function useTerminal(
       disposer.dispose();
       paths.dispose();
       ws?.close();
+      termRef.current = null;
       term.dispose();
     };
   }, [sessionId]);

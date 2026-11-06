@@ -78,7 +78,9 @@ npm run test-server -- --port 4399 [--dir <data dir>]   # isolated server, stub 
   tips:** use `title` (HoverTip shows it). **OSC titles:** Claude panes only.
   **Dark rules** go in twice: under `prefers-color-scheme: dark` for
   `:root:not([data-theme="light"])`, and for `:root[data-theme="dark"]` (the
-  topbar's light / dark toggle).
+  topbar's light / dark toggle), and only set tokens there: a themed
+  component selector outranks its variants. Accent text uses the `--*-ink`
+  tokens, never a pastel fill colour.
 - **Isolated testing:** `DEN_DB` alone isolates only the database; use
   `npm run test-server` or `DEN_DATA_DIR`. Don't test Fox on an isolated
   server against real sessions (`ListAgents` is real). In this sandbox,

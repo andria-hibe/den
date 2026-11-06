@@ -681,7 +681,7 @@ clears it, since Escape at a prompt fires no hook). Clock out's
 "still working" uses it, plus "waiting on you" as a blocker. The OSC title
 glyph stays as the fallback for panes started without the hooks. Stop was
 verified live in `claude -p`; Notification wasn't (no prompts in -p). The
-crew's routine helpers (badger, hare, tanuki, squirrel) run at
+crew's routine helpers (badger, hare, bowerbird, tanuki, squirrel) run at
 `effort: "medium"` (`AgentDef.effort`; `--agents` accepts it, verified).
 `ContextChip` marks a chat **cold** when `prompt_cache.expires_at` has
 passed and `recache_tokens_if_cold` is past the peach line: the next
@@ -754,7 +754,7 @@ developer's day across the other sessions instead of them being the glue.
 - Next (issue 46): Clock out (safe-to-end check, ask each pane to refresh
   its handover, end, fresh tomorrow, keep-alive pin), then the workers.
 - **The crew are forest animals** (andria, 2026-10-29), so keep any new
-  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Badger, Hare and Wolf are reviewers a kit can call in to check its own work. Squirrel (Fox's errand runner, Sonnet by Fox's own pick, 2026-10-30): read-only jobs the developer asks Fox for, such as going through a Linear project for tickets worth picking up, matching tickets to PRs, or pre-reading a PR. Beaver (clean up, Sonnet, 2026-10-30): the clean-up workspace (`den:cleanup`, the rail's beaver button) is drawn as Beaver and runs `--model sonnet` (`workspaceArgs`), since its audit is mechanical and the developer's approval of its plan is the safety step.
+  one in theme. Fox (Manager, Opus); kits (Fox's cubs: the ticket sessions that write the code, scarf in the session's colour); Tanuki (Linear inbox + GitHub notifications, Sonnet); Raccoon (CI failures across PRs, Haiku); Hedgehog (handover refresh at clock out, the session's own model); Field mouse (token pace, plain code); Badger (testing and QA, Sonnet); Hare (performance, Sonnet); Wolf (security, Opus, uses the repo's security-review skill); Owl (code review: colleagues' PRs in review panes, and a kit's own PR before the developer looks; also the advisor kits and Fox consult on hard problems; Opus, or Fable for the hardest when the field mouse says the week has room). Bowerbird (design consistency, Sonnet, 2026-11-06): contrast, design tokens over raw values, spacing, alignment, type and icon sizes, shared components, and the design the ticket links; drawn holding a colour swatch card. Badger, Hare, Wolf and Bowerbird are reviewers a kit can call in to check its own work. Squirrel (Fox's errand runner, Sonnet by Fox's own pick, 2026-10-30): read-only jobs the developer asks Fox for, such as going through a Linear project for tickets worth picking up, matching tickets to PRs, or pre-reading a PR. Beaver (clean up, Sonnet, 2026-10-30): the clean-up workspace (`den:cleanup`, the rail's beaver button) is drawn as Beaver and runs `--model sonnet` (`workspaceArgs`), since its audit is mechanical and the developer's approval of its plan is the safety step.
   Pixel art: `critterSprites.ts` (18x19 like the fox's SIT, same outline
   and eyes; `CREW` holds name, job, model, built), drawn by `Critter.tsx`
   with the fox's `rasterize` (`tint` recolours a kit's scarf). den shows
@@ -764,7 +764,7 @@ developer's day across the other sessions instead of them being the glue.
   with any sprite or name change.
 - **The reviewers and advisor are real subagents**:
   `server/crew.ts` builds Claude Code `--agents` JSON - `kitAgents` for every
-  workspace and my-PR pane (owl, badger, hare, wolf, raccoon, each with its
+  workspace and my-PR pane (owl, badger, hare, wolf, bowerbird, raccoon, each with its
   model and a report-only prompt), `reviewAgents` (the same minus owl) for a
   review pane, and `managerAgents` (owl) for Fox - and `crewRule` (workspace
   and my-PR prompts) / `reviewCrewRule` (in `reviewInstruction`, run
@@ -790,28 +790,67 @@ developer's day across the other sessions instead of them being the glue.
   even pace), else Opus; full model ids work in `--agents` (verified: a
   subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
   their crew up at spawn, so existing ones need a restart.
-- **Done check** (2026-11-06): a kit's crew card has a "run" row that asks
-  the pane to run den's done check, a Claude Code **workflow** (the Workflow
-  tool), not a single subagent: `server/doneCheck.ts` holds the script
-  (`DONE_CHECK_SCRIPT`, plain JS, no template literals, no `Date.now()`),
-  written to `~/.den/workflows/done-check.js` at startup, and
-  `POST /api/sessions/:id/done-check` pastes `doneCheckPrompt`. The script
-  scopes the diff (one low-effort agent), runs badger + owl, plus hare/wolf
-  when the scope says performance/security, as the pane's own subagent
-  types (`agentType`), then a skeptic per high/medium finding, most serious
-  first across all helpers, capped at `DONE_CHECK_MAX_VERIFY`, and returns
-  confirmed / unverified / refuted plus which helpers failed. The route
+- **Ready check** (the done check, widened 2026-11-06 at andria's ask: "is
+  this PR ready for a human reviewer, as an easy approval"): a kit's crew
+  card has a "run" row that asks the pane to run it, a Claude Code
+  **workflow** (the Workflow tool), not a single subagent:
+  `server/doneCheck.ts` holds the script (`DONE_CHECK_SCRIPT`, plain JS, no
+  template literals except the build-time `${...}` that embed
+  `commentRules` / `testingRules`, no `Date.now()`), written to
+  `~/.den/workflows/den-check.js` at startup, and
+  `POST /api/sessions/:id/done-check` pastes `doneCheckPrompt`. The scope
+  agent (medium effort) also finds the PR and sizes the **blast radius**
+  (the repo's skill for sizing a change's blast radius, if it has one: work per item, big tables,
+  schema, permissions, data model, what a click-through can't confirm) into
+  `tripwires`, counting hits as performance / security. Then in parallel:
+  `requirements` (the ticket and its comments, the PR description,
+  conversation, reviews and threads, since product and design comment
+  early: unmet criteria, unanswered comments, scope creep, what the
+  description lacks), owl (bugs first), badger (tests, changed-file lint and
+  type-check, `gh pr checks`), `tidy` (low-value comments and tests by den's
+  own rules, leftovers, over-complication, duplicates, inconsistency), plus
+  hare / wolf / bowerbird when the scope says performance / security / UI,
+  as the pane's own subagent types (`agentType`); then a skeptic per
+  high/medium finding, most serious first across all helpers, capped at
+  `DONE_CHECK_MAX_VERIFY`. The severity rubric ranks an unmet requirement
+  high and an unanswered comment or unasked-for change medium, so they
+  block `ready`; a skeptic checks a requirements finding against the ticket
+  and PR, not the code. The tripwires go into the requirements, hare, and
+  wolf asks; requirements and tidy run at medium effort. It returns
+  confirmed / unverified / refuted, which helpers failed, `tripwires`, and
+  (own PR only) `ready`: nothing high/medium open and every helper
+  reported. `CheckResults` shows that verdict as "when it ran", since the
+  pane fixes afterwards and doesn't re-run; its chat verdict is the live
+  one. The pane fixes, cuts or undoes only what it agrees with (and lists
+  it), drafts replies, updates the description (file paths for
+  screenshots; the PR stays a draft, and it never opens one), and ends with
+  a verdict. The route
   passes the pane's base (`meta().stack.parent`) and only serves kits.
   Verified live 2026-11-06: agent types resolve and a run on its own diff
   took 9 agents, ~5 minutes, and about 700k subagent tokens.
   Only from the button: a session runs a workflow only when the developer
   asks, so `crewRule` still names the helpers one by one.
   `doneCheck.test.ts` runs the script against fake hooks.
+- **Checks log** (2026-11-06): the work panel's **Checks** tab
+  (`ChecksTab.tsx`) lists every crew helper's finished run and every ready
+  check / deep review result, newest first, filterable by kind (security =
+  wolf, performance = hare, design = bowerbird, testing = badger, code
+  review = owl, ready checks, deep reviews, other) and searchable by PR,
+  ticket, session, or summary. Unlike the crew card's per-pane "Recent
+  helper runs" and "last check", it lasts after the workspace closes:
+  `server/checkLog.ts` `recordChecks` copies new runs (`newCrewRuns`, crew
+  agent types only, so a workflow's general-purpose scope and skeptic agents
+  are left out, while its owl / wolf / hare runs are kept) and new check
+  results into the `checks` table (`store.ts`, newest 2000 kept) with the
+  session's name, ticket, branch, and PR. It runs on the 60s timer, on
+  `GET /api/checks`, and in `sessions.remove` before the workspace's files
+  go. `GET /api/checks/:id` returns one row's body (a `CrewRun` or a check
+  result, opened in `CheckResultsDialog`).
 - **Deep review, check results, and helper runs** (2026-11-06, after
   acorn): the check script has a review mode (`args.mode: "review"`): a
   `code-review` pass (the skill plus the consistency check and the repo's
   QA review skill), a `ticket` pass (Linear, read only), badger, and hare /
-  wolf when the scope says so, then the same skeptics. The Review tab's
+  wolf / bowerbird when the scope says so, then the same skeptics. The Review tab's
   "deep review" (`DeepReviewButton`, `POST /api/sessions/:id/deep-review`,
   `getPrBase` for the base, gated like the done check) pastes
   `deepReviewPrompt`: run it, save the result, write the review from it
@@ -1174,8 +1213,22 @@ developer's day across the other sessions instead of them being the glue.
   sets `data-theme` on the root and remembers it (`den.theme`); until then
   den follows the system. Each dark block in `theme.css` is written twice:
   under `prefers-color-scheme: dark` for `:root:not([data-theme="light"])`,
-  and for `:root[data-theme="dark"]`. New dark rules need both. The
-  terminal (xterm) is dark in both themes.
+  and for `:root[data-theme="dark"]`. New dark rules need both, and they
+  set **tokens on the root only**: a component selector behind a theme
+  prefix outranks its own variants (`.pr-badge.draft`) and once wiped every
+  badge's fill in dark mode. Pastels (`--pink`, `--mint`...) are fills with
+  dark ink in both themes; accent text uses `--accent-ink`, `--ok-ink`,
+  `--warn-ink`, `--info-ink`, `--bad-ink`; neutral chips `--chip-bg`; diffs
+  and comment hunks the `--code-*` / `--hl-*` tokens. The topbar is always a
+  pastel tint, so its ink stays dark in both. Colours are held to WCAG AA.
+- **Terminal theme**: xterm colours live in `web/src/termThemes.ts`. The
+  window POSTs its theme to `/api/theme` (`server/paneTheme.ts`, saved in
+  `DATA_DIR/theme.txt`) and `paneSettings` passes it as Claude Code's
+  `theme`, with `COLORTERM=truecolor` in the pane env. Claude Code reads the
+  theme once at launch (a changed `--settings` file is not picked up,
+  checked 2026-11-06), so `DenSession.termTheme` records what each pane
+  started in; its xterm keeps those colours, and the header shows a
+  sun or moon chip (its theme) until it restarts. Shell panes follow the window.
 - **Pixel art**: render via canvas + `image-rendering: pixelated` at an *integer*
   pixel scale; animate with `steps()` (fractional transforms/offsets blur it).
 - **Hover tips** (`HoverTip.tsx`, mounted once in App): den's window never

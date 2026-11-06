@@ -216,7 +216,7 @@ export function cleanupPrompt(skill: string | null): string {
 
 /** The helpers a pane's crew buttons can call: the subagents den gives it
  * (kitAgents / reviewAgents / managerAgents in server/crew.ts). */
-export type CrewHelper = "owl" | "badger" | "hare" | "wolf" | "raccoon" | "tanuki" | "squirrel";
+export type CrewHelper = "owl" | "badger" | "hare" | "wolf" | "bowerbird" | "raccoon" | "tanuki" | "squirrel";
 
 /** Which pane the crew buttons sit on: a kit (workspace or my-PR), a PR
  * review, or Fox. */
@@ -226,7 +226,9 @@ export type CrewPane = "kit" | "review" | "manager";
  * so it has no Owl to call. */
 export function crewFor(pane: CrewPane): CrewHelper[] {
   if (pane === "manager") return ["tanuki", "squirrel", "raccoon", "owl"];
-  return pane === "review" ? ["badger", "hare", "wolf", "raccoon"] : ["owl", "badger", "hare", "wolf", "raccoon"];
+  return pane === "review"
+    ? ["badger", "hare", "wolf", "bowerbird", "raccoon"]
+    : ["owl", "badger", "hare", "wolf", "bowerbird", "raccoon"];
 }
 
 /** What a crew button pastes. `submit: false` leaves it in the prompt for the
@@ -279,6 +281,8 @@ export function crewAskPrompt(helper: CrewHelper, pane: CrewPane): CrewAsk {
       return ask(`Ask hare, your performance subagent, to check ${subject} for slow paths now. ${report}`);
     case "wolf":
       return ask(`Ask wolf, your security subagent, to review ${subject} now. ${report}`);
+    case "bowerbird":
+      return ask(`Ask bowerbird, your design subagent, to review ${subject} for design consistency now. ${report}`);
     case "raccoon":
       return ask(
         `Check CI on ${review ? "this pull request" : "this branch's pull request"} with gh pr checks. ` +

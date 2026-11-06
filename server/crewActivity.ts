@@ -214,6 +214,34 @@ function readTranscript(path: string): string {
   }
 }
 
+/** A workspace's finished runs of the agent `types` not yet `seen`,
+ * oldest first: only these have their transcripts read. A run whose
+ * transcript can't be read yet is left for the next call. */
+export function newCrewRuns(groupId: string, types: ReadonlySet<string>, seen: (id: string) => boolean): CrewRun[] {
+  if (!GROUP_ID_RE.test(groupId)) return [];
+  let log: string;
+  try {
+    log = readFileSync(runsFile(groupId), "utf8");
+  } catch {
+    return [];
+  }
+  const out: CrewRun[] = [];
+  for (const line of log.split("\n")) {
+    if (!line.trim()) continue;
+    let e: { agent_id?: unknown; agent_type?: unknown; agent_transcript_path?: unknown };
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof e.agent_id !== "string" || typeof e.agent_transcript_path !== "string") continue;
+    if (typeof e.agent_type !== "string" || !types.has(e.agent_type) || seen(e.agent_id)) continue;
+    const transcript = readTranscript(e.agent_transcript_path);
+    if (transcript.trim()) out.push(summarizeRun(e.agent_id, e.agent_type, transcript));
+  }
+  return out;
+}
+
 export function removeCrewRuns(groupId: string): void {
   if (!GROUP_ID_RE.test(groupId)) return;
   rmSync(runsFile(groupId), { force: true });

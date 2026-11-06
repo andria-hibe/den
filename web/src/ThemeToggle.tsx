@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+import type { ThemeName } from "./termThemes.ts";
 
-type Theme = "light" | "dark";
 const KEY = "den.theme";
 
 /** The theme picked with the toggle, if any; the system's otherwise. */
-function savedTheme(): Theme | null {
+function savedTheme(): ThemeName | null {
   try {
     const t = localStorage.getItem(KEY);
     return t === "light" || t === "dark" ? t : null;
@@ -13,7 +13,8 @@ function savedTheme(): Theme | null {
   }
 }
 
-const systemTheme = (): Theme => (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+const systemTheme = (): ThemeName =>
+  window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 
 /** Apply the saved theme before the first render, so the page doesn't flash
  * the system's. theme.css keys off `data-theme` on the root. */
@@ -22,19 +23,32 @@ export function applySavedTheme(): void {
   if (t) document.documentElement.dataset.theme = t;
 }
 
+function currentTheme(): ThemeName {
+  const t = document.documentElement.dataset.theme;
+  return t === "light" || t === "dark" ? t : systemTheme();
+}
+
+function subscribe(onChange: () => void): () => void {
+  const mo = new MutationObserver(onChange);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+  mq?.addEventListener("change", onChange);
+  return () => {
+    mo.disconnect();
+    mq?.removeEventListener("change", onChange);
+  };
+}
+
+/** The theme den is showing: the toggle's pick, or the system's until one is made. */
+export function useTheme(): ThemeName {
+  return useSyncExternalStore(subscribe, currentTheme);
+}
+
 /** The topbar's light / dark switch. A pick sticks across restarts; until
  * then den follows the system. */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(() => savedTheme() ?? systemTheme());
-  // Follow the system while nothing has been picked.
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
-    const follow = () => !savedTheme() && setTheme(systemTheme());
-    mq.addEventListener("change", follow);
-    return () => mq.removeEventListener("change", follow);
-  }, []);
-  const next: Theme = theme === "dark" ? "light" : "dark";
+  const theme = useTheme();
+  const next: ThemeName = theme === "dark" ? "light" : "dark";
   return (
     <button
       className="btn topbar-day theme-toggle"
@@ -47,11 +61,10 @@ export function ThemeToggle() {
         } catch {
           // still switched for this window
         }
-        setTheme(next);
       }}
     >
       {/* Text presentation, so the glyphs match the day buttons beside it. */}
-      {theme === "dark" ? "\u263E\uFE0E" : "\u2600\uFE0E"}
+      {theme === "dark" ? "☾︎" : "☀︎"}
     </button>
   );
 }

@@ -7,6 +7,7 @@ import { Fox } from "./Fox.tsx";
 import { accentStyle, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
 import { usePersistentString } from "./usePersistent.ts";
+import { ChecksTab } from "./ChecksTab.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -269,7 +270,7 @@ export function WorkPanel({
 
   // Linear and GitHub each get the whole column on a small screen, rather
   // than GitHub sitting below every ticket.
-  const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github"] as const);
+  const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github", "checks"] as const);
   const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine", "open"] as const);
   const open = useOpenReviewPrs(source === "github");
   const linearBang = (linear?.unreadNotifications ?? 0) > 0 ? " !" : "";
@@ -302,10 +303,21 @@ export function WorkPanel({
         >
           GitHub{prsBang}
         </button>
+        <button
+          role="tab"
+          aria-selected={source === "checks"}
+          className={`look-tab${source === "checks" ? " active" : ""}`}
+          onClick={() => setSource("checks")}
+          title="Every helper run and check result: security, performance, design, tests, reviews, and ready checks"
+        >
+          Checks
+        </button>
       </div>
 
       <div className="pr-scroll">
-        {source === "linear" ? (
+        {source === "checks" ? (
+          <ChecksTab />
+        ) : source === "linear" ? (
           <LinearSection onOpenTicket={onOpenTicket} ticketColor={ticketColor} />
         ) : (
           <div className="pr-section">

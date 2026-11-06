@@ -67,6 +67,8 @@ import { ciFinishes, ciMessage } from "./ciWatch.ts";
 import { notePrs, refreshStacks } from "./stack.ts";
 import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
+import { store } from "./store.ts";
+import { isPaneTheme, setPaneTheme } from "./paneTheme.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
 
@@ -516,6 +518,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // The week's pace and the costliest chats, for the topbar (#45).
   app.get("/api/usage", async () => sessions.usageOverview());
 
+  // The window's light / dark theme, which new Claude panes start in.
+  app.post("/api/theme", async (req, reply) => {
+    const { theme } = (req.body ?? {}) as { theme?: unknown };
+    if (!isPaneTheme(theme)) return reply.code(400).send({ error: "theme must be light or dark" });
+    setPaneTheme(theme);
+    return { ok: true };
+  });
+
   app.post("/api/sessions/:id/handover", async (req, reply) => {
     const { id } = req.params as { id: string };
     const { on } = (req.body ?? {}) as { on?: boolean };
@@ -685,6 +695,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const base = (await getPrBase(session.prRepo, session.pr)) ?? null;
     const ready = await paste(session, deepReviewPrompt(base, checkResultPath(session.groupId)), true);
     return { ok: true, ready };
+  });
+
+  // The checks log: every helper run and check result, newest first.
+  app.get("/api/checks", async () => {
+    sessions.recordChecks();
+    return { checks: store.listChecks(500) };
+  });
+  app.get("/api/checks/:id", async (req, reply) => {
+    const row = store.getCheck((req.params as { id: string }).id);
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    return { ...row, body: JSON.parse(row.body) as unknown };
   });
 
   // What each helper a pane called was asked, ran, and reported.

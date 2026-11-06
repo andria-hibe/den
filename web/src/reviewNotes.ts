@@ -18,7 +18,7 @@ const CHECKED = /^(checked|what was checked)$/i;
 
 /** A bullet's source tag, as reviewInstruction asks for it: "[hare]",
  * "[code-review, verified]". */
-export const SOURCE_TAG = /\s*\[(code-review|owl|badger|hare|wolf|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\]\s*$/i;
+export const SOURCE_TAG = /\s*\[(code-review|owl|badger|hare|wolf|bowerbird|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\]\s*$/i;
 
 /** A bullet without its source tag, for posting to GitHub. */
 export function stripSource(text: string): string {
@@ -31,7 +31,7 @@ export function stripSource(text: string): string {
 /** Rendered review HTML with each source tag drawn as a chip. */
 export function sourceChips(html: string): string {
   return html.replace(
-    /\s*\[(code-review|owl|badger|hare|wolf|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\](?=\s*(<\/li>|<\/p>|<br|$))/gi,
+    /\s*\[(code-review|owl|badger|hare|wolf|bowerbird|raccoon|ticket|consistency|intent|line question|reviewer)(, verified)?\](?=\s*(<\/li>|<\/p>|<br|$))/gi,
     (_, src: string, verified?: string) =>
       ` <span class="src-chip${verified ? " verified" : ""}" title="${verified ? "Found and confirmed by " : "Found by "}${src}">${src}${verified ? " ✓" : ""}</span>`,
   );

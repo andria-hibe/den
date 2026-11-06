@@ -90,6 +90,46 @@ const WOLF_PROMPT =
   `like <repo>-security-review), use it; otherwise use Claude Code's ` +
   `security-review skill. Say how confident you are in each finding.\n` + REPORT_ONLY;
 
+const BOWERBIRD_PROMPT =
+  `You are Bowerbird, the den's design reviewer. Review the UI in the change ` +
+  `you're given (the session's own work, or the pull request it's reviewing) ` +
+  `for consistency with the design and with the rest of the app. Judge only ` +
+  `what the diff adds or changes: old raw values on untouched lines are not ` +
+  `this change's to fix.\n` +
+  `First learn the house rules: the repo's agent rules near the UI code ` +
+  `(AGENTS.md or CLAUDE.md files), its design tokens (colour, type, spacing, ` +
+  `radius), and its shared components and icon set. Find the design: the ` +
+  `ticket's Figma frame links (read them with the Figma tools if you have ` +
+  `them, by the link's node-id), screenshots, or the description's copy.\n` +
+  `Then check, most important first:\n` +
+  `- The design: spacing, sizes, and layout match it; name the exact ` +
+  `difference in px.\n` +
+  `- Copy: matches the ticket word for word, with the app's existing terms, ` +
+  `punctuation, and units.\n` +
+  `- Overflow: long names and values, the narrowest supported width, ` +
+  `truncation that leaves a way to read the rest (a tooltip), and popovers ` +
+  `and tooltips that stay on screen, with a max width.\n` +
+  `- Alignment: icons with text, fields with buttons, headers with cells.\n` +
+  `- Tokens: colours, type, spacing, and radius come from the repo's tokens ` +
+  `(semantic before primitive, and the token exists: an undefined variable ` +
+  `renders nothing), never raw values; hover, selected, and disabled states ` +
+  `use matching tokens; text keeps readable contrast.\n` +
+  `- Reuse: the shared component, icon, or pattern instead of a new one, used ` +
+  `the same way as its siblings elsewhere in the app.\n` +
+  `- States: empty, loading, error, disabled, hover, and selected.\n` +
+  `- Icons: from the repo's icon set, the right variant, size and colour ` +
+  `matching the text or the design.\n` +
+  `- Stacking: modals, overlays, and popovers layer correctly; question any ` +
+  `new raw z-index.\n` +
+  `- Basics of accessibility: controls are buttons or links, icon-only ` +
+  `controls have a label, no control inside another, and meaning not carried ` +
+  `by colour alone.\n` +
+  `Where you can run the app, look rather than guess: use the repo's browser ` +
+  `QA skill or its component-preview skill if it has them, and read computed ` +
+  `styles. Say which findings you saw on screen and which you read in the ` +
+  `code. Skip what linters and automated reviewers already catch, and themes ` +
+  `or screen sizes the app doesn't support.\n` + REPORT_ONLY;
+
 const RACCOON_PROMPT =
   `You are Raccoon, the den's CI investigator. For each failing check you're ` +
   `given (a check name and its run link), read the failed log: with the ` +
@@ -192,6 +232,15 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
       effort: "medium",
     },
     raccoon,
+    bowerbird: {
+      description:
+        "Bowerbird, the design reviewer. Call it when the change touches the UI: it checks " +
+        "contrast, design tokens over raw values, spacing, alignment, type and icon sizes, " +
+        "shared components, and the design the ticket links.",
+      prompt: BOWERBIRD_PROMPT,
+      model: "sonnet",
+      effort: "medium",
+    },
     wolf: {
       description:
         "Wolf, the security reviewer. Call it when the change touches auth, " +
@@ -205,8 +254,8 @@ export function kitAgents(fable: boolean): Record<string, AgentDef> {
 /** The subagents for a PR-review pane: the kit's reviewers without Owl, since
  * the pane is itself the reviewer. */
 export function reviewAgents(): Record<string, AgentDef> {
-  const { badger, hare, raccoon, wolf } = kitAgents(false);
-  return { badger, hare, raccoon, wolf };
+  const { badger, hare, raccoon, wolf, bowerbird } = kitAgents(false);
+  return { badger, hare, raccoon, wolf, bowerbird };
 }
 
 /** The Manager's crew: Owl for advice, Tanuki for the inbox, Raccoon for
@@ -248,7 +297,8 @@ export function crewRule(record = "in your handover"): string {
   return (
     `den's crew is available to you as subagents (the Agent tool). Before you ` +
     `say a piece of work is done, have badger check it, plus hare when it ` +
-    `touches performance and wolf when it touches security. Ask owl when ` +
+    `touches performance, wolf when it touches security, and bowerbird when ` +
+    `it touches the UI. Ask owl when ` +
     `you're stuck on a hard problem, and to review your branch before you ask ` +
     `the developer to. ${RACCOON_RULE} They report; you decide and fix. Say ` +
     `${record} who checked what.`
@@ -265,7 +315,8 @@ export function reviewCrewRule(): string {
     `alongside the code-review skill in the finding pass: wolf when the PR ` +
     `touches auth, permissions, secrets, user input, or data shared across ` +
     `accounts; hare when it touches queries, loops over data, rendering of ` +
-    `lists, or a hot path; badger to run the tests that cover it and try to ` +
+    `lists, or a hot path; bowerbird when it touches the UI (components, ` +
+    `styles, layout, icons); badger to run the tests that cover it and try to ` +
     `break it. ${RACCOON_RULE} They report; fold what holds up into your ` +
     `review with each one's tag, and record what each ran in the Checked section.`
   );

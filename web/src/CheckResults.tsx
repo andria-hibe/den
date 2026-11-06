@@ -19,6 +19,10 @@ export interface CheckResult {
   base?: string;
   summary?: string;
   error?: string;
+  pr?: string;
+  /** Ready-check verdict: nothing serious open and every helper reported. */
+  ready?: boolean;
+  tripwires?: { risk: string; why: string; humanTesting?: string }[];
   crew?: { name: string; failed: boolean; checked: string; notChecked: string }[];
   confirmed?: Finding[];
   unverified?: Finding[];
@@ -47,7 +51,8 @@ export function useCheckResult(sessionId: string, poll = false) {
 export function checkSummary(r: CheckResult): string {
   if (r.error) return r.error;
   const n = (l?: unknown[]) => l?.length ?? 0;
-  return `${n(r.confirmed)} confirmed, ${n(r.unverified)} unverified, ${n(r.refuted)} refuted`;
+  const verdict = r.ready === undefined ? "" : r.ready ? "was ready, " : "wasn't ready, ";
+  return `${verdict}${n(r.confirmed)} confirmed, ${n(r.unverified)} unverified, ${n(r.refuted)} refuted`;
 }
 
 function FindingRow({ f }: { f: Finding }) {
@@ -96,8 +101,27 @@ export function CheckResultsDialog({ result, at, onClose }: { result: CheckResul
           </button>
         </div>
         <div className="check-body">
+          {result.ready !== undefined && (
+            <p className={`check-verdict${result.ready ? " ready" : ""}`}>
+              {result.ready
+                ? "When it ran: ready for a human reviewer, with nothing serious left open."
+                : "When it ran: not ready. The findings below were open, or a helper didn't finish. The session's own verdict, after its fixes, is in its chat."}
+            </p>
+          )}
           {result.summary && <p className="check-summary">{result.summary}</p>}
           {result.error && <p className="check-error">{result.error}</p>}
+          {result.tripwires?.length ? (
+            <section>
+              <h5>Blast radius ({result.tripwires.length})</h5>
+              {result.tripwires.map((t, i) => (
+                <div key={i} className="check-finding medium">
+                  <div>{t.risk}</div>
+                  <div className="check-why">{t.why}</div>
+                  {t.humanTesting && <div className="check-fix">A human must test: {t.humanTesting}</div>}
+                </div>
+              ))}
+            </section>
+          ) : null}
           {groups.map(([title, list]) =>
             list?.length ? (
               <section key={title}>

@@ -4,7 +4,7 @@ import { NewSessionDialog } from "./NewSessionDialog.tsx";
 import { NotepadPane } from "./NotepadPane.tsx";
 import { LedgerChip } from "./LedgerChip.tsx";
 import { UpdateButton } from "./UpdateButton.tsx";
-import { ThemeToggle } from "./ThemeToggle.tsx";
+import { ThemeToggle, useTheme } from "./ThemeToggle.tsx";
 import { TodayView, nextItemSession, openItemSessions } from "./TodayView.tsx";
 import { Critter } from "./Critter.tsx";
 import { ClockOutDialog } from "./ClockOutDialog.tsx";
@@ -53,6 +53,11 @@ const MOD =
     : "Ctrl";
 
 export function App() {
+  const theme = useTheme();
+  // New Claude panes start in the window's theme.
+  useEffect(() => {
+    api("/api/theme", { method: "POST", body: JSON.stringify({ theme }) }).catch(() => {});
+  }, [theme]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -555,6 +560,18 @@ export function App() {
           </button>
         )}
         {s.status === "running" && s.context && <ContextChip context={s.context} canFresh={canStartFresh(s)} />}
+        {s.status === "running" && s.termTheme && s.termTheme !== theme && (
+          <span
+            className="ledger-chip context-chip stale-prompt"
+            title={
+              `Claude in this session started in ${s.termTheme} mode and keeps those colours until it restarts. ` +
+              (canStartFresh(s) ? "Start fresh (✦) or close and reopen it to switch." : "Close and reopen it to switch.")
+            }
+          >
+            {/* A glyph, not words: the header's cwd and branch chips give way to it. */}
+            {s.termTheme === "light" ? "☀︎" : "☾︎"}
+          </span>
+        )}
         {s.promptStale && (
           <span
             className="ledger-chip context-chip stale-prompt"

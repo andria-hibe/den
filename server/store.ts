@@ -84,6 +84,19 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS checks (
+    id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    session TEXT NOT NULL,
+    repo TEXT,
+    branch TEXT,
+    ticket TEXT,
+    pr TEXT,
+    summary TEXT NOT NULL,
+    body TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS checks_at ON checks (at DESC);
 `);
 
 // Migrate older DBs that predate workspace grouping or session-context columns.
@@ -148,7 +161,34 @@ const stmts = {
      ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
   ),
   deleteSetting: db.prepare(`DELETE FROM settings WHERE key=?`),
+  addCheck: db.prepare(
+    `INSERT OR IGNORE INTO checks (id, at, kind, session, repo, branch, ticket, pr, summary, body)
+     VALUES (@id, @at, @kind, @session, @repo, @branch, @ticket, @pr, @summary, @body)`,
+  ),
+  hasCheck: db.prepare(`SELECT 1 FROM checks WHERE id=?`),
+  listChecks: db.prepare(
+    `SELECT id, at, kind, session, repo, branch, ticket, pr, summary FROM checks ORDER BY at DESC LIMIT ?`,
+  ),
+  getCheck: db.prepare(`SELECT * FROM checks WHERE id=?`),
+  pruneChecks: db.prepare(`DELETE FROM checks WHERE id NOT IN (SELECT id FROM checks ORDER BY at DESC LIMIT ?)`),
 };
+
+/** One finished helper run or check workflow, kept after its session closes. */
+export interface CheckRow {
+  id: string;
+  at: number;
+  /** The helper's agent type ("wolf"), or "ready check" / "deep review". */
+  kind: string;
+  session: string;
+  repo: string | null;
+  branch: string | null;
+  ticket: string | null;
+  pr: string | null;
+  /** One line for the list. */
+  summary: string;
+  /** JSON: a CrewRun, or a check workflow's result. */
+  body: string;
+}
 
 export const store = {
   insert(row: SessionRow) {
@@ -180,5 +220,20 @@ export const store = {
   },
   deleteSetting(key: string) {
     stmts.deleteSetting.run(key);
+  },
+  addCheck(row: CheckRow) {
+    stmts.addCheck.run(row);
+  },
+  hasCheck(id: string): boolean {
+    return stmts.hasCheck.get(id) !== undefined;
+  },
+  listChecks(limit: number): Omit<CheckRow, "body">[] {
+    return stmts.listChecks.all(limit) as Omit<CheckRow, "body">[];
+  },
+  getCheck(id: string): CheckRow | null {
+    return (stmts.getCheck.get(id) as CheckRow | undefined) ?? null;
+  },
+  pruneChecks(keep: number) {
+    stmts.pruneChecks.run(keep);
   },
 };

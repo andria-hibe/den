@@ -605,7 +605,7 @@ export function reviewInstruction(
     `that section to the developer and never posts it.\n` +
     `SAY WHERE EACH FINDING CAME FROM. End every finding bullet, in the general ` +
     `review and under each file, with its source in square brackets: ` +
-    `[code-review], [badger], [hare], [wolf], [raccoon], [ticket], ` +
+    `[code-review], [badger], [hare], [wolf], [bowerbird], [raccoon], [ticket], ` +
     `[consistency], [intent], or [reviewer] for your own reading; add ", ` +
     `verified" when it was confirmed by reading or running the code, as in ` +
     `[hare, verified]. den draws the tag as a chip and strips it before posting. ` +

@@ -25,9 +25,11 @@ function run(answer: (prompt: string, opts: Opts) => unknown, args: unknown = {}
 describe("done check workflow", () => {
   it("calls the helpers the change needs, double-checks serious findings up to the limit, and ranks them", async () => {
     const asked: string[] = [];
+    const passes: string[] = [];
     const finding = (severity: string, where: string) => ({ severity, where, problem: "p", fix: "f" });
     const out = await run((_p, o) => {
-      if (o.label === "scope") return { base: "main", summary: "s", files: ["a.ts"], performance: false, security: true };
+      if (o.label === "scope") return { base: "main", summary: "s", files: ["a.ts"], performance: false, security: true, ui: false };
+      if (!o.label!.startsWith("verify")) passes.push(o.label!);
       if (o.agentType) {
         asked.push(o.agentType);
         if (o.agentType === "badger") return { findings: [finding("low", "a.ts:1"), finding("high", "a.ts:2")], checked: "c" };
@@ -37,6 +39,8 @@ describe("done check workflow", () => {
       return { refuted: o.label!.includes("wrong.ts"), reason: "r" };
     });
     expect(asked.sort()).toEqual(["badger", "owl", "wolf"]);
+    expect(passes.sort()).toEqual(["badger", "owl", "requirements", "tidy", "wolf"]);
+    expect(out.ready).toBe(false);
     const verified = [...out.confirmed, ...out.refuted].length;
     expect(verified).toBe(DONE_CHECK_MAX_VERIFY);
     expect(out.unverified.filter((f: { capped: boolean }) => f.capped)).toHaveLength(9 - 1 - DONE_CHECK_MAX_VERIFY);
@@ -44,6 +48,15 @@ describe("done check workflow", () => {
     // The double-checks go to the most serious findings, whoever reported them.
     expect(out.unverified.some((f: { severity: string; capped: boolean }) => f.capped && f.severity === "high")).toBe(false);
     expect(out.unverified.some((f: { severity: string }) => f.severity === "low")).toBe(true);
+  });
+
+  it("calls a PR ready only when nothing serious is open and every helper reported", async () => {
+    const scope = { base: "main", summary: "s", files: ["a.ts"], performance: false, security: false, ui: false };
+    const lowOnly = { findings: [{ severity: "low", where: "a.ts:1", problem: "p", fix: "f" }], checked: "c" };
+    const clean = await run((_p, o) => (o.label === "scope" ? scope : lowOnly));
+    expect(clean.ready).toBe(true);
+    const oneFailed = await run((_p, o) => (o.label === "scope" ? scope : o.label === "tidy" ? null : lowOnly));
+    expect(oneFailed.ready).toBe(false);
   });
 
   it("reviews a pull request with a code-review pass, a ticket check, and badger", async () => {

@@ -4,7 +4,7 @@
   --bg-panel: #fffafd;
   --bg-rail: #f3e8f7;
   --ink: #5b4b66;
-  --ink-soft: #9c8aa8;
+  --ink-soft: #75628a;
   --pink: #ffb7d5;
   --pink-deep: #ff8fbe;
   --lilac: #cdb4f6;
@@ -19,8 +19,41 @@
   --danger-bg: #ffd0dc;
   --danger-edge: #d9466f;
 
-  --term-bg: #2b2233;
-  --term-fg: #f3e9f7;
+  /* The pastels above are fills; text in an accent colour uses these, which
+     keep AA contrast on the panels in each theme. */
+  --accent-ink: #b8336a;
+  --ok-ink: #2e7a58;
+  --warn-ink: #9a5612;
+  --info-ink: #2f6fa8;
+  --bad-ink: #c0305f;
+  /* Neutral chips and the active session row: a step off the panel. */
+  --chip-bg: #fff;
+
+  /* Code views (diffs and the hunks under PR comments). The terminal's own
+     colours live in web/src/termThemes.ts. */
+  --code-bg: #faf3fb;
+  --code-fg: #4a3a52;
+  --code-strong: #2e2333;
+  --code-dim: #6f5c7d;
+  --code-num: #8f7d9c;
+  --code-num-new: #75628a;
+  --code-rule: rgba(90, 60, 90, 0.1);
+  --code-inline-bg: rgba(90, 60, 90, 0.08);
+  --code-head: #6f46b5;
+  --code-hunk: #2a64a0;
+  --code-add: #1f6b45;
+  --code-del: #a8284a;
+  --code-add-bg: rgba(63, 191, 127, 0.16);
+  --code-del-bg: rgba(255, 92, 122, 0.14);
+  --code-hunk-bg: rgba(120, 170, 220, 0.14);
+  --code-anchor-bg: rgba(255, 143, 190, 0.2);
+  --hl-keyword: #7a3fb0;
+  --hl-string: #8a4c00;
+  --hl-number: #a3401a;
+  --hl-title: #1d62a0;
+  --hl-type: #136b60;
+  --hl-attr: #a82e60;
+  --hl-meta: #2a64a0;
 
   font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   color: var(--ink);
@@ -38,6 +71,35 @@
     --danger-ink: #ff9bb8;
     --danger-bg: #5a2436;
     --danger-edge: #d9466f;
+    --chip-bg: #372c44;
+    --accent-ink: #ff8fbe;
+    --ok-ink: #7fd6a8;
+    --warn-ink: #ffc27a;
+    --info-ink: #8fc3f0;
+    --bad-ink: #ff8fa8;
+    --code-bg: #2b2233;
+    --code-fg: #d9cfe0;
+    --code-strong: #f0e6f5;
+    --code-dim: #a99bb4;
+    --code-num: #9a8ba6;
+    --code-num-new: #b3a6bd;
+    --code-rule: rgba(255, 255, 255, 0.07);
+    --code-inline-bg: rgba(255, 255, 255, 0.08);
+    --code-head: #cdb4f6;
+    --code-hunk: #7fb0d8;
+    --code-add: #8ee6b0;
+    --code-del: #ff9db0;
+    --code-add-bg: rgba(63, 191, 127, 0.13);
+    --code-del-bg: rgba(255, 92, 122, 0.13);
+    --code-hunk-bg: rgba(180, 216, 246, 0.08);
+    --code-anchor-bg: rgba(255, 183, 213, 0.14);
+    --hl-keyword: #d7a7ff;
+    --hl-string: #ffd28a;
+    --hl-number: #ffb38a;
+    --hl-title: #8fd3ff;
+    --hl-type: #9ce8d3;
+    --hl-attr: #ff9ecf;
+    --hl-meta: #b4d8f6;
   }
 }
 :root[data-theme="dark"] {
@@ -51,6 +113,35 @@
   --danger-ink: #ff9bb8;
   --danger-bg: #5a2436;
   --danger-edge: #d9466f;
+  --chip-bg: #372c44;
+  --accent-ink: #ff8fbe;
+  --ok-ink: #7fd6a8;
+  --warn-ink: #ffc27a;
+  --info-ink: #8fc3f0;
+  --bad-ink: #ff8fa8;
+  --code-bg: #2b2233;
+  --code-fg: #d9cfe0;
+  --code-strong: #f0e6f5;
+  --code-dim: #a99bb4;
+  --code-num: #9a8ba6;
+  --code-num-new: #b3a6bd;
+  --code-rule: rgba(255, 255, 255, 0.07);
+  --code-inline-bg: rgba(255, 255, 255, 0.08);
+  --code-head: #cdb4f6;
+  --code-hunk: #7fb0d8;
+  --code-add: #8ee6b0;
+  --code-del: #ff9db0;
+  --code-add-bg: rgba(63, 191, 127, 0.13);
+  --code-del-bg: rgba(255, 92, 122, 0.13);
+  --code-hunk-bg: rgba(180, 216, 246, 0.08);
+  --code-anchor-bg: rgba(255, 183, 213, 0.14);
+  --hl-keyword: #d7a7ff;
+  --hl-string: #ffd28a;
+  --hl-number: #ffb38a;
+  --hl-title: #8fd3ff;
+  --hl-type: #9ce8d3;
+  --hl-attr: #ff9ecf;
+  --hl-meta: #b4d8f6;
 }
 
 /* A theme picked with the topbar toggle (ThemeToggle.tsx) overrides the
@@ -231,7 +322,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: #9a7fa6;
+  color: #75628a;
   margin-bottom: 7px;
 }
 .shortcuts-pop ul {
@@ -308,7 +399,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  opacity: 0.6;
+  opacity: 0.85;
   border: 1.5px solid rgba(74, 58, 82, 0.35);
   border-radius: 6px;
   padding: 1px 6px;
@@ -482,15 +573,7 @@ body {
 }
 .session.active {
   border-color: var(--pink-deep);
-  background: #fff;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .session.active {
-    background: #372c44;
-  }
-}
-:root[data-theme="dark"] .session.active {
-  background: #372c44;
+  background: var(--chip-bg);
 }
 .dot {
   width: 12px;
@@ -520,7 +603,7 @@ body {
   height: 16px;
   border-radius: 50%;
   background: var(--pink-deep);
-  color: #fff;
+  color: #5e1d36;
   font-size: 11px;
   font-weight: 900;
   line-height: 16px;
@@ -613,7 +696,7 @@ body {
   opacity: 1;
 }
 .session-close:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
   background: var(--bg);
 }
 /* Restart an exited session — kept visible (not hover-only) so it's easy to
@@ -634,7 +717,7 @@ body {
   opacity: 1;
 }
 .session-restart:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
   background: var(--bg);
 }
 .restart-btn {
@@ -663,26 +746,11 @@ body {
 /* When the app is up, the button opens it — tint it mint so it reads "live". */
 .app-run-btn.running {
   border-color: color-mix(in srgb, var(--mint) 70%, #1f5a42);
-  color: #1f5a42;
+  color: var(--ok-ink);
   background: color-mix(in srgb, var(--mint) 22%, transparent);
 }
 .app-run-btn.running:hover {
   background: color-mix(in srgb, var(--mint) 40%, transparent);
-  color: #1f5a42;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .app-run-btn.running {
-    color: var(--mint);
-  }
-  :root:not([data-theme="light"]) .app-run-btn.running:hover {
-    color: var(--mint);
-  }
-}
-:root[data-theme="dark"] .app-run-btn.running {
-  color: var(--mint);
-}
-:root[data-theme="dark"] .app-run-btn.running:hover {
-  color: var(--mint);
 }
 .rename-input {
   flex: 1;
@@ -868,7 +936,7 @@ body {
   display: flex;
   border-radius: 12px;
   overflow: hidden;
-  background: var(--term-bg);
+  background: var(--code-bg);
   padding: 8px;
 }
 /* The element xterm is opened into + FitAddon measures. Keep it padding-free so
@@ -978,7 +1046,7 @@ body {
   border-radius: 4px;
 }
 .shell-tab-close:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .shell-tab-add {
   border: 1.5px dashed var(--border);
@@ -1077,7 +1145,7 @@ body {
 /* Worktree setup button (#10), pink when the worktree looks not set up. */
 .app-run-btn.needs-setup {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 
 /* Progress notepad */
@@ -1119,7 +1187,7 @@ body {
 .notepad-dirty {
   font-size: 10px;
   font-weight: 700;
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .notepad-save {
   margin-left: auto;
@@ -1352,7 +1420,7 @@ body {
   border: none;
   border-radius: 50%;
   background: var(--pink-deep);
-  color: #fff;
+  color: #5e1d36;
   font-size: 11px;
   font-weight: 900;
   line-height: 15px;
@@ -1380,7 +1448,7 @@ body {
   padding: 1px 7px 1px 5px;
   border-radius: 999px;
   background: var(--pink-deep);
-  color: #fff;
+  color: #5e1d36;
   font-size: 11px;
   font-weight: 900;
   line-height: 1.5;
@@ -1415,13 +1483,13 @@ body {
   text-align: center;
 }
 .check-pass {
-  color: #3fbf7f;
+  color: var(--ok-ink);
 }
 .check-fail {
-  color: #ff6b8a;
+  color: var(--bad-ink);
 }
 .check-pending {
-  color: #e6a94a;
+  color: var(--warn-ink);
 }
 .check-none {
   color: var(--ink-soft);
@@ -1444,17 +1512,9 @@ body {
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 7px;
-  background: #fff;
+  background: var(--chip-bg);
   border: 1px solid var(--border);
   color: var(--ink-soft);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .pr-badge {
-    background: #372c44;
-  }
-}
-:root[data-theme="dark"] .pr-badge {
-  background: #372c44;
 }
 .pr-badge.ticket {
   background: var(--lilac);
@@ -1490,6 +1550,11 @@ body {
   color: #7a2a45;
   border-color: transparent;
 }
+.pr-badge.review-review_required {
+  background: var(--lemon);
+  color: #6b5a1a;
+  border-color: transparent;
+}
 /* A PR you've already reviewed stays in "review requested" until it merges or
    closes, so mark quietly why it's still listed. */
 .pr-badge.reviewed {
@@ -1522,8 +1587,8 @@ body {
   color: var(--ink-soft);
 }
 .pr-badge.prio-urgent {
-  background: #ff8fbe;
-  color: #7a2a45;
+  background: var(--pink-deep);
+  color: #5e1d36;
   border-color: transparent;
 }
 .pr-badge.prio-high {
@@ -1556,7 +1621,7 @@ body {
   font-size: 13px;
 }
 .ticket-ext:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .ticket-card .pr-time {
   margin-left: 8px;
@@ -1688,7 +1753,7 @@ body {
 }
 .ticket-comment-time {
   font-size: 11px;
-  color: var(--muted, #9a7fa6);
+  color: var(--ink-soft);
 }
 .ticket-comment .md {
   font-size: 13px;
@@ -1758,7 +1823,7 @@ body {
   height: 18px;
   border-radius: 9px;
   background: var(--pink-deep);
-  color: #fff;
+  color: #5e1d36;
   font-size: 11px;
   font-weight: 800;
   line-height: 18px;
@@ -1805,7 +1870,7 @@ body {
    are rounded on the first/last block's columns instead of clipped. */
 .diff-view {
   flex: none;
-  background: var(--term-bg);
+  background: var(--code-bg);
   border-radius: 12px;
 }
 .diff-file-block:first-child .diff-notes-col { border-top-left-radius: 12px; }
@@ -1815,7 +1880,7 @@ body {
 .diff-file-block {
   display: grid;
   grid-template-columns: minmax(190px, 36%) 1fr;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--code-rule);
 }
 .diff-file-block:first-child {
   border-top: none;
@@ -1827,8 +1892,8 @@ body {
   top: 0;
   align-self: start;
   padding: 9px 11px;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
-  background: var(--term-bg);
+  border-right: 1px solid var(--code-rule);
+  background: var(--code-bg);
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 .diff-note-file {
@@ -1843,14 +1908,14 @@ body {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 10.5px;
   font-weight: 700;
-  color: #cdb4f6;
+  color: var(--code-head);
   margin-bottom: 5px;
   word-break: break-all;
 }
 .diff-fold {
   display: inline-block;
   width: 1.4ch;
-  color: #8a7a95;
+  color: var(--code-dim);
 }
 .diff-file-block.collapsed .diff-note-md,
 .diff-file-block.collapsed .diff-note-empty,
@@ -1867,13 +1932,13 @@ body {
   padding: 0 12px;
   cursor: pointer;
   font: inherit;
-  color: #8a7a95;
+  color: var(--code-dim);
 }
 .diff-collapsed:hover {
-  color: #d9cfe0;
+  color: var(--code-fg);
 }
-.diff-add-count { color: #8ee6b0; }
-.diff-del-count { color: #ff9db0; }
+.diff-add-count { color: var(--code-add); }
+.diff-del-count { color: var(--code-del); }
 .diff-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -1895,61 +1960,61 @@ body {
   width: 1ch;
 }
 
-/* Syntax tokens (highlight.js classes), tuned for the dark diff background and
-   the add/del tints under them. Plain code keeps the line's own colour. */
+/* Syntax tokens (highlight.js classes), tuned for the code background and the
+   add/del tints under them. Plain code keeps the line's own colour. */
 .diff-text .hljs-keyword,
 .diff-text .hljs-selector-tag,
 .diff-text .hljs-built_in,
-.diff-text .hljs-literal { color: #d7a7ff; }
+.diff-text .hljs-literal { color: var(--hl-keyword); }
 .diff-text .hljs-string,
 .diff-text .hljs-regexp,
-.diff-text .hljs-template-tag { color: #ffd28a; }
+.diff-text .hljs-template-tag { color: var(--hl-string); }
 .diff-text .hljs-number,
 .diff-text .hljs-symbol,
-.diff-text .hljs-bullet { color: #ffb38a; }
+.diff-text .hljs-bullet { color: var(--hl-number); }
 .diff-text .hljs-comment,
-.diff-text .hljs-quote { color: #8a7a95; font-style: italic; }
+.diff-text .hljs-quote { color: var(--code-dim); font-style: italic; }
 .diff-text .hljs-title,
 .diff-text .hljs-section,
 .diff-text .hljs-selector-id,
-.diff-text .hljs-selector-class { color: #8fd3ff; }
+.diff-text .hljs-selector-class { color: var(--hl-title); }
 .diff-text .hljs-type,
 .diff-text .hljs-class .hljs-title,
-.diff-text .hljs-title.class_ { color: #9ce8d3; }
+.diff-text .hljs-title.class_ { color: var(--hl-type); }
 .diff-text .hljs-attr,
 .diff-text .hljs-attribute,
 .diff-text .hljs-property,
 .diff-text .hljs-name,
-.diff-text .hljs-tag { color: #ff9ecf; }
+.diff-text .hljs-tag { color: var(--hl-attr); }
 .diff-text .hljs-variable,
 .diff-text .hljs-template-variable,
-.diff-text .hljs-params { color: #f0e6f5; }
-.diff-text .hljs-meta { color: #b4d8f6; }
+.diff-text .hljs-params { color: var(--code-strong); }
+.diff-text .hljs-meta { color: var(--hl-meta); }
 .diff-note-md {
   font-size: 12px;
   line-height: 1.5;
-  color: #d9cfe0;
+  color: var(--code-fg);
 }
 .diff-note-md > :first-child { margin-top: 0; }
 .diff-note-md > :last-child { margin-bottom: 0; }
 .diff-note-md h4,
-.diff-note-md h3 { font-size: 12px; margin: 8px 0 3px; color: #cdb4f6; }
+.diff-note-md h3 { font-size: 12px; margin: 8px 0 3px; color: var(--code-head); }
 .diff-note-md ul { padding-left: 16px; margin: 4px 0; }
 .diff-note-md li { margin: 4px 0; }
 .diff-note-md code {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--code-inline-bg);
   font-size: 11px;
-  color: #f0e6f5;
+  color: var(--code-strong);
 }
 .diff-note-md pre {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--code-inline-bg);
   font-size: 11px;
   padding: 6px 8px;
 }
 .diff-note-empty {
   font-size: 11.5px;
   font-style: italic;
-  color: #8a7a95;
+  color: var(--code-dim);
 }
 .diff-note-review {
   margin-left: 0;
@@ -1970,7 +2035,7 @@ body {
   display: flex;
   width: max-content;
   min-width: 100%;
-  color: #d9cfe0;
+  color: var(--code-fg);
 }
 .diff-text {
   white-space: pre;
@@ -1986,24 +2051,24 @@ body {
   display: flex;
   gap: 5px;
   padding: 0 9px 0 6px;
-  background: var(--term-bg);
+  background: var(--code-bg);
   user-select: none;
 }
 .diff-num {
   width: 4ch;
   text-align: right;
   font-size: 10.5px;
-  color: #6c5f76;
+  color: var(--code-num);
 }
-.diff-num-new { color: #8f809a; }
-.diff-add .diff-gutter { background: linear-gradient(rgba(63, 191, 127, 0.13) 0 100%), var(--term-bg); }
-.diff-del .diff-gutter { background: linear-gradient(rgba(255, 92, 122, 0.13) 0 100%), var(--term-bg); }
-.diff-hunk .diff-gutter { background: linear-gradient(rgba(180, 216, 246, 0.08) 0 100%), var(--term-bg); }
-.diff-file { color: #cdb4f6; font-weight: 700; margin-top: 8px; }
-.diff-meta { color: #8a7a95; }
-.diff-hunk { color: #7fb0d8; background: rgba(180, 216, 246, 0.08); }
-.diff-add { color: #8ee6b0; background: rgba(63, 191, 127, 0.13); }
-.diff-del { color: #ff9db0; background: rgba(255, 92, 122, 0.13); }
+.diff-num-new { color: var(--code-num-new); }
+.diff-add .diff-gutter { background: linear-gradient(var(--code-add-bg) 0 100%), var(--code-bg); }
+.diff-del .diff-gutter { background: linear-gradient(var(--code-del-bg) 0 100%), var(--code-bg); }
+.diff-hunk .diff-gutter { background: linear-gradient(var(--code-hunk-bg) 0 100%), var(--code-bg); }
+.diff-file { color: var(--code-head); font-weight: 700; margin-top: 8px; }
+.diff-meta { color: var(--code-dim); }
+.diff-hunk { color: var(--code-hunk); background: var(--code-hunk-bg); }
+.diff-add { color: var(--code-add); background: var(--code-add-bg); }
+.diff-del { color: var(--code-del); background: var(--code-del-bg); }
 
 .pr-info {
   border: 2px solid var(--border);
@@ -2157,7 +2222,7 @@ body {
   opacity: 1;
 }
 .diff-hunk-block {
-  background: var(--term-bg);
+  background: var(--code-bg);
   overflow-x: auto;
   padding: 6px 0;
   font-family: ui-monospace, Menlo, monospace;
@@ -2169,10 +2234,10 @@ body {
    which sits above the line's own inset shadow. */
 .diff-hunk-block .diff-anchor {
   box-shadow: inset 3px 0 0 var(--pink-deep);
-  background: rgba(255, 183, 213, 0.14);
+  background: var(--code-anchor-bg);
 }
 .diff-hunk-block .diff-anchor .diff-gutter {
-  background: linear-gradient(rgba(255, 183, 213, 0.14) 0 100%), var(--term-bg);
+  background: linear-gradient(var(--code-anchor-bg) 0 100%), var(--code-bg);
   box-shadow: inset 3px 0 0 var(--pink-deep);
 }
 .pr-prereview-group {
@@ -2207,7 +2272,7 @@ body {
 }
 .own-pr-btn.on {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
   background: color-mix(in srgb, var(--pink) 22%, transparent);
 }
 .confirm-card {
@@ -2236,7 +2301,7 @@ body {
   color: var(--ink-soft);
 }
 .update-warn {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .update-log {
   max-height: 240px;
@@ -2343,7 +2408,7 @@ body {
 /* A session pinned to stay up through Clock out. */
 .restart-btn.pinned {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 
 /* Clock out (ClockOutDialog). */
@@ -2478,7 +2543,7 @@ body {
   cursor: pointer;
 }
 .today-tick:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .today-tick.done {
   color: var(--ink-soft);
@@ -2526,23 +2591,23 @@ body {
   background: var(--pink-deep);
 }
 .ledger-label {
-  color: #3f8a6a;
+  color: #2e7a58;
 }
 .ledger-chip.ahead .ledger-label {
-  color: #c2457a;
+  color: #a8325f;
 }
 .ledger-chip.early .ledger-label {
-  color: rgba(74, 58, 82, 0.6);
+  color: rgba(74, 58, 82, 0.8);
 }
 /* The field mouse's warnings: a spike, then a limit set to run out early. */
 .ledger-chip.mouse-watch .ledger-label {
-  color: #b86a1f;
+  color: #9a5612;
 }
 .ledger-chip.mouse-tight {
-  outline: 2px solid #c2457a;
+  outline: 2px solid #a8325f;
 }
 .ledger-chip.mouse-tight .ledger-label {
-  color: #c2457a;
+  color: #a8325f;
   font-weight: 700;
 }
 /* Pushes the topbar's right-hand group (start my day, pace, fox) to the edge. */
@@ -2638,7 +2703,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: #fff;
+  color: #5e1d36;
   background: var(--pink-deep);
   padding: 1px 5px;
   border-radius: 999px;
@@ -2661,7 +2726,7 @@ body {
   text-decoration: none;
 }
 .fox-pop-arch:hover {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .loading-row {
   display: flex;
@@ -2722,7 +2787,7 @@ body {
 }
 .link-chip.pr.failing {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .link-chip.issue.edited {
   box-shadow: inset 0 0 0 1px var(--pink-deep);
@@ -2844,7 +2909,7 @@ body {
 }
 .browser-error {
   font-size: 12px;
-  color: var(--pink-deep);
+  color: var(--accent-ink);
   margin-bottom: 8px;
 }
 .browser-list {
@@ -3001,10 +3066,10 @@ body {
   margin-left: auto;
   font-size: 10px;
   font-weight: 700;
-  background: #fff;
+  background: var(--chip-bg);
   border-radius: 7px;
   padding: 1px 7px;
-  color: #234a63;
+  color: var(--info-ink);
 }
 
 .new-folder {
@@ -3056,13 +3121,16 @@ body {
 }
 .context-chip.full {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .context-chip.full .ledger-fill {
   background: var(--pink-deep);
 }
+.context-chip .ledger-label {
+  color: var(--ok-ink);
+}
 .context-chip.cold .ledger-label {
-  color: #3d7fb8;
+  color: var(--info-ink);
 }
 .context-chip.stale-prompt {
   border-color: var(--peach);
@@ -3118,7 +3186,7 @@ body {
   color: var(--ink-soft);
 }
 .line-err {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .line-ask-row {
   display: flex;
@@ -3154,8 +3222,8 @@ body {
   white-space: nowrap;
 }
 .src-chip.verified {
-  color: #3f8a6a;
-  border-color: #3f8a6a;
+  color: var(--ok-ink);
+  border-color: var(--ok-ink);
 }
 .review-checked {
   margin-top: 8px;
@@ -3201,7 +3269,7 @@ body {
 }
 .guide-mark.risk .guide-mark-tone,
 .guide-mark-tone.risk {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .guide-read {
   margin-left: auto;
@@ -3209,8 +3277,8 @@ body {
   padding: 1px 8px;
 }
 .guide-read.on {
-  color: #3f8a6a;
-  border-color: #3f8a6a;
+  color: var(--ok-ink);
+  border-color: var(--ok-ink);
 }
 .guide-section.read .guide-section-title {
   color: var(--ink-soft);
@@ -3279,7 +3347,7 @@ body {
   color: var(--ink-soft);
 }
 .check-sev.high {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 .check-fix,
 .check-evidence,
@@ -3288,7 +3356,18 @@ body {
   margin-top: 2px;
 }
 .check-error {
-  color: var(--pink-deep);
+  color: var(--accent-ink);
+}
+.check-verdict {
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--pink);
+  color: #7a2a45;
+}
+.check-verdict.ready {
+  background: var(--mint);
+  color: #1f5a42;
 }
 .check-crew {
   margin-bottom: 6px;
@@ -3301,7 +3380,7 @@ body {
 }
 .btn.tight {
   border-color: var(--pink-deep);
-  color: var(--pink-deep);
+  color: var(--accent-ink);
 }
 
 /* A pane's recent helper runs, in its crew card (CrewRuns.tsx). */
@@ -3364,4 +3443,107 @@ body {
   padding: 2px 6px;
   font-size: 15px;
   line-height: 1;
+}
+
+/* The work panel's Checks tab (ChecksTab.tsx). */
+.checks-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.checks-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.checks-filter {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.checks-filter.on {
+  background: var(--lilac);
+  border-color: var(--lilac);
+  color: #3b2a5a;
+}
+.checks-search {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--ink);
+}
+.checks-entry {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+}
+.checks-entry.open {
+  border-color: var(--lilac);
+}
+.checks-entry-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.checks-kind-icon {
+  width: 22px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--ok-ink);
+}
+.checks-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.checks-entry-top {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+.checks-entry-session {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.checks-entry-when {
+  margin-left: auto;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.checks-entry-summary {
+  font-size: 12px;
+}
+.checks-entry-where {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.checks-entry .crew-run-body {
+  margin: 0 9px 9px;
+  font-size: 11px;
+}
+.checks-open {
+  margin: 0 9px 9px;
 }

@@ -198,11 +198,13 @@ export function CrewButtons({
           {pane === "kit" && (
             <div className="crew-row crew-done-check">
               <div className="crew-row-text">
-                <strong>Done check</strong>
+                <strong>Ready check</strong>
                 {checking && <span className="crew-working">asking...</span>}
                 <div className="crew-card-job">
-                  Badger and Owl at once, plus Hare or Wolf when the change needs them, with each serious finding
-                  double-checked. Up to about ten helpers, so it costs more than one ask.
+                  Is the PR ready for a human reviewer? Re-reads the ticket and every PR comment, sizes the blast
+                  radius, and checks requirements, bugs, tests, and tidiness, plus performance, security, and design
+                  when the change touches them, with each serious finding double-checked. Up to about thirteen
+                  helpers, so it costs more than one ask.
                 </div>
                 {tight && <div className="crew-card-job update-warn">{tight}</div>}
               </div>
