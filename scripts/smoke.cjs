@@ -1,8 +1,9 @@
-// End-to-end smoke test (#21): boots a den server on a throwaway database,
+// End-to-end smoke test (#21): boots a den server on a throwaway data dir,
 // loads the real UI in a headless Electron window, opens a shell session from
 // the rail, and checks that the rail lists it, its terminal attaches, and a
-// typed command's output comes back. Exits 0 on success, 1 with the failed
-// step otherwise.
+// typed command's output comes back; then starts a Claude workspace on
+// scripts/stub-claude and checks it was given den's instructions. Exits 0 on
+// success, 1 with the failed step otherwise.
 //
 //   npm run smoke          (builds the web UI first)
 //
@@ -53,7 +54,15 @@ function startServer() {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "den-smoke-"));
   // A clean environment for the server: its own db, no idle handovers, and
   // none of a surrounding Claude session's variables (panes would inherit them).
-  const env = { ...process.env, PORT: "0", DEN_DB: path.join(tmp, "den.db"), DEN_IDLE_HANDOVER_MIN: "0" };
+  const env = {
+    ...process.env,
+    PORT: "0",
+    DEN_DATA_DIR: tmp,
+    DEN_DB: path.join(tmp, "den.db"),
+    DEN_IDLE_HANDOVER_MIN: "0",
+    MC_CLAUDE_BIN: path.join(ROOT, "scripts", "stub-claude"),
+    STUB_CLAUDE_DIR: path.join(tmp, "stub-claude"),
+  };
   for (const k of Object.keys(env)) if (k.startsWith("CLAUDE")) delete env[k];
   server = spawn("npx", ["tsx", "server/index.ts"], {
     cwd: ROOT,
@@ -118,6 +127,22 @@ app.whenReady().then(async () => {
     await waitFor("and the server's session is gone", async () =>
       !(await api("/api/sessions")).sessions.some((s) => s.id === session.id),
     );
+
+    // A Claude workspace, on the stub: den's system prompt is what every
+    // pane's behaviour hangs on, and only a spawn shows it was passed.
+    const post = { method: "POST", headers: { "content-type": "application/json" } };
+    const ws = await api("/api/sessions", { ...post, body: JSON.stringify({ name: "smoke claude", cwd: ROOT }) });
+    const args = await waitFor("a Claude workspace starts with den's instructions", async () => {
+      const dir = path.join(tmp, "stub-claude");
+      for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".args"))) {
+        const a = fs.readFileSync(path.join(dir, f), "utf8").split("\0");
+        const prompt = a[a.indexOf("--append-system-prompt") + 1] ?? "";
+        if (prompt.includes(path.join(tmp, "progress", `${ws.groupId}.md`))) return a;
+      }
+      return null;
+    });
+    if (!args.includes("-n")) throw new Error("the Claude pane was started without a name");
+    await fetch(`${url}/api/sessions/${ws.id}`, { method: "DELETE" });
 
     done(0, `${steps.join("\n")}\nSMOKE OK`);
   } catch (err) {

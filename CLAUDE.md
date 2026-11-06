@@ -626,6 +626,8 @@ developer's day across the other sessions instead of them being the glue.
   and lists open review threads on others' PRs too (review-requested +
   pickup, `MAX_OTHERS_THREADS`), since Fox's subagents can't call `gh api`.
   Today matches `(session: X)` on `name` or `agentName` (`isNamed` in App).
+  Changes made while Fox is stopped aren't replayed when it starts: the
+  next digest carries them.
   A refresh whose today.md heading is another day (`todayIsOld`) tells Fox
   to start a new list carrying only open items.
 - Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /
@@ -1163,7 +1165,8 @@ surrounding `CLAUDE*` env stripped), loads it in a headless Electron window,
 opens a shell from the rail, and checks the rail lists it, the terminal
 attaches, a typed command's output comes back (`echo den-smoke-$((6*7))` →
 `42`, so the echo can't pass for the result), and closing from the rail
-removes it. Prints each step, exits 1 naming the one that failed. Needs the
+removes it; then it starts a Claude workspace on the stub Claude and checks
+its args carry den's system prompt. Prints each step, exits 1 naming the one that failed. Needs the
 sandbox disabled (it runs fine right after `npm run app` now). Run it after
 touching sessions, the WebSocket, or the rail. Close from the **rail**, not
 the API: the rail's poll only merges rows it already has, so it never drops
@@ -1179,7 +1182,12 @@ conservative about calling it core).
 Tests cost time on every run; KISS. Den tells the Claude sessions it spawns
 the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
 panes). Beyond that, verification is scripted + visual:
-- Run an **isolated** server: `DEN_DATA_DIR=<tmp dir> DEN_DB=<tmp>/den.db PORT=4399 npm run start`
+- Run an **isolated** server: `npm run test-server -- [--port 4399] [--dir <data dir>]`
+  (`scripts/test-server.mjs`: its own data dir and db, idle handovers off,
+  `CLAUDE*` env stripped, and `scripts/stub-claude` as `claude` via
+  `MC_CLAUDE_BIN` unless `--real-claude`; the stub records each pane's args
+  and typed input under `<data dir>/stub-claude/`). By hand it's
+  `DEN_DATA_DIR=<tmp dir> DEN_DB=<tmp>/den.db PORT=4399 npm run start`
   (node ABI). `DEN_DB` alone isolates only the database: notepads, review
   files, and the `manager/` files are still the installed app's, and a
   test once overwrote the running app's Fox settings and digest that way.

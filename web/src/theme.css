@@ -2420,6 +2420,12 @@ body {
   list-style: none;
   padding-left: 4px;
 }
+/* A plain bullet, such as With sessions, has no box to mark it. */
+.today-list li:not(:has(> .today-tick))::before {
+  content: "\2022";
+  margin-right: 8px;
+  color: var(--ink-soft);
+}
 .today-tick {
   font: inherit;
   font-size: 15px;

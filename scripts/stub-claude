@@ -1,0 +1,16 @@
+#!/bin/bash
+# A stand-in for `claude` in test servers (scripts/test-server.mjs, smoke):
+# records how den started it, draws a prompt, and records what is typed, so
+# a check can see a pane's args and pasted prompts without a real Claude.
+#   $STUB_CLAUDE_DIR/<pid>.args   one argument per line, NULs between them
+#   $STUB_CLAUDE_DIR/<pid>.input  everything typed into the pane
+dir="${STUB_CLAUDE_DIR:-${TMPDIR:-/tmp}/stub-claude}"
+mkdir -p "$dir"
+printf '%s\0' "$@" > "$dir/$$.args"
+echo "stub claude (pid $$) in $(pwd)"
+printf '> '
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> "$dir/$$.input"
+  echo "stub got: ${line:0:200}"
+  printf '> '
+done

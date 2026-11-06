@@ -32,7 +32,8 @@
     "lint": "eslint .",
     "check": "npm run typecheck && npm run lint && npm run test",
     "smoke": "npm run build && electron scripts/smoke.cjs",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "test-server": "node scripts/test-server.mjs"
   },
   "dependencies": {
     "@fastify/static": "^9.1.3",
