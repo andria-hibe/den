@@ -3,14 +3,17 @@ import { promisify } from "node:util";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId, freshStartPrompt, notepadPath, DIGEST_PATH, MANAGER_DIR, TODAY_PATH } from "./sessions.ts";
-import { buildDigest, pickupPrs } from "./digest.ts";
+import { sessions, isValidGroupId, freshStartPrompt, notepadPath, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./sessions.ts";
+import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
+
+/** Others' PRs whose open review threads go in the digest: one GitHub call each. */
+const MAX_OTHERS_THREADS = 10;
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
-import { managerRefreshPrompt, managerStartPrompt, toggleTodayItem } from "./manager.ts";
+import { managerRefreshPrompt, managerStartPrompt, todayIsOld, toggleTodayItem } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
@@ -862,8 +865,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // --- GitHub PRs (cached) ---
   const lastChecks = new Map<string, CheckState>();
+  let prState: { prs: PrBuckets | null; team: TeamPr[] | null } = { prs: null, team: null };
+  const writePrState = (next: Partial<typeof prState>) => {
+    prState = { ...prState, ...next };
+    try {
+      mkdirSync(MANAGER_DIR, { recursive: true });
+      writeFileSync(`${PRS_PATH}.tmp`, buildPrState(Date.now(), prState.prs, prState.team));
+      renameSync(`${PRS_PATH}.tmp`, PRS_PATH);
+    } catch (err) {
+      logWarn("pr state", err);
+    }
+  };
   const prCache = ttlCache<PrBuckets>(30_000, async () => {
     const buckets = await getMyPullRequests();
+    writePrState({ prs: buckets });
     notePrs([...buckets.authored, ...buckets.reviewRequested]);
     for (const done of ciFinishes(lastChecks, [...buckets.authored, ...buckets.reviewRequested])) {
       sessions.tellAboutPr(done.pr, ciMessage(done));
@@ -872,7 +887,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
   // The work panel's Open PRs for review: team PRs nobody has reviewed, with
   // Fox's easy picks marked. The digest reads the same cache.
-  const teamPrCache = ttlCache<TeamPr[]>(60_000, getTeamReviewPrs);
+  const teamPrCache = ttlCache<TeamPr[]>(60_000, async () => {
+    const prs = await getTeamReviewPrs();
+    writePrState({ team: prs });
+    return prs;
+  });
   app.get("/api/github/team-prs", async (req, reply) => {
     const fresh = (req.query as { refresh?: string })?.refresh === "1";
     try {
@@ -960,6 +979,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Start my day: write what den knows to the digest, bring up the Manager,
   // and ask it to build the Today list. GitHub and Linear are best effort and
   // bounded, like seedWithWhatExists, so a slow API never holds up the day.
+  /** Run `fn` over `items` two at a time: a burst of GitHub calls has hit its
+   * secondary rate limit before. */
+  const inPairs = async <T,>(items: T[], fn: (item: T) => Promise<void>) => {
+    const queue = [...items];
+    const worker = async () => {
+      for (let t = queue.shift(); t; t = queue.shift()) await fn(t);
+    };
+    await Promise.all([worker(), worker()]);
+  };
+
   const writeDigest = async () => {
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
@@ -970,20 +999,25 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       bounded(getNotifications(new Date(Date.now() - 24 * 3_600_000)), null),
       bounded(teamPrCache.get(true), null),
     ]);
-    // Two at a time, since a burst of GitHub calls has hit its secondary rate
-    // limit before; a PR still unfetched at the bound reads as not answered.
-    const reviewThreads = prs?.authored.map((p) => ({ pr: p.number, repo: p.repo, threads: null as OpenThread[] | null }));
-    if (reviewThreads) {
-      const queue = [...reviewThreads];
-      const worker = async () => {
-        for (let t = queue.shift(); t; t = queue.shift()) t.threads = await openReviewThreads(t.repo, t.pr);
-      };
-      await bounded(Promise.all([worker(), worker()]), undefined);
+    mkdirSync(MANAGER_DIR, { recursive: true });
+    let seen: Set<string> | null = null;
+    try {
+      seen = new Set(JSON.parse(readFileSync(DIGEST_SESSIONS_PATH, "utf8")) as string[]);
+    } catch {
+      // first digest: nothing counts as new
     }
+    const digestSessions = sessions.digestSessions(seen);
+    const pickup = teamPrs && pickupPrs(teamPrs, digestSessions);
+    const threadsFor = (p: { number: number; repo: string }) => ({ pr: p.number, repo: p.repo, threads: null as OpenThread[] | null });
+    const reviewThreads = prs?.authored.map(threadsFor);
+    const othersThreads = [...(prs?.reviewRequested ?? []), ...(pickup ?? [])].slice(0, MAX_OTHERS_THREADS).map(threadsFor);
+    // A PR still unfetched at the bound reads as not answered.
+    await bounded(inPairs([...(reviewThreads ?? []), ...othersThreads], async (t) => {
+      t.threads = await openReviewThreads(t.repo, t.pr);
+    }), undefined);
     const limits = readLimits();
     const week = limits?.week;
-    mkdirSync(MANAGER_DIR, { recursive: true });
-    const digestSessions = sessions.digestSessions();
+    writeFileSync(DIGEST_SESSIONS_PATH, JSON.stringify(digestSessions.map((s) => s.groupId)));
     writeFileSync(
       DIGEST_PATH,
       buildDigest({
@@ -992,9 +1026,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         prs,
         linear,
         week: week && limits ? weekPace(week.usedPercentage, week.resetsAt, limits.at) : null,
-        inbox: { linear: linearInbox, github: githubInbox },
+        inbox: { linear: linearInbox, github: githubInbox && tagReviewRequests(githubInbox, prs?.reviewRequested ?? null, teamPrs) },
         reviewThreads: reviewThreads ?? null,
-        teamPrs: teamPrs && pickupPrs(teamPrs, digestSessions),
+        othersThreads,
+        teamPrs: pickup,
       }),
     );
   };
@@ -1020,7 +1055,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "manager_not_running" };
     }
     await writeDigest();
-    await paste(manager, managerRefreshPrompt(new Date()), true);
+    let today = "";
+    try {
+      today = readFileSync(TODAY_PATH, "utf8");
+    } catch {
+      // no list yet
+    }
+    const now = new Date();
+    await paste(manager, managerRefreshPrompt(now, todayIsOld(today, now)), true);
     return { ok: true };
   });
 

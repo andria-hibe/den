@@ -9,9 +9,17 @@ import type { LinearData, LinearNotification } from "./linear.ts";
 import type { StackStatus } from "./stack.ts";
 
 export interface DigestSession {
+  /** The workspace's group id, to tell which sessions are new next time. */
+  groupId: string;
+  /** The name other sessions use to message it (ListAgents): the name its
+   * Claude was started with, which a later retitle in den doesn't change. */
   name: string;
-  /** The name other sessions use to message it (ListAgents), which is den's
-   * pane name. */
+  /** What den's rail shows, when that differs from `name`. */
+  title: string | null;
+  /** Where its handover is, when it keeps one. */
+  handoverPath: string | null;
+  /** Not in the previous digest. */
+  isNew: boolean;
   status: "running" | "exited";
   ticket: string | null;
   branch: string | null;
@@ -29,9 +37,11 @@ export interface DigestInput {
   linear: LinearData | null;
   week: Pace | null;
   /** Unread inbox items; null when that source didn't answer. */
-  inbox: { linear: LinearNotification[] | null; github: GhNotification[] | null };
+  inbox: { linear: LinearNotification[] | null; github: (GhNotification & { requested?: "named" | "team" })[] | null };
   /** Open review threads per authored PR; null where GitHub didn't answer. */
   reviewThreads?: { pr: number; threads: OpenThread[] | null }[] | null;
+  /** The same for others' PRs the developer reviews or could pick up. */
+  othersThreads?: { pr: number; threads: OpenThread[] | null }[];
   /** PRs asking the developer's team, not them, for a review, already
    * through `pickupPrs`; null when GitHub didn't answer. */
   teamPrs?: TeamPr[] | null;
@@ -55,6 +65,63 @@ export function sharedFailures(prs: PullRequest[]): { check: string; prs: number
   return [...by.entries()]
     .filter(([, nums]) => nums.length > 1)
     .map(([check, nums]) => ({ check, prs: nums }));
+}
+
+/** The GitHub inbox with each review request tagged by who it asks: the
+ * developer by name, or only a team they're in. A request that is neither any
+ * more (merged, closed, reviewed, or withdrawn) is dropped. Untouched when
+ * GitHub didn't answer either PR search, since nothing can be told apart. */
+export function tagReviewRequests(
+  notifs: GhNotification[],
+  named: PullRequest[] | null,
+  team: TeamPr[] | null,
+): (GhNotification & { requested?: "named" | "team" })[] {
+  if (!named || !team) return notifs;
+  const key = (repo: string, n: number) => `${repo}#${n}`;
+  const namedKeys = new Set(named.filter((p) => p.reviewRequestedFromMe).map((p) => key(p.repo, p.number)));
+  const teamKeys = new Set(team.map((p) => key(p.repo, p.number)));
+  return notifs.flatMap((n) => {
+    const num = n.reason === "review_requested" ? /\/pull\/(\d+)/.exec(n.url ?? "")?.[1] : undefined;
+    if (!num) return [n];
+    const k = key(n.repo, Number(num));
+    if (namedKeys.has(k)) return [{ ...n, requested: "named" as const }];
+    if (teamKeys.has(k)) return [{ ...n, requested: "team" as const }];
+    return [];
+  });
+}
+
+/** The PR state file Fox checks before presenting an item about a PR, since
+ * the digest is only as fresh as the last start or refresh. */
+export function buildPrState(now: number, prs: PrBuckets | null, team: TeamPr[] | null): string {
+  const out = [
+    `# Open PRs, read ${new Date(now).toISOString()}`,
+    "",
+    "A PR not listed here is merged, closed, or no longer involves me.",
+    "",
+  ];
+  if (!prs) out.push("GitHub didn't answer for my PRs.");
+  else out.push("Mine:", ...prs.authored.map(prLine), "", "Review requested or reviewed by me:", ...prs.reviewRequested.map(prLine));
+  out.push("", "My team's, nobody has reviewed yet:");
+  if (!team) out.push("- (GitHub didn't answer)");
+  else if (!team.length) out.push("- none");
+  for (const p of team ?? []) out.push(`- #${p.number} ${p.title} (${p.repo}) - by ${p.author}, CI ${p.checks}`);
+  return out.join("\n") + "\n";
+}
+
+function threadLines(groups: { pr: number; threads: OpenThread[] | null }[], mine: boolean): string[] {
+  const out: string[] = [];
+  for (const p of groups) {
+    if (!p.threads) out.push(`- #${p.pr}: (GitHub didn't answer)`);
+    for (const t of p.threads ?? []) {
+      const body = t.body.replace(/\s+/g, " ").trim();
+      const at = `${t.path}${t.line ? `:${t.line}` : ""}`;
+      const state = mine ? (t.waitingOnMe ? ", waiting on me" : ", I replied last") : "";
+      const replies = t.replies ? `, ${t.replies} repl${t.replies === 1 ? "y" : "ies"}` : "";
+      const max = mine ? 300 : 150;
+      out.push(`- #${p.pr} ${at}, ${t.author}${replies}${state}: "${body.length > max ? `${body.slice(0, max)}...` : body}"`);
+    }
+  }
+  return out;
 }
 
 /** The part of a handover written for the developer: everything above the
@@ -113,6 +180,12 @@ export function buildDigest(d: DigestInput): string {
       s.stack && s.stack.behindOrigin > 0 && `${s.stack.behindOrigin} behind origin`,
     ].filter(Boolean);
     out.push(`### ${s.name}`, "", meta.join(" - "));
+    const about = [
+      s.isNew ? "New since the last digest." : null,
+      s.title ? `den's rail shows it as "${s.title}".` : null,
+      s.handoverPath ? `Handover: ${s.handoverPath}` : "Keeps no handover.",
+    ].filter(Boolean);
+    out.push(about.join(" "), "");
     if (s.handover) {
       out.push(`Handover written ${ago(d.now, s.handover.writtenAt)}:`, "", s.handover.top, "");
     } else {
@@ -170,22 +243,19 @@ export function buildDigest(d: DigestInput): string {
   if (!d.inbox.github) out.push("- (GitHub didn't answer)");
   else if (!d.inbox.github.length) out.push("- nothing new");
   for (const n of d.inbox.github ?? []) {
-    out.push(`- ${n.reason}: ${n.title} (${n.repo}${n.url ? `, ${n.url}` : ""})`);
+    const reason = n.requested ? `${n.reason} (${n.requested === "named" ? "me by name" : "my team only"})` : n.reason;
+    out.push(`- ${reason}: ${n.title} (${n.repo}${n.url ? `, ${n.url}` : ""})`);
   }
   if (d.reviewThreads !== undefined) {
     out.push("", "GitHub, open review threads on my PRs:");
     if (!d.reviewThreads) out.push("- (GitHub didn't answer)");
     else if (d.reviewThreads.every((p) => p.threads && !p.threads.length)) out.push("- none open");
-    for (const p of d.reviewThreads ?? []) {
-      if (!p.threads) out.push(`- #${p.pr}: (GitHub didn't answer)`);
-      for (const t of p.threads ?? []) {
-        const body = t.body.replace(/\s+/g, " ").trim();
-        const at = `${t.path}${t.line ? `:${t.line}` : ""}`;
-        const state = t.waitingOnMe ? "waiting on me" : "I replied last";
-        const replies = t.replies ? `, ${t.replies} repl${t.replies === 1 ? "y" : "ies"}` : "";
-        out.push(`- #${p.pr} ${at}, ${t.author}${replies}, ${state}: "${body.length > 300 ? `${body.slice(0, 300)}...` : body}"`);
-      }
-    }
+    out.push(...threadLines(d.reviewThreads ?? [], true));
+  }
+  if (d.othersThreads?.length) {
+    out.push("", "GitHub, open review threads on PRs I review or could pick up:");
+    if (d.othersThreads.every((p) => p.threads && !p.threads.length)) out.push("- none open");
+    out.push(...threadLines(d.othersThreads, false));
   }
   out.push("");
 

@@ -41,6 +41,9 @@ import type { SessionMeta } from "../../server/sessions.ts";
 import { COLORS } from "../../shared/colors.ts";
 import { canStartFresh } from "../../shared/handover.ts";
 
+/** Fox names sessions as ListAgents does, which can differ from the rail's title. */
+const isNamed = (s: SessionMeta, name: string) => s.name === name || s.agentName === name;
+
 // Modifier shown in the shortcuts hint.
 const MOD =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)
@@ -420,7 +423,7 @@ export function App() {
     try {
       const { content } = await api<{ content: string }>("/api/manager/today");
       const next = nextItemSession(content, current);
-      const target = next ? rail.find((r) => r.name === next) : undefined;
+      const target = next ? rail.find((r) => isNamed(r, next)) : undefined;
       if (target) selectSession(target.id);
       else goToday();
     } catch {
@@ -538,10 +541,10 @@ export function App() {
             ▶ dev
           </a>
         )}
-        {s.view !== "manager" && todaySessions.includes(s.name) && (
+        {s.view !== "manager" && todaySessions.some((n) => isNamed(s, n)) && (
           <button
             className="btn btn-ghost-outline restart-btn"
-            onClick={() => goNextItem(s.name)}
+            onClick={() => goNextItem(todaySessions.find((n) => isNamed(s, n)) ?? s.name)}
             title="On to the next session on Fox's Today list (back to Today after the last)"
           >
             next ›
@@ -908,7 +911,7 @@ export function App() {
               }
             }}
             onOpenSession={(name) => {
-              const target = rail.find((r) => r.name === name);
+              const target = rail.find((r) => isNamed(r, name));
               if (target) selectSession(target.id);
             }}
             header={renderHeader(active)}

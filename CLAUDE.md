@@ -601,8 +601,26 @@ developer's day across the other sessions instead of them being the glue.
   /api/manager/refresh`: rewrite the digest, then paste + submit
   `managerRefreshPrompt`: tanuki sweeps the inbox, Fox updates the list,
   keeping the developer's ticks), meant for any time in the day.
+- **Keeping Fox's picture current** (Fox's own asks, 2026-11-06): den tells
+  a running Fox (`tellManagerWaiting`, on the 5s flush timer; Fox's
+  `--settings` now has `inboxHooks`, no nudge) when a session's "Waiting on
+  you" changes (`waitingChangeMessage`), since the developer often answers
+  in the session. The PR caches rewrite `~/.den/manager/prs.md`
+  (`buildPrState`) on every fetch, which Fox reads before presenting a PR
+  item (a missing PR = merged/closed). The digest names each session by
+  `agentName` (the `-n` name its Claude was started with, which ListAgents
+  shows; `name` follows OSC retitles), with its rail title when different,
+  its handover path, and "new since the last digest"
+  (`digest-sessions.json`); tags GitHub `review_requested` notifications
+  "me by name" / "my team only" and drops the rest (`tagReviewRequests`);
+  and lists open review threads on others' PRs too (review-requested +
+  pickup, `MAX_OTHERS_THREADS`), since Fox's subagents can't call `gh api`.
+  Today matches `(session: X)` on `name` or `agentName` (`isNamed` in App).
+  A refresh whose today.md heading is another day (`todayIsOld`) tells Fox
+  to start a new list carrying only open items.
 - Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /
-  FYI, `- [ ]` items with `(session: <name>)`); `TodayView` renders it above
+  FYI, `- [ ]` items with `(session: <name>)`, then With sessions: plain
+  bullets for session-owned "Waiting on you" items, never presented); `TodayView` renders it above
   the Fox pane (each box is a button: `tickBoxes` numbers them in file order to
   match `toggleTodayItem`, and a click posts `/api/manager/today/toggle`) (review-view layout, one splitter), polls
   `GET /api/manager/today`, and turns `(session: X)` into a button that opens

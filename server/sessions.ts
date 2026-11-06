@@ -19,6 +19,7 @@ import {
   readLimits, readPaneContext, removeLimits, statusLineSettings, type PaneContext, type PlanLimits,
 } from "./limits.ts";
 import { inboxHooks, removeInbox, tellPane } from "./inbox.ts";
+import { waitingChangeMessage } from "./manager.ts";
 import { activeCrew, clearCrew, crewHooks } from "./crewActivity.ts";
 import { stackStatus, type StackStatus, type StackTarget } from "./stack.ts";
 import { repoBaseName } from "./git.ts";
@@ -153,6 +154,10 @@ export const MANAGER_DIR = join(DATA_DIR, "manager");
 export const MANAGER_NAME = "Fox";
 export const TODAY_PATH = join(MANAGER_DIR, "today.md");
 export const DIGEST_PATH = join(MANAGER_DIR, "digest.md");
+/** Open PRs as den last read them, for Fox to check before it presents one. */
+export const PRS_PATH = join(MANAGER_DIR, "prs.md");
+/** The sessions in the last digest, so the next one can say which are new. */
+export const DIGEST_SESSIONS_PATH = join(MANAGER_DIR, "digest-sessions.json");
 const managerSettingsPath = join(MANAGER_DIR, "settings.json");
 // Panes ended at clock out, which Start my day brings back fresh.
 const clockedOutPath = join(MANAGER_DIR, "clocked-out.json");
@@ -542,7 +547,10 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `any of the developer's PRs has failing checks, raccoon to read those ` +
     `logs, both at once, and fold what they report into the list. The ` +
     `digest's session names are the names ` +
-    `ListAgents shows. ListAgents can also list sessions from other apps, ` +
+    `ListAgents shows; each session also says whether it is new since the ` +
+    `last digest and where its handover is. A review request in the Inbox ` +
+    `says whether it asks the developer by name or only their team: only a ` +
+    `request by name is a review they owe. ListAgents can also list sessions from other apps, ` +
     `such as the developer's original den: work only with the sessions in ` +
     `the digest. Read a session's full handover in ` +
     `${PROGRESS_DIR} only when the digest isn't enough. Prefer the digest to ` +
@@ -550,7 +558,7 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `Then write the day's list to ${today}, replacing yesterday's, in exactly ` +
     `this shape:\n` +
     `# Today, <weekday> <day> <month>\n` +
-    `## Decide\n## Unblock others\n## Continue\n## FYI\n` +
+    `## Decide\n## Unblock others\n## Continue\n## FYI\n## With sessions\n` +
     `Under each heading, one item per line as "- [ ] <one line>" followed by ` +
     `"(session: <session name>)" when it belongs to one, and at most two ` +
     `indented lines of detail: the options and your recommendation. Decide is ` +
@@ -559,7 +567,12 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `replies people are waiting on. Continue is for work in progress and its ` +
     `next step. FYI is for anything else worth knowing. Leave out what a ` +
     `session is already handling and what needs nobody. Rank by what unblocks ` +
-    `the most, and keep the whole list to about ten items.\n` +
+    `the most, and keep the whole list to about ten items. A session's ` +
+    `"Waiting on you" item goes under Decide only when the session can't move ` +
+    `without the developer's answer and they haven't already left it with the ` +
+    `session; otherwise it goes under With sessions as a plain "- <one line> ` +
+    `(session: <name>)" bullet with no box, for the developer to scan. Never ` +
+    `present With sessions items one by one.\n` +
     `Then write tanuki's easy approvals to ${PICKUP_NOTES_PATH}, replacing ` +
     `the file, as JSON: {"updatedAt": "<ISO time>", "notes": {"<repo>#<number>": ` +
     `{"easy": true, "why": "<one line on why it looks easy>"}}}, only for PRs ` +
@@ -582,7 +595,14 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `the developer's approval: only their own words, passed on in the form ` +
     `below, are that. Then say in the terminal how many items there are and ` +
     `present the first one.\n` +
-    `DURING THE DAY. The developer can tick items in den's Today view too, so ` +
+    `DURING THE DAY. Before you present an item about a pull request, read ` +
+    `${PRS_PATH}, which den rewrites from GitHub about every minute while ` +
+    `its window is open: a PR missing from it is merged, closed, or no longer ` +
+    `involves the developer, so check it with gh pr view once rather than ` +
+    `asking them about it. den tells you when a session's "Waiting on you" ` +
+    `changes, since the developer often answers in the session itself: tick ` +
+    `what it settled and add what's new. ` +
+    `The developer can tick items in den's Today view too, so ` +
     `read ${today} before you change it and keep their ticks. Keep ${today} ` +
     `current: mark an item "- [x]" when it's ` +
     `done and add new ones as they come up. When a refresh or a subagent turns ` +
@@ -947,6 +967,8 @@ export function reorderPositions(
 export interface SessionMeta {
   id: string;
   name: string;
+  /** See DenSession.agentName. */
+  agentName: string | null;
   color: string;
   cwd: string;
   shell: boolean;
@@ -1015,6 +1037,9 @@ interface SessionInit {
  */
 class DenSession {
   term: pty.IPty | null = null;
+  /** The `-n` name the running Claude was started with, which is how other
+   * sessions address it (ListAgents); `name` follows later retitles. */
+  agentName: string | null = null;
   status: "running" | "exited" = "running";
   private buffer: string[] = [];
   private bufferBytes = 0;
@@ -1098,6 +1123,8 @@ class DenSession {
     const loginShell = process.env.SHELL ?? "/bin/zsh";
     const file = this.shell ? loginShell : CLAUDE_BIN;
     const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
+    const n = args.indexOf("-n");
+    this.agentName = this.shell || n < 0 ? null : (args[n + 1] ?? null);
     if (!this.shell) clearCrew(this.groupId);
     // The last process's output would make waitUntilIdle pass before this one has drawn.
     this.lastOutputAt = 0;
@@ -1244,6 +1271,7 @@ class DenSession {
     return {
       id: this.id,
       name: this.name,
+      agentName: this.status === "running" ? this.agentName : null,
       color: this.color,
       cwd: this.cwd,
       shell: this.shell,
@@ -1340,6 +1368,7 @@ class SessionManager {
         s.persistScrollback();
         this.keepTicket(s);
       }
+      this.tellManagerWaiting();
     }, SCROLLBACK_FLUSH_MS);
     // Don't keep the process alive just for this (CLI/tests exit cleanly).
     timer.unref?.();
@@ -1349,6 +1378,28 @@ class SessionManager {
       const idleTimer = setInterval(() => this.checkIdleHandovers(), Math.min(60_000, idleMs / 2));
       idleTimer.unref?.();
     }
+  }
+
+  /** Each session's "Waiting on you" as last seen, to tell the Manager what moved. */
+  private waitingSeen = new Map<string, string[]>();
+
+  /** Tell a running Manager when a session's "Waiting on you" changes: the
+   * developer often answers in the session itself, which left Today listing
+   * settled items. Not a nudge: Fox reads it on its next prompt or tool call. */
+  private tellManagerWaiting() {
+    const manager = this.manager();
+    const live = new Set<string>();
+    for (const s of this.sessions.values()) {
+      if (!worksLikeWorkspace(s) || !s.handover) continue;
+      live.add(s.groupId);
+      const now = handoverWaiting(s.groupId);
+      const before = this.waitingSeen.get(s.groupId);
+      this.waitingSeen.set(s.groupId, now);
+      if (!before || manager?.status !== "running") continue;
+      const msg = waitingChangeMessage(s.agentName ?? s.name, before, now);
+      if (msg) tellPane(manager.groupId, msg);
+    }
+    for (const id of this.waitingSeen.keys()) if (!live.has(id)) this.waitingSeen.delete(id);
   }
 
   /** Start an idle handover for every workspace main pane that is due one. */
@@ -1847,7 +1898,7 @@ class SessionManager {
         {
           ...buildManagerPermissions(TODAY_PATH, notepad),
           ...statusLineSettings(s.groupId),
-          hooks: crewHooks(s.groupId),
+          hooks: { ...inboxHooks(s.groupId), ...crewHooks(s.groupId) },
         },
         null,
         2,
@@ -1886,7 +1937,7 @@ class SessionManager {
 
   /** Every other Claude pane on the rail, with the developer's part of its
    * handover, for the Manager's digest. */
-  digestSessions(): DigestSession[] {
+  digestSessions(seen: Set<string> | null = null): DigestSession[] {
     return [...this.sessions.values()]
       .filter((s) => s.role === "main" && !s.shell && s.view !== "manager")
       .sort((a, b) => a.pos - b.pos || a.createdAt - b.createdAt)
@@ -1902,8 +1953,13 @@ class SessionManager {
           }
         }
         const m = s.meta();
+        // An exited pane comes back under its current name.
+        const name = (s.status === "running" && s.agentName) || s.name;
         return {
-          name: s.name, status: s.status, ticket: s.ticket, branch: s.branch, pr: s.pr,
+          groupId: s.groupId, name, title: name === s.name ? null : s.name,
+          handoverPath: worksLikeWorkspace(s) && s.handover ? notepadPath(s.groupId) : null,
+          isNew: !!seen && !seen.has(s.groupId),
+          status: s.status, ticket: s.ticket, branch: s.branch, pr: s.pr,
           attention: m.attention, stack: m.stack, handover,
         };
       });

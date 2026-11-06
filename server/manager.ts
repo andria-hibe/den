@@ -3,7 +3,7 @@
 
 /** `fresh`: the sessions den just started fresh, which wait for Fox's brief. */
 export function managerStartPrompt(now: Date, fresh: string[] = []): string {
-  const day = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const day = dayLabel(now);
   const woke = fresh.length
     ? ` den started these sessions fresh from their handovers, and they're waiting for your ` +
       `brief: ${fresh.map((n) => `"${n.replaceAll('"', "'")}"`).join(", ")}.`
@@ -14,11 +14,28 @@ export function managerStartPrompt(now: Date, fresh: string[] = []): string {
   );
 }
 
-/** Refresh, from Today's header: any time in the day, not just at the start. */
-export function managerRefreshPrompt(now: Date): string {
+/** The weekday and date as Today's heading writes them ("Friday 6 November"). */
+export function dayLabel(now: Date): string {
+  return now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/** Whether the Today list is from an earlier day than `now`: its heading
+ * names another date. A list with no heading isn't treated as old. */
+export function todayIsOld(md: string, now: Date): boolean {
+  const heading = /^# Today, (.+)$/m.exec(md)?.[1].trim();
+  return !!heading && heading !== dayLabel(now);
+}
+
+/** Refresh, from Today's header: any time in the day, not just at the start.
+ * `newDay`: the list is from an earlier day, so it starts over. */
+export function managerRefreshPrompt(now: Date, newDay = false): string {
   const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const restart = newDay
+    ? ` The Today list is from an earlier day: start a new one for ${dayLabel(now)} in the usual ` +
+      `shape, carrying over only the items still open, and leave yesterday's ticked ones out.`
+    : "";
   return (
-    `Refresh my day. It's ${time}. den has just rewritten the digest. Ask tanuki, your inbox ` +
+    `Refresh my day. It's ${time}.${restart} den has just rewritten the digest. Ask tanuki, your inbox ` +
     `subagent, to go through its Inbox section and pick easy approvals from its Team PRs ` +
     `section, then go through the Today list against the digest and what tanuki found: tick ` +
     `what's done, add what's new and needs me, drop what no longer applies, and rewrite ` +
@@ -48,4 +65,19 @@ export function toggleTodayItem(md: string, n: number, text?: string): string | 
 /** Each checklist item's text, in the order toggleTodayItem counts them. */
 export function todayItemTexts(md: string): string[] {
   return [...md.matchAll(/^\s*- \[(?: |x|X)\] (.*)$/gm)].map((m) => m[1].trim());
+}
+
+/** What den tells the Manager when a session's "Waiting on you" changes, or
+ * null when nothing did. Items are compared as written, so a reworded item
+ * shows as one gone and one new. */
+export function waitingChangeMessage(session: string, before: string[], after: string[]): string | null {
+  const gone = before.filter((i) => !after.includes(i));
+  const added = after.filter((i) => !before.includes(i));
+  if (!gone.length && !added.length) return null;
+  const list = (items: string[]) => items.map((i) => `"${i.replaceAll('"', "'")}"`).join("; ");
+  const parts = [
+    gone.length ? `no longer waiting on the developer: ${list(gone)}` : null,
+    added.length ? `now waiting on the developer: ${list(added)}` : null,
+  ].filter(Boolean);
+  return `Session "${session}" changed the "Waiting on you" in its handover. ${parts.join(". ")}.`;
 }
