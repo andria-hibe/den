@@ -6,7 +6,8 @@
 //   node scripts/test-server.mjs [--port 4399] [--dir <data dir>] [--real-claude]
 //
 // Prints the URL, the data dir, and where the stub writes each pane's args
-// and input. Runs until stopped.
+// and input. Runs until stopped. It serves the API only: for the UI, run it
+// on --port 4321 and `npm run dev:web` (Vite proxies /api and /ws there).
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

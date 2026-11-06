@@ -2202,11 +2202,15 @@ body {
   color: var(--pink-deep);
 }
 .update-log {
-  max-height: 140px;
+  max-height: 240px;
   overflow: auto;
-  margin: 0;
+  margin: 4px 0 0;
+  padding: 6px;
   font-size: 10px;
   white-space: pre-wrap;
+  background: color-mix(in srgb, var(--pink) 14%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* Error toast */

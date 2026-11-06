@@ -1125,7 +1125,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const r = buildUpdate(repo);
     if (r === "started") return { ok: true };
     reply.code(409);
-    return { error: r, message: r === "dirty" ? "den's checkout has uncommitted changes." : "A build is already running." };
+    const why = { dirty: "den's checkout has uncommitted changes.", busy: "A build is already running.", failed: "Couldn't read den's checkout." };
+    return { error: r, message: why[r] };
   });
   app.post("/api/den/update/install", async (_req, reply) => {
     const repo = denRepo();
