@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeChecks, reviewFrom, parseTicketHint, authoredAttention, reviewAttention, buildReviewBucket, isValidRepo, type PullRequest, reviewRequestBody, isValidNodeId, splitByAuthor, type SearchNode } from "./github.ts";
+import { summarizeChecks, reviewFrom, parseTicketHint, authoredAttention, reviewAttention, buildReviewBucket, isValidRepo, type PullRequest, reviewRequestBody, isValidNodeId, splitByAuthor, reviewedByTeammate, type SearchNode } from "./github.ts";
 
 describe("summarizeChecks", () => {
   it("reports none when there are no checks", () => {
@@ -224,5 +224,16 @@ describe("isValidNodeId", () => {
     expect(isValidNodeId("a b")).toBe(false);
     expect(isValidNodeId("../x")).toBe(false);
     expect(isValidNodeId("")).toBe(false);
+  });
+});
+
+describe("reviewedByTeammate (Open PRs for review)", () => {
+  const copilot = { author: { login: "copilot-pull-request-reviewer", __typename: "Bot" } };
+  const own = { author: { login: "pr-author", __typename: "User" } };
+  it("ignores Copilot and the author's own thread replies", () => {
+    expect(reviewedByTeammate("pr-author", [copilot, own])).toBe(false);
+  });
+  it("counts a teammate's comment as a review", () => {
+    expect(reviewedByTeammate("pr-author", [copilot, { author: { login: "teammate", __typename: "User" } }])).toBe(true);
   });
 });
