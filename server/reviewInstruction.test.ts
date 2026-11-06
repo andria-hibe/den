@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reviewInstruction, isAscii } from "./sessions.ts";
+import { reviewInstruction, isAscii } from "./instructions.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 const DIFF = "/Users/x/.den/review/abc-123.diff";

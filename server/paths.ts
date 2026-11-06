@@ -1,0 +1,18 @@
+// Where den keeps the files its panes and the Manager share, under DATA_DIR.
+import { join } from "node:path";
+import { DATA_DIR } from "./dataDir.ts";
+
+// Outside any repo, so a notepad never ends up in a commit.
+export const PROGRESS_DIR = join(DATA_DIR, "progress");
+
+// The Manager pane's day (#46): den's digest, and the Today list it writes.
+// One Manager at a time, so these aren't per group.
+export const MANAGER_DIR = join(DATA_DIR, "manager");
+/** The Manager pane's name, which is how other sessions see it (ListAgents). */
+export const MANAGER_NAME = "Fox";
+export const TODAY_PATH = join(MANAGER_DIR, "today.md");
+export const DIGEST_PATH = join(MANAGER_DIR, "digest.md");
+/** Open PRs as den last read them, for Fox to check before it presents one. */
+export const PRS_PATH = join(MANAGER_DIR, "prs.md");
+/** The sessions in the last digest, so the next one can say which are new. */
+export const DIGEST_SESSIONS_PATH = join(MANAGER_DIR, "digest-sessions.json");

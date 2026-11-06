@@ -1,19 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  houseRules,
-  isAscii,
-  lookInstruction,
-  myPrInstruction,
-  denIssueRule,
-  reviewInstruction,
-  testingRules,
-  commentRules,
-  workspaceInstruction,
-  managerInstruction,
-  managerRelayRule,
-  buildManagerPermissions,
-  clockOutBlockers,
-} from "./sessions.ts";
+import { clockOutBlockers } from "./sessions.ts";
+import { houseRules, isAscii, lookInstruction, myPrInstruction, denIssueRule, reviewInstruction, testingRules, commentRules, workspaceInstruction, managerInstruction, managerRelayRule, buildManagerPermissions } from "./instructions.ts";
 import { crewRule, kitAgents, managerAgents } from "./crew.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";

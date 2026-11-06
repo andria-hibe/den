@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, freshStartPrompt, idleHandoverDue, idleHandoverPrompt, isAscii } from "./sessions.ts";
+import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, idleHandoverDue } from "./sessions.ts";
+import { freshStartPrompt, idleHandoverPrompt, isAscii } from "./instructions.ts";
 
 const NOW = 10_000_000_000;
 const due = (over: Partial<Parameters<typeof idleHandoverDue>[0]> = {}) =>

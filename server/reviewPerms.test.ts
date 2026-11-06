@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildReviewPermissions, scratchBranch } from "./sessions.ts";
+import { buildReviewPermissions, scratchBranch } from "./instructions.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";
 const GUIDE = "/Users/x/.den/review/abc-123.guide.md";

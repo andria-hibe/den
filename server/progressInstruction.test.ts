@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { progressInstruction, isAscii } from "./sessions.ts";
+import { progressInstruction, isAscii } from "./instructions.ts";
 import { HANDOVER_HEADINGS, SESSION_NOTES_HEADING } from "../shared/handover.ts";
 
 const NOTEPAD = "/Users/x/.den/progress/abc-123.md";

@@ -5,7 +5,8 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId, freshStartPrompt, notepadPath, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./sessions.ts";
+import { sessions, isValidGroupId, notepadPath, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./sessions.ts";
+import { freshStartPrompt } from "./instructions.ts";
 import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
 
 /** Others' PRs whose open review threads go in the digest: one GitHub call each. */

@@ -94,6 +94,10 @@ WebSocket; everything else is REST.
   and ticket/PR/look/view metadata. Every pane gets a short per-workspace
   `AGENT_BROWSER_SOCKET_DIR` (`socketDir`, `/tmp/den-<id>`, removed with the
   workspace; issue 40), since a socket under a worktree path is too long. Spawns `claude -n <name> [flags] [prompt]`.
+  The prompt builders and permission rules below live in
+  **`server/instructions.ts`** (pure, no session state); the paths the
+  panes and Fox share (`PROGRESS_DIR`, `MANAGER_DIR`, `TODAY_PATH`, ...) in
+  `server/paths.ts`.
   `reviewInstruction` asks a review pane for **two** deliverables: the reading
   guide (`~/.den/review/<groupId>.guide.md`, grouped by purpose) and the review
   (the notepad, filed per file). **Every Claude pane gets a system prompt from
@@ -1032,7 +1036,7 @@ developer's day across the other sessions instead of them being the glue.
 - **Comments say why, and only what you verified** (andria, 2026-09-29): no
   restating the code, no narrating the change or your own fixes, no asides or
   TODOs, one sentence unless something breaks silently without it. Den tells
-  the sessions it spawns the same (`commentRules()` in `sessions.ts`, appended
+  the sessions it spawns the same (`commentRules()` in `instructions.ts`, appended
   wherever `testingRules()` is), and the rule says it beats Claude Code's own
   "match the surrounding comment density", which this comment-heavy repo would
   otherwise pull the wrong way. Existing comments aren't rewritten in passing.
@@ -1106,7 +1110,7 @@ local control plane, not a public API:
   (It was strictly read-only, `deny: ["Bash", Edit(worktree)]`, until 2026-08-13;
   that made real review work impossible. Don't reintroduce the Bash deny.) What
   holds the line now is two layers:
-  1. **The instruction** (`reviewInstruction` in `sessions.ts`) — the primary
+  1. **The instruction** (`reviewInstruction` in `instructions.ts`) — the primary
      guard, and the one to edit if the rules change: never commit, never push,
      never post to GitHub, and any file change goes on a local scratch branch
      `andria/changes-to-<pr branch>` (`scratchBranch`), left uncommitted, so the
@@ -1160,7 +1164,7 @@ local control plane, not a public API:
 ### Verifying changes (how this project has been tested)
 `npm run check` (typecheck + eslint + vitest) is the automated gate.
 **`npm run smoke`** (`scripts/smoke.cjs`, issue 21) is the end-to-end one: it
-builds the UI, boots a server on a throwaway db (idle handovers off, the
+builds the UI, boots a server on a throwaway data dir (idle handovers off, the
 surrounding `CLAUDE*` env stripped), loads it in a headless Electron window,
 opens a shell from the rail, and checks the rail lists it, the terminal
 attaches, a typed command's output comes back (`echo den-smoke-$((6*7))` →
@@ -1180,7 +1184,7 @@ covers, and no tests pinning a fix to your own mistake or a review follow-up
 unless that change has become a core part of the functionality (be
 conservative about calling it core).
 Tests cost time on every run; KISS. Den tells the Claude sessions it spawns
-the same (`testingRules()` in `sessions.ts`, appended to workspace and my-PR
+the same (`testingRules()` in `instructions.ts`, appended to workspace and my-PR
 panes). Beyond that, verification is scripted + visual:
 - Run an **isolated** server: `npm run test-server -- [--port 4399] [--dir <data dir>]`
   (`scripts/test-server.mjs`: its own data dir and db, idle handovers off,
