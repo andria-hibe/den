@@ -657,6 +657,24 @@ export function freshStartPrompt(notepad: string, long: number | null = null): s
   );
 }
 
+/** What den tells Fox when the developer starts a session fresh from its
+ * header, so Fox briefs it the way it briefs the morning's fresh starts.
+ * `long`: the handover's length when it is past HANDOVER_LONG_CHARS. */
+export function freshBriefPrompt(session: string, long: number | null = null): string {
+  const name = session.replaceAll('"', "'");
+  return (
+    `den: the developer started session "${name}" fresh from its handover. It is ` +
+    `a new conversation that knows only its handover and waits for a first ` +
+    `message. Brief it now with SendMessage: tell it to read its handover, say in ` +
+    `a few lines where the work stands and what it will do next, and carry on ` +
+    `unless it is waiting on the developer. Add anything new you know that ` +
+    `concerns it (review comments or failing checks on its PR, a changed ticket, ` +
+    `a reply it was waiting for), as short facts with links.` +
+    (long ? ` Also ask it to ${trimRequest(long)}` : "") +
+    ` Then carry on with what you were doing.`
+  );
+}
+
 /** Asks a session to cut a long handover down. */
 function trimRequest(long: number): string {
   return (

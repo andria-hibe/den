@@ -617,11 +617,19 @@ skip it, since clock out just wrote the handovers. Only panes `canStartFresh`
 `POST /api/sessions/:id/restart` with `{ fresh: true }`; UI: the header's
 `FreshStartButton` (confirm in a `ConfirmCard` under the button, like
 `OwnPrToggle`'s: inline confirm text in the never-shrinking `.term-actions`
-pushed its buttons off screen). The route then pastes and submits
-`freshStartPrompt` (read the handover, say where it stands, carry on) once
-the new conversation is up, so it doesn't sit waiting; `spawn()` zeroes
-`lastOutputAt` so that paste's `waitUntilIdle` waits for the new process
-to draw. Start my day's wakes don't send it: Fox briefs those (below). A plain restart still
+pushed its buttons off screen). The new conversation then gets its first
+message **through Fox** (andria's pick, 2026-11-06), so it hears anything
+new Fox knows for it: `freshBriefRoute` types `freshBriefPrompt` into Fox
+when its turn state is done and the developer has no draft in its prompt
+(`DenSession.draft`, from typed input: set by text but not escape
+  sequences or backspace, cleared by Enter or
+Ctrl+C), or leaves it in Fox's inbox while Fox works. Fox waiting on the
+developer, a draft, or no Fox: the route pastes and submits
+`freshStartPrompt` (read the handover, say where it stands, carry on)
+into the pane itself, and so does a timer when the pane still has no turn
+after `FRESH_BRIEF_WAIT_MS` (3 minutes), so it never sits waiting.
+`spawn()` zeroes `lastOutputAt` so that a paste's `waitUntilIdle` waits
+for the new process to draw. Start my day's wakes don't send it: Fox briefs those (below). A plain restart still
 resumes the long conversation, so this is what makes ending chats save
 tokens. The handover instruction also asks for when PR/CI/review state was
 last checked and, on a stacked branch, the stack in merge order (issue 44).

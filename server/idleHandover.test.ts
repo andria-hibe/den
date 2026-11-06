@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { IDLE_HANDOVER_MS, NOTEPAD_FRESH_MS, idleHandoverDue } from "./sessions.ts";
-import { freshStartPrompt, idleHandoverPrompt, isAscii } from "./instructions.ts";
+import { freshBriefPrompt, freshStartPrompt, idleHandoverPrompt, isAscii } from "./instructions.ts";
 
 const NOW = 10_000_000_000;
 const due = (over: Partial<Parameters<typeof idleHandoverDue>[0]> = {}) =>
@@ -56,6 +56,9 @@ describe("idleHandoverPrompt", () => {
       expect(isAscii(t)).toBe(true);
       expect(t).toContain("/Users/x/.den/progress/g.md");
     }
+  });
+  it("briefs through Fox in plain ASCII", () => {
+    expect(isAscii(freshBriefPrompt('ABC-1 "fix" it', 20_000))).toBe(true);
   });
   it("only touches the notepad", () => {
     expect(text).toContain("Do not run anything or change any other file.");

@@ -748,6 +748,18 @@ class DenSession {
     };
   }
 
+  /** The developer may have left a draft in the prompt: their last typed
+   * input submitted nothing and didn't clear it. Den never submits over one. */
+  draft = false;
+
+  /** Input the developer typed in the terminal (not den's own pastes). */
+  typed(data: string) {
+    if (/[\r\x03]/.test(data)) this.draft = false;
+    // Focus reports, arrow keys, and backspace are not text.
+    else if (/[^\x7f]/.test(data.replace(/\x1b(\[[0-9;?]*[ -/]*[@-~]|O.|.)?/g, ""))) this.draft = true;
+    this.write(data);
+  }
+
   write(data: string) {
     this.term?.write(data);
     this.lastActive = Date.now();
@@ -1631,6 +1643,18 @@ class SessionManager {
     // A pinned id with no transcript starts a new conversation (chooseResume).
     s.claudeSessionId = randomUUID();
     return this.restart(id);
+  }
+
+  /** How a pane the developer just started fresh gets its first message:
+   * from Fox, typed into an idle Fox ("paste") or left in its inbox while it
+   * works ("inbox"), else (no Fox, or Fox waiting on the developer or with a
+   * draft in its prompt) null, and den sends the pane its fresh-start prompt. */
+  freshBriefRoute(): { via: "paste" | "inbox"; manager: DenSession } | null {
+    const m = this.manager();
+    if (!m || m.status !== "running" || m.draft) return null;
+    if (m.turn?.state === "done") return { via: "paste", manager: m };
+    if (m.turn?.state === "working") return { via: "inbox", manager: m };
+    return null;
   }
 
   /** Kill a running pane and wait for it to exit; false if it didn't. */

@@ -10,7 +10,8 @@ import { sessions, isValidGroupId, notepadPath, reviewDiffPath, reviewGuidePath 
 import { StillAnswering, askLine, readThreads } from "./lineAsk.ts";
 import { worksLikeWorkspace } from "../shared/handover.ts";
 import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
-import { freshStartPrompt } from "./instructions.ts";
+import { freshBriefPrompt, freshStartPrompt } from "./instructions.ts";
+import { tellPane } from "./inbox.ts";
 import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
@@ -119,6 +120,8 @@ export function sanitizePaste(text: string): string {
 // Beat between a bracketed paste and the carriage return that submits it, so
 // Claude's TUI has taken the text into its input box before Enter arrives.
 const PASTE_SUBMIT_DELAY_MS = 250;
+/** How long a pane started fresh waits for Fox's brief before den sends it its own start prompt. */
+const FRESH_BRIEF_WAIT_MS = 3 * 60_000;
 
 // Single-quote a path for a POSIX shell.
 export function shellQuote(s: string): string {
@@ -591,9 +594,26 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // A pane that wouldn't stop keeps its old chat, which mustn't get this prompt.
     if (fresh === true && session && session.claudeSessionId !== chatBefore && meta.status === "running") {
-      void paste(session, freshStartPrompt(notepadPath(session.groupId), sessions.handoverTooLong(session.groupId)), true).catch((e) =>
-        logWarn("fresh start prompt", e),
-      );
+      const long = sessions.handoverTooLong(session.groupId);
+      const chat = session.claudeSessionId;
+      const startItself = () =>
+        void paste(session, freshStartPrompt(notepadPath(session.groupId), long), true).catch((e) =>
+          logWarn("fresh start prompt", e),
+        );
+      // Fox briefs it, as it does the morning's fresh starts, with anything
+      // new it knows for it.
+      const route = sessions.freshBriefRoute();
+      if (!route) startItself();
+      else {
+        const brief = freshBriefPrompt(session.agentName ?? session.name, long);
+        if (route.via === "paste") void paste(route.manager, brief, true).catch((e) => logWarn("fresh brief", e));
+        else tellPane(route.manager.groupId, brief);
+        // Fox may not get to it (it stops, or its turn ends before the inbox
+        // is read): a pane still untouched by then starts itself.
+        setTimeout(() => {
+          if (session.status === "running" && session.claudeSessionId === chat && !session.turn) startItself();
+        }, FRESH_BRIEF_WAIT_MS).unref?.();
+      }
     }
     return meta;
   });
@@ -1504,7 +1524,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       } catch {
         return;
       }
-      if (msg.type === "input") session.write(msg.data);
+      if (msg.type === "input") session.typed(msg.data);
       else if (msg.type === "resize") session.resize(msg.cols, msg.rows);
       else if (msg.type === "ping") send({ type: "pong" });
     });
