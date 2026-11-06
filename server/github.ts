@@ -754,7 +754,8 @@ export async function getNotifications(since: Date): Promise<GhNotification[]> {
 }
 
 /** An open PR that asks a team the developer is in for a review, but not the
- * developer by name: what the digest offers as PRs to pick up. */
+ * developer by name, and that no one else has reviewed yet: the work panel's
+ * Open PRs for review, and what the digest offers as PRs to pick up. */
 export interface TeamPr {
   repo: string;
   number: number;
@@ -762,6 +763,7 @@ export interface TeamPr {
   url: string;
   author: string;
   branch: string;
+  createdAt: string;
   additions: number;
   deletions: number;
   files: number;
@@ -774,15 +776,26 @@ export interface TeamPr {
 const TEAM_PR_QUERY =
   "is:pr is:open draft:false review-requested:@me -user-review-requested:@me -author:@me -reviewed-by:@me";
 
+/** Whether anyone but the PR's author has reviewed it. A bot's review (an AI
+ * reviewer) doesn't count, and neither does the author answering a thread,
+ * which GitHub records as a review of their own. */
+export function reviewedByTeammate(
+  author: string | undefined,
+  reviews: { author: { login: string; __typename: string } | null }[],
+): boolean {
+  return reviews.some((r) => r.author && r.author.__typename !== "Bot" && r.author.login !== author);
+}
+
 export async function getTeamReviewPrs(): Promise<TeamPr[]> {
   const query =
     `query{search(type:ISSUE,first:${SEARCH_LIMIT},query:"${TEAM_PR_QUERY}"){issueCount nodes{` +
-    `... on PullRequest{number title url headRefName additions deletions changedFiles reviewDecision ` +
-    `author{login} repository{nameWithOwner} reviews(states:APPROVED){totalCount}}}}}`;
+    `... on PullRequest{number title url headRefName createdAt additions deletions changedFiles reviewDecision ` +
+    `author{login} repository{nameWithOwner} reviews(first:50){nodes{state author{login __typename}}}}}}}`;
   type Node = {
-    number?: number; title: string; url: string; headRefName: string;
+    number?: number; title: string; url: string; headRefName: string; createdAt: string;
     additions: number; deletions: number; changedFiles: number; reviewDecision: string | null;
-    author: { login: string } | null; repository: { nameWithOwner: string }; reviews: { totalCount: number };
+    author: { login: string } | null; repository: { nameWithOwner: string };
+    reviews: { nodes: { state: string; author: { login: string; __typename: string } | null }[] };
   };
   const found = new Map<string, Node>();
   // See searchPrs: GitHub's search sometimes answers short.
@@ -792,8 +805,7 @@ export async function getTeamReviewPrs(): Promise<TeamPr[]> {
     for (const n of search.nodes) if (n?.number) found.set(`${n.repository.nameWithOwner}#${n.number}`, n);
     if (found.size >= Math.min(search.issueCount, SEARCH_LIMIT)) break;
   }
-  // APPROVED means it has the approvals the repo's rules ask for.
-  const open = [...found.values()].filter((n) => n.reviewDecision !== "APPROVED");
+  const open = [...found.values()].filter((n) => !reviewedByTeammate(n.author?.login, n.reviews.nodes));
   return mapLimit(open, 4, async (n) => {
     let checks: CheckState = "none";
     try {
@@ -808,10 +820,11 @@ export async function getTeamReviewPrs(): Promise<TeamPr[]> {
       url: n.url,
       author: n.author?.login ?? "?",
       branch: n.headRefName,
+      createdAt: n.createdAt,
       additions: n.additions,
       deletions: n.deletions,
       files: n.changedFiles,
-      approvals: n.reviews.totalCount,
+      approvals: n.reviews.nodes.filter((r) => r.state === "APPROVED").length,
       review: reviewFrom(n.reviewDecision),
       checks,
     };

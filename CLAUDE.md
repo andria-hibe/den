@@ -357,9 +357,13 @@ WebSocket; everything else is REST.
     **Description**) and the session below. The Review tab is one scroll region — the general review
     first, then the diff with **each file's review comments beside that file's
     hunks** (sticky, via `parseReview` → `DiffView notes=`). The session is told
-    (via `reviewInstruction`) to save its finished review as markdown to the
-    workspace notepad `~/.den/progress/<groupId>.md`, structured as general review
-    then one `## <file path>` heading per file; the view polls that notepad, so the
+    (via `reviewInstruction`) to save its finished review as markdown to
+    `~/.den/review/<groupId>.review.md` (`reviewNotesPath`; review panes from
+    before it wrote to the notepad, and `ensureReviewNotes` moves that over at
+    boot in `hydrate()` and on a pane's start; once the file exists it never
+    runs again, so a handover is never moved), structured as general review
+    then one `## <file path>` heading per file; the view polls it (`GET
+    /api/review/notes/:groupId`), so the
     review is shown next to the code it's about *and* kept as a record.
     **The review's house style is part of that instruction**, because andria
     copies the comments straight into GitHub: **plain ASCII only** (no em dash,
@@ -411,7 +415,7 @@ WebSocket; everything else is REST.
     questions in general, so a one-file ask can't overwrite the finished review.
     (`reviewInstruction` is the only copy of these rules — the headless
     `reviewPr` duplicate was removed 2026-08-25.)
-    Review panes carry a notepad **and a guide file** — `create()`/`restartArgs`
+    Review panes carry a review file **and a guide file** — `create()`/`restartArgs`
     wire both for `view === "review"`, and `remove()` deletes them with the diff
     and settings file when the workspace closes. **A review pane has a full shell** (running the tests or
     trying a fix is part of reviewing) but **must never commit or push** — see
@@ -706,7 +710,7 @@ developer's day across the other sessions instead of them being the glue.
   kind badge. The
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
   button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
-  GitHub split into Review requested / My open PRs (`den.prTab`); a tab
+  GitHub split into Review requested / My open PRs / Open PRs for review (`den.prTab`); a tab
   shows "!" when something in it needs you. Fox is drawn as the whole
   sitting fox (`Fox pose="sit"`, not a bust) in place of a colour dot
   (rail, header, title chip), so it never reads as one of its kits.
@@ -731,15 +735,23 @@ developer's day across the other sessions instead of them being the glue.
   (Haiku, reads failed logs with `gh run view --log-failed`, says flake or
   real and whether a fix landed on the base; never reruns). Kits, my-PR and
   review panes get raccoon too, for their own red CI.
-  The digest also has `## Team PRs to pick up` (`getTeamReviewPrs`:
-  `review-requested:@me -user-review-requested:@me`, a request to the
-  developer's team only, minus drafts, their own, ones they reviewed, and
-  APPROVED; then pure `pickupPrs` drops failing CI and PRs a session is on,
-  by branch or number). Tanuki picks the likely easy approvals (at most
-  five `gh pr diff` reads, allowed in `buildManagerPermissions`) and Fox
-  lists them last in today.md under `## Easy approvals to pick up`: plain
-  bullets, no checkbox, outside the ten items, never tagging the developer
-  (filters suggested by Fox, 2026-11-03).
+  **Open PRs for review** (andria, 2026-11-06, design agreed with Fox):
+  `getTeamReviewPrs` (`review-requested:@me -user-review-requested:@me`, a
+  request to the developer's team only, minus drafts and their own, then
+  `reviewedByTeammate` drops any PR someone other than its author has
+  reviewed, comments included; bots don't count) feeds the work panel's
+  third GitHub tab (`GET /api/github/team-prs`, a 60s `teamPrCache` the
+  digest shares) and the digest's `## Team PRs to pick up` (where pure
+  `pickupPrs` also drops failing CI and PRs a session is on). Tanuki picks
+  the likely easy approvals from that section (at most five `gh pr diff`
+  reads) and Fox writes them to `~/.den/manager/review-pickup.json`
+  (`server/pickup.ts`: `{updatedAt, notes: {"<repo>#<n>": {easy, why}}}`,
+  allowed in `buildManagerPermissions`); `withPickNotes` tags those cards
+  `easy` (the why in its title and under the card) and sorts them first,
+  then smallest. A note for a PR no longer listed is ignored, so the tab is
+  right on days Fox doesn't run. Cards open the PR dialog like the others;
+  nothing approves, comments, or assigns. today.md has no picks section,
+  just an FYI line with the count.
 
 ## Features (all built + committed on `master`)
 
@@ -1086,7 +1098,21 @@ local control plane, not a public API:
   the never-commit rules for "commit, push, and post when asked" plus
   `houseRules`/`testingRules`/`commentRules`; the guide and review
   deliverables stay. `buildReviewPermissions(..., owned)` empties `deny`.
-  The `allow` list is the notepad and the guide file (`Edit(//<notepad>)`,
+  Taken on, the pane **works like a workspace** (andria, 2026-11-06: devs
+  increasingly finish PRs a product person or an agent opened):
+  `worksLikeWorkspace` (`shared/handover.ts`) counts it wherever a workspace
+  counts - a handover at the notepad path (`progressInstruction`, so the
+  digest, waiting items, idle handover, Hedgehog, start fresh, and the pin
+  all apply), `managerRelayRule`, `denWatchRule`, `crewRule` with
+  `kitAgents` (not "you are Owl"), `setupHint`, the developer's own
+  permission mode (no `--permission-mode default`), the stack check, and
+  the ▶ run / ⚙ set up buttons; it's drawn as a kit. `PrReviewView` with
+  `work` adds Handover (default), Description & comments, Inline comments,
+  and Terminal (App's `renderShells`) tabs to Guide / Review, so the review
+  stays a click away without taking the space. Every review pane gets
+  `inboxHooks`, since `tellAboutPr` queues CI messages for review panes too.
+  The `allow` list is the review file and the guide file (`Edit(//<review>)`,
+  plus the handover when taken on,
   `Edit(//<guide>)`, so the finished review and its reading guide save without a
   prompt) plus the reads a review runs constantly — `git
   log/show/diff/status/blame/grep/fetch`, `rg`/`grep`, `gh pr view|diff|checks`

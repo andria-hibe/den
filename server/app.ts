@@ -29,7 +29,9 @@ import {
   type PrBuckets,
   type CheckState,
   type OpenThread,
+  type TeamPr,
 } from "./github.ts";
+import { readPickNotes, withPickNotes } from "./pickup.ts";
 import {
   getAssignedIssues,
   getInboxNotifications,
@@ -839,7 +841,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { ok: true };
   });
 
-  // Read-only from the client: only the review session writes the guide.
+  // Read-only from the client: only the review session writes the review and the guide.
+  app.get("/api/review/notes/:groupId", async (req, reply) => {
+    const { groupId } = req.params as { groupId: string };
+    if (!isValidGroupId(groupId)) {
+      reply.code(400);
+      return { error: "bad_group_id" };
+    }
+    return { content: sessions.readReviewNotes(groupId) };
+  });
+
   app.get("/api/review/guide/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
     if (!isValidGroupId(groupId)) {
@@ -859,6 +870,22 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     return buckets;
   });
+  // The work panel's Open PRs for review: team PRs nobody has reviewed, with
+  // Fox's easy picks marked. The digest reads the same cache.
+  const teamPrCache = ttlCache<TeamPr[]>(60_000, getTeamReviewPrs);
+  app.get("/api/github/team-prs", async (req, reply) => {
+    const fresh = (req.query as { refresh?: string })?.refresh === "1";
+    try {
+      const prs = await teamPrCache.get(fresh);
+      const { updatedAt, notes } = readPickNotes();
+      return { prs: withPickNotes(prs, notes), notesAt: updatedAt };
+    } catch (err) {
+      logWarn("github team prs", err);
+      reply.code(502);
+      return { error: "gh_failed", message: "GitHub request failed." };
+    }
+  });
+
   app.get("/api/github/prs", async (req, reply) => {
     const fresh = (req.query as { refresh?: string })?.refresh === "1";
     try {
@@ -941,7 +968,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       hasKey() ? bounded(linearCache.get(false), null) : Promise.resolve(null),
       hasKey() ? bounded(getInboxNotifications(), null) : Promise.resolve(null),
       bounded(getNotifications(new Date(Date.now() - 24 * 3_600_000)), null),
-      bounded(getTeamReviewPrs(), null),
+      bounded(teamPrCache.get(true), null),
     ]);
     // Two at a time, since a burst of GitHub calls has hit its secondary rate
     // limit before; a PR still unfetched at the bound reads as not answered.

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { anchorBelow, ConfirmCard, type CardAnchor } from "./ConfirmCard.tsx";
 
 /** A review pane's switch between reviewing someone else's PR and working on
- * it as your own (commit, push, post). Switching restarts a running Claude
+ * it as your own, like a work session. Switching restarts a running Claude
  * pane into the same conversation, so it asks first. */
 export function OwnPrToggle({
   owned,
@@ -39,7 +39,7 @@ export function OwnPrToggle({
         title={
           owned
             ? "Claude is working on this PR as yours: it can edit, commit, push, and post to GitHub when you ask. Click to go back to review only."
-            : "Work on it yourself: let Claude edit, commit, push, and post to GitHub on this PR as if it were yours."
+            : "Work on it yourself: this PR becomes a work session (handover, terminals, crew), and Claude can edit, commit, push, and post to GitHub on it as if it were yours."
         }
       >
         {owned ? "🛠 working on it" : "✋ work on it yourself"}
@@ -47,7 +47,11 @@ export function OwnPrToggle({
       {confirming && (
         <ConfirmCard
           at={confirming}
-          message={`${owned ? "Back to review only?" : "Let Claude commit, push, and post?"} Restarts Claude in this conversation.`}
+          message={`${
+            owned
+              ? "Back to review only?"
+              : "Work on this PR as your own? Claude can commit, push, and post, and it keeps a handover like a work session."
+          } Restarts Claude in this conversation.`}
           confirmLabel="switch"
           busyLabel="switching…"
           busy={busy}

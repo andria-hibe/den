@@ -54,7 +54,7 @@ export function WorkLinkChips({
           : "";
   const chips = (
     <>
-      {s.view === "review" && (
+      {s.view === "review" && !s.owned && (
         <span className="link-chip review" title="reviewing this PR — read-only toward GitHub">
           review
         </span>

@@ -102,7 +102,7 @@ describe("fileReviewPrompt", () => {
 
   it("keeps the answer out of the finished review", () => {
     expect(text).toContain("Answer here in the terminal");
-    expect(text).toContain("leave the notepad review and the guide file");
+    expect(text).toContain("leave the review file and the guide file");
   });
 });
 

@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { COLORS } from "../shared/colors.ts";
 import {
   HANDOVER_HEADINGS, HANDOVER_TEMPLATE, SESSION_NOTES_HEADING, canStartFresh, lineChanges, restoreTicket,
-  ticketDescription, waitingItems,
+  ticketDescription, waitingItems, worksLikeWorkspace,
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
@@ -26,6 +26,7 @@ import { denRepo, workDir } from "./fs.ts";
 import { hasSession, latestSessionForCwd, sessionMtime } from "./discover.ts";
 import { parseTicketHint } from "./github.ts";
 import { logWarn } from "./log.ts";
+import { PICKUP_NOTES_PATH } from "./pickup.ts";
 import type { ServerMessage } from "./ws-protocol.ts";
 import { DATA_DIR } from "./dataDir.ts";
 import { REVIEW_CHECKS, crewRule, fableHasRoom, kitAgents, managerAgents, reviewAgents, reviewCrewRule } from "./crew.ts";
@@ -138,6 +139,13 @@ export const reviewGuidePath = (groupId: string) => {
   return join(REVIEW_DIR, `${groupId}.guide.md`);
 };
 
+// A review pane's review. The notepad is the handover, which a pane the
+// developer has taken on keeps like any workspace.
+export const reviewNotesPath = (groupId: string) => {
+  if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
+  return join(REVIEW_DIR, `${groupId}.review.md`);
+};
+
 // The Manager pane's day (#46): den's digest, and the Today list it writes.
 // One Manager at a time, so these aren't per group.
 export const MANAGER_DIR = join(DATA_DIR, "manager");
@@ -203,7 +211,7 @@ function gitWorkState(cwd: string): { merging: boolean; staged: boolean } {
 /** The Manager pane's permission rules: a deny backstop under
  * managerInstruction, like buildReviewPermissions (a shell can still route
  * around it). It may write only its Today list and its own handover. */
-export function buildManagerPermissions(todayAbs: string, notepadAbs: string) {
+export function buildManagerPermissions(todayAbs: string, notepadAbs: string, picksAbs = PICKUP_NOTES_PATH) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
     permissions: {
@@ -228,6 +236,8 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string) {
         `Edit(${root(todayAbs)})`,
         `Write(${root(todayAbs)})`,
         `Edit(${root(notepadAbs)})`,
+        `Edit(${root(picksAbs)})`,
+        `Write(${root(picksAbs)})`,
         `Read(${root(DATA_DIR)}/**)`,
         "Bash(gh pr view:*)",
         "Bash(gh pr checks:*)",
@@ -251,11 +261,11 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string) {
  * refs. Deny beats allow, so none of this loosens the backstop.
  *
  * `owned` (the developer has taken the PR on) drops the deny list, since
- * that pane is meant to commit, push, and post.
+ * that pane is meant to commit, push, and post, and allows its handover.
  *
- * `notepadAbs` and `guideAbs` must be absolute; they're emitted as Claude's
- * "//<path>" root-anchored specifier. */
-export function buildReviewPermissions(notepadAbs: string, guideAbs: string, owned = false) {
+ * The paths must be absolute; they're emitted as Claude's "//<path>"
+ * root-anchored specifier. */
+export function buildReviewPermissions(reviewAbs: string, guideAbs: string, owned = false, handoverAbs?: string) {
   const root = (p: string) => "//" + p.replace(/^\/+/, "");
   return {
     permissions: {
@@ -274,8 +284,9 @@ export function buildReviewPermissions(notepadAbs: string, guideAbs: string, own
         "Bash(gh api:*)",
       ],
       allow: [
-        `Edit(${root(notepadAbs)})`,
+        `Edit(${root(reviewAbs)})`,
         `Edit(${root(guideAbs)})`,
+        ...(owned && handoverAbs ? [`Edit(${root(handoverAbs)})`] : []),
         "Bash(git log:*)",
         "Bash(git show:*)",
         "Bash(git diff:*)",
@@ -539,7 +550,7 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `Then write the day's list to ${today}, replacing yesterday's, in exactly ` +
     `this shape:\n` +
     `# Today, <weekday> <day> <month>\n` +
-    `## Decide\n## Unblock others\n## Continue\n## FYI\n## Easy approvals to pick up\n` +
+    `## Decide\n## Unblock others\n## Continue\n## FYI\n` +
     `Under each heading, one item per line as "- [ ] <one line>" followed by ` +
     `"(session: <session name>)" when it belongs to one, and at most two ` +
     `indented lines of detail: the options and your recommendation. Decide is ` +
@@ -548,13 +559,17 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `replies people are waiting on. Continue is for work in progress and its ` +
     `next step. FYI is for anything else worth knowing. Leave out what a ` +
     `session is already handling and what needs nobody. Rank by what unblocks ` +
-    `the most, and keep the whole list to about ten items. Easy approvals to ` +
-    `pick up is tanuki's picks, as plain "- [#<number> <title>](<url>): <why ` +
-    `it looks easy>" bullets (den links only that form) with no checkbox and ` +
-    `no session, outside the ten; "none ` +
-    `today" when there are none. They are for the developer to look at if ` +
+    `the most, and keep the whole list to about ten items.\n` +
+    `Then write tanuki's easy approvals to ${PICKUP_NOTES_PATH}, replacing ` +
+    `the file, as JSON: {"updatedAt": "<ISO time>", "notes": {"<repo>#<number>": ` +
+    `{"easy": true, "why": "<one line on why it looks easy>"}}}, only for PRs ` +
+    `in the digest's Team PRs to pick up section, and {"updatedAt": "<ISO ` +
+    `time>", "notes": {}} when there are none. den lists every team PR ` +
+    `waiting for a first review in the work panel's Open PRs for review tab ` +
+    `and tags these easy; when there are any, add one FYI item "<N> easy ` +
+    `picks in Open PRs for review". They are for the developer to look at if ` +
     `they want: never request their review, assign anyone, approve, comment, ` +
-    `or @mention them for one, and move one into Unblock others only when ` +
+    `or @mention them for one, and put one in Unblock others only when ` +
     `they say they're taking it.\n` +
     `Then brief the sessions with SendMessage. The start prompt names the ` +
     `sessions den started fresh this morning: each is a new conversation that ` +
@@ -647,11 +662,12 @@ export function lookInstruction(
  * "just as thoroughly" clause: the bullet cap limits the writing, never the
  * reading. */
 export function reviewInstruction(
-  notepad: string,
+  reviewFile: string,
   diffFile: string,
   branch: string | null | undefined,
   guideFile: string,
   owned = false,
+  handover = "",
 ): string {
   const scratch = scratchBranch(branch);
   const rules = owned
@@ -674,7 +690,7 @@ export function reviewInstruction(
       `1. NEVER commit. Not on the PR's branch, not anywhere.\n` +
       `2. NEVER push, and never post anything to GitHub. No \`git push\`, no ` +
       `\`gh pr review\`/\`comment\`/\`merge\`/\`edit\`, no \`gh api\` writes. Your ` +
-      `review goes in the notepad file named below and nowhere else; the developer ` +
+      `review goes in the review file named below and nowhere else; the developer ` +
       `decides what, if anything, reaches GitHub. The one exception is an issue ` +
       `about den itself, as described at the end.\n` +
       `3. If you need to change files, to test a fix, reproduce a bug, or check a ` +
@@ -719,7 +735,7 @@ export function reviewInstruction(
     `yourself what its scope misses (design, tests, naming, missing cases). If ` +
     `the skill is unavailable, do the whole review by hand.\n` +
     `${REVIEW_CHECKS}\n` +
-    `THE REVIEW goes as markdown at the absolute path ${notepad} ` +
+    `THE REVIEW goes as markdown at the absolute path ${reviewFile} ` +
     `(create or overwrite it). That file is where the review lives. den splits ` +
     `that file up and renders each file's comments next to that file's diff, so ` +
     `structure it exactly like this: first the general review (a two or three ` +
@@ -752,7 +768,10 @@ export function reviewInstruction(
     `are written, answer follow-up questions (about one file, one comment, or ` +
     `anything else) in the terminal and leave both files as they are, unless ` +
     `the developer asks you to change them.\n` +
-    `${owned ? "" : `${pasteRule()}\n`}${reviewCrewRule()}\n${denIssueRule()}`
+    (owned
+      ? `${progressInstruction(handover)}\n${denWatchRule()}\n${managerRelayRule()}\n${crewRule()}\n` +
+        `${ticketDiscussionRule()}\n${denIssueRule()}`
+      : `${pasteRule()}\n${reviewCrewRule()}\n${denIssueRule()}`)
   );
 }
 
@@ -1246,7 +1265,7 @@ class DenSession {
       handover: this.handover,
       owned: this.owned,
       keepAlive: this.keepAlive,
-      waiting: this.shell || this.role !== "main" || this.look || this.view ? [] : handoverWaiting(this.groupId),
+      waiting: worksLikeWorkspace(this) ? handoverWaiting(this.groupId) : [],
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
       crewActive: this.shell || this.role !== "main" ? [] : activeCrew(this.groupId),
@@ -1337,7 +1356,7 @@ class SessionManager {
     const idleMs = idleHandoverMs();
     const now = Date.now();
     for (const s of this.sessions.values()) {
-      if (s.shell || s.role !== "main" || s.look || s.view) continue;
+      if (!worksLikeWorkspace(s)) continue;
       if (s.status !== "running" || !s.handover || s.handoverRunning || !s.claudeSessionId) continue;
       let notepadMtime = 0;
       try {
@@ -1561,6 +1580,14 @@ class SessionManager {
       s.keepAlive = row.keepAlive === 1;
       if (row.scrollback) s.restoreScrollback(row.scrollback);
       this.sessions.set(s.id, s);
+      // At boot, so an old review shows before its pane is restarted.
+      if (s.view === "review" && s.role === "main") {
+        try {
+          this.ensureReviewNotes(s.groupId);
+        } catch (err) {
+          logWarn("review notes", err);
+        }
+      }
     }
   }
 
@@ -1789,17 +1816,22 @@ class SessionManager {
    * create; a restart omits it and keeps the captured diff. `--permission-mode
    * default` keeps the settings file's deny rules in force. */
   private reviewArgs(s: DenSession, diff?: string): string[] {
-    const file = this.ensureNotepad(s.groupId, "");
+    const reviewFile = this.ensureReviewNotes(s.groupId);
+    const handover = s.owned ? this.ensureNotepad(s.groupId) : "";
     const diffFile = this.ensureReviewDiff(s.groupId, diff);
     const guideFile = this.ensureReviewGuide(s.groupId);
     const settingsFile = this.ensureReviewPerms(s.groupId, s.owned);
+    const prompt = reviewInstruction(reviewFile, diffFile, s.branch, guideFile, s.owned, handover);
+    const hint = s.owned ? setupHint(s.cwd) : "";
     return [
       "--settings", settingsFile,
-      "--permission-mode", "default",
+      // Taken on, it runs in the developer's own mode like a workspace; the
+      // deny backstop it would enforce is empty then anyway.
+      ...(s.owned ? [] : ["--permission-mode", "default"]),
       "--add-dir", PROGRESS_DIR,
       "--add-dir", REVIEW_DIR,
-      "--agents", JSON.stringify(reviewAgents()),
-      "--append-system-prompt", reviewInstruction(file, diffFile, s.branch, guideFile, s.owned),
+      "--agents", JSON.stringify(s.owned ? kitAgents(fableHasRoom()) : reviewAgents()),
+      "--append-system-prompt", hint ? `${prompt}\n${hint}` : prompt,
     ];
   }
 
@@ -1860,11 +1892,14 @@ class SessionManager {
       .sort((a, b) => a.pos - b.pos || a.createdAt - b.createdAt)
       .map((s) => {
         let handover: DigestSession["handover"] = null;
-        try {
-          const file = notepadPath(s.groupId);
-          handover = { top: developerSections(readFileSync(file, "utf8")), writtenAt: statSync(file).mtimeMs };
-        } catch {
-          // no notepad (a my-PR pane) or unreadable
+        // A look pane's notepad is its ticket, and a review pane's is left over from being taken on.
+        if (worksLikeWorkspace(s)) {
+          try {
+            const file = notepadPath(s.groupId);
+            handover = { top: developerSections(readFileSync(file, "utf8")), writtenAt: statSync(file).mtimeMs };
+          } catch {
+            // no notepad yet, or unreadable
+          }
         }
         const m = s.meta();
         return {
@@ -1937,7 +1972,7 @@ class SessionManager {
    * the pane's next start. */
   setHandover(id: string, on: boolean): SessionMeta | null {
     const s = this.sessions.get(id);
-    if (!s || s.shell || s.role !== "main" || s.look || s.view) return null;
+    if (!s || !worksLikeWorkspace(s)) return null;
     s.handover = on;
     store.update(s.toRow());
     return s.meta();
@@ -2057,6 +2092,7 @@ class SessionManager {
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
+      rmSync(reviewNotesPath(groupId), { force: true });
       if (isValidGroupId(groupId)) {
         removeLimits(groupId);
         removeInbox(groupId);
@@ -2092,6 +2128,28 @@ class SessionManager {
     return file;
   }
 
+  /** A review pane's review file. Review panes from before it existed wrote
+   * the review to the notepad, so the first start moves it over; the file
+   * then exists, even empty, and the notepad is left for a handover. */
+  private ensureReviewNotes(groupId: string): string {
+    mkdirSync(REVIEW_DIR, { recursive: true });
+    const file = reviewNotesPath(groupId);
+    if (existsSync(file)) return file;
+    const old = notepadPath(groupId);
+    if (existsSync(old)) renameSync(old, file);
+    else writeFileSync(file, "");
+    return file;
+  }
+
+  /** The review as the review session has written it so far. */
+  readReviewNotes(groupId: string): string {
+    try {
+      return readFileSync(reviewNotesPath(groupId), "utf8");
+    } catch {
+      return "";
+    }
+  }
+
   /** The reading guide as the review session has written it so far (empty until
    * it has). Polled by the review pane's Guide tab. */
   readReviewGuide(groupId: string): string {
@@ -2108,9 +2166,9 @@ class SessionManager {
   private ensureReviewPerms(groupId: string, owned: boolean): string {
     mkdirSync(REVIEW_DIR, { recursive: true });
     const settings = {
-      ...buildReviewPermissions(notepadPath(groupId), reviewGuidePath(groupId), owned),
+      ...buildReviewPermissions(reviewNotesPath(groupId), reviewGuidePath(groupId), owned, notepadPath(groupId)),
       ...statusLineSettings(groupId),
-      hooks: crewHooks(groupId),
+      hooks: { ...inboxHooks(groupId), ...crewHooks(groupId) },
     };
     const file = reviewSettingsPath(groupId);
     writeFileSync(file, JSON.stringify(settings, null, 2));
@@ -2182,10 +2240,10 @@ class SessionManager {
 
   /** Tell a workspace's Claude pane something on its next prompt or tool
    * call (see inbox.ts), and nudge the developer if nobody is watching it.
-   * Only workspace main and my-PR panes have the hooks that deliver it. */
+   * Workspace main, my-PR, and review panes have the hooks that deliver it. */
   tell(groupId: string, message: string): void {
     const main = [...this.sessions.values()].find((s) => s.groupId === groupId && s.role === "main");
-    if (!main || main.shell || main.look || main.view === "review") return;
+    if (!main || main.shell || main.look) return;
     tellPane(groupId, message);
     main.nudge();
   }
@@ -2194,7 +2252,7 @@ class SessionManager {
    * my-PR panes. */
   stackTargets(baseOverride: string | null): StackTarget[] {
     return [...this.sessions.values()]
-      .filter((s) => s.role === "main" && !s.shell && !s.look && s.view !== "review" && s.status === "running")
+      .filter((s) => (worksLikeWorkspace(s) || s.view === "mypr") && s.status === "running")
       .map((s) => ({ id: s.id, groupId: s.groupId, cwd: s.cwd, base: repoBaseName(s.cwd, baseOverride) }));
   }
 

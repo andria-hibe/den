@@ -1,4 +1,7 @@
+import { useCallback, useEffect, useState } from "react";
 import type { PullRequest } from "../../server/github.ts";
+import type { OpenReviewPr } from "../../server/pickup.ts";
+import { api } from "./api.ts";
 import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
 import { accentStyle, relTime } from "./format.ts";
@@ -154,6 +157,85 @@ function PrList({
   );
 }
 
+/** A team PR as the PR dialog takes it, so a card opens a review like the others. */
+function asPullRequest(p: OpenReviewPr): PullRequest {
+  return {
+    number: p.number, title: p.title, url: p.url, repo: p.repo, branch: p.branch,
+    isDraft: false, updatedAt: p.createdAt, checks: p.checks,
+    checkCounts: { passed: 0, failed: 0, pending: 0, total: 0 }, review: p.review,
+    isMine: false, needsAttention: false, reviewRequestedFromMe: false, reviewedByMe: false,
+  };
+}
+
+/** A team PR nobody has reviewed yet. It never offers to approve, comment, or
+ * assign: the developer does those on GitHub. */
+function OpenReviewCard({ pr, onOpen, accent }: { pr: OpenReviewPr; onOpen: (pr: PullRequest) => void; accent?: string }) {
+  const check = CHECK_ICON[pr.checks];
+  return (
+    <div
+      className={`pr-card ticket-card${accent ? " session-linked" : ""}`}
+      style={accentStyle(accent)}
+      onClick={() => onOpen(asPullRequest(pr))}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="pr-top">
+        <span className={`pr-check ${check.cls}`} title={`checks ${pr.checks}`}>
+          {check.icon}
+        </span>
+        <span className="pr-repo">
+          {pr.repo.split("/")[1] ?? pr.repo} #{pr.number}
+        </span>
+        {pr.easy && (
+          <span className="pr-badge easy" title={pr.why ?? "Tanuki read it and it looks like an easy approval"}>
+            easy
+          </span>
+        )}
+        <a
+          className="ticket-ext"
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          title="open on GitHub"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ↗
+        </a>
+        <span className="pr-time" title="opened">{relTime(pr.createdAt)}</span>
+      </div>
+      <div className="pr-title">{pr.title}</div>
+      <div className="pr-meta">
+        <span className="pr-badge ticket" title="author">{pr.author}</span>
+        <span className="pr-checkcounts" title={`${pr.files} files`}>
+          +{pr.additions} −{pr.deletions}
+        </span>
+      </div>
+      {pr.easy && pr.why && <div className="pr-why">{pr.why}</div>}
+    </div>
+  );
+}
+
+/** Team PRs waiting for a first review, polled while the GitHub tab is open. */
+function useOpenReviewPrs(active: boolean) {
+  const [prs, setPrs] = useState<OpenReviewPr[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback((refresh = false) => {
+    api<{ prs: OpenReviewPr[] }>(`/api/github/team-prs${refresh ? "?refresh=1" : ""}`)
+      .then((d) => {
+        setPrs(d.prs);
+        setError(null);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, []);
+  useEffect(() => {
+    if (!active) return;
+    load();
+    const t = setInterval(() => load(), 60_000);
+    return () => clearInterval(t);
+  }, [active, load]);
+  return { prs, error, refresh: () => load(true) };
+}
+
 /** A tab label with its count, and a "!" when anything in it needs you. */
 function tabLabel(name: string, prs: PullRequest[]): string {
   const bang = prs.some((p) => p.needsAttention) ? " !" : "";
@@ -188,7 +270,8 @@ export function WorkPanel({
   // Linear and GitHub each get the whole column on a small screen, rather
   // than GitHub sitting below every ticket.
   const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github"] as const);
-  const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine"] as const);
+  const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine", "open"] as const);
+  const open = useOpenReviewPrs(source === "github");
   const linearBang = (linear?.unreadNotifications ?? 0) > 0 ? " !" : "";
   const prsBang = data && [...data.reviewRequested, ...data.authored].some((p) => p.needsAttention) ? " !" : "";
 
@@ -236,7 +319,10 @@ export function WorkPanel({
               <span style={{ marginLeft: "auto" }}>
                 <button
                   className="btn-ghost"
-                  onClick={refreshPrs}
+                  onClick={() => {
+                    refreshPrs();
+                    open.refresh();
+                  }}
                   disabled={loading}
                   title="refresh"
                 >
@@ -269,13 +355,43 @@ export function WorkPanel({
                   >
                     {tabLabel("My open PRs", data.authored)}
                   </button>
+                  <button
+                    role="tab"
+                    aria-selected={prTab === "open"}
+                    className={`look-tab${prTab === "open" ? " active" : ""}`}
+                    onClick={() => setPrTab("open")}
+                    title="Team PRs that ask your team, not you, for a review and that nobody has reviewed yet. Tanuki tags the easy ones."
+                  >
+                    Open PRs for review{open.prs?.length ? ` (${open.prs.length})` : ""}
+                  </button>
                 </div>
-                <PrList
-                  prs={prTab === "review" ? data.reviewRequested : data.authored}
-                  onOpenPr={onOpenPr}
-                  onDismissPr={dismissPrAttention}
-                  prColor={prColor}
-                />
+                {prTab !== "open" ? (
+                  <PrList
+                    prs={prTab === "review" ? data.reviewRequested : data.authored}
+                    onOpenPr={onOpenPr}
+                    onDismissPr={dismissPrAttention}
+                    prColor={prColor}
+                  />
+                ) : open.error && !open.prs ? (
+                  <div className="browser-error">⚠️ {open.error}</div>
+                ) : !open.prs ? (
+                  <div className="loading-row">
+                    <Fox pose="walk" size={22} /> loading team PRs…
+                  </div>
+                ) : open.prs.length === 0 ? (
+                  <div className="placeholder" style={{ padding: "4px 6px" }}>
+                    nothing waiting for a first review 🌿
+                  </div>
+                ) : (
+                  open.prs.map((pr) => (
+                    <OpenReviewCard
+                      key={`${pr.repo}#${pr.number}`}
+                      pr={pr}
+                      onOpen={onOpenPr}
+                      accent={prColor?.(pr.repo, pr.number)}
+                    />
+                  ))
+                )}
               </>
             )}
           </div>

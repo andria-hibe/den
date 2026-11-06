@@ -56,17 +56,26 @@ export function lineChanges(before: string, after: string, max = 40): string[] {
   return out.length > max ? [...out.slice(0, max), `(${out.length - max} more lines)`] : out;
 }
 
-/** Only a workspace main pane keeping a handover, or the Manager (which
- * always keeps one), has a handover to start fresh from. */
-export function canStartFresh(s: {
+type PaneKind = {
   shell: boolean;
   role: string;
   look: unknown;
   view: unknown;
-  handover: boolean;
-}): boolean {
+  owned?: boolean;
+};
+
+/** A pane that works like a workspace and so writes a handover: a workspace
+ * main pane, or a review pane the developer has taken on as their own PR. */
+export function worksLikeWorkspace(s: PaneKind): boolean {
+  if (s.shell || s.role !== "main" || s.look) return false;
+  return !s.view || (s.view === "review" && !!s.owned);
+}
+
+/** Only a pane keeping a handover, or the Manager (which always keeps one),
+ * has a handover to start fresh from. */
+export function canStartFresh(s: PaneKind & { handover: boolean }): boolean {
   if (s.shell || s.role !== "main") return false;
-  return s.view === "manager" || (!s.look && !s.view && s.handover);
+  return s.view === "manager" || (worksLikeWorkspace(s) && s.handover);
 }
 
 /** The items under a handover's "Waiting on you", one per bullet or line;

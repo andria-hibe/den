@@ -139,13 +139,16 @@ function InlineComments({
 }
 
 /** Reviewing someone else's PR: a tabbed pane (guide, review, description)
- * above the session. Two regions, one splitter, so it fits a small screen. */
+ * above the session. Two regions, one splitter, so it fits a small screen.
+ * Taken on as the developer's own (`work`), the same pane also holds what a
+ * workspace has: the handover, the PR's comments, and terminal tabs. */
 export function PrReviewView({
   repo,
   number,
   sessionId,
   groupId,
   owned,
+  work,
   autoReview,
   onAutoReviewStarted,
   header,
@@ -158,6 +161,8 @@ export function PrReviewView({
   groupId: string;
   /** The developer has taken the PR on (see OwnPrToggle). */
   owned: boolean;
+  /** A taken-on PR's handover pane and terminal tabs. */
+  work?: { handover: ReactNode; terminals: ReactNode; terminalCount: number };
   /** Start on its own when the view opens: the full pre-review, or the
    * reading guide only. Null: wait to be asked. */
   autoReview: "full" | "guide" | null;
@@ -166,7 +171,7 @@ export function PrReviewView({
   header: ReactNode;
   terminal: ReactNode;
 }) {
-  const { detail } = usePrDetail(repo, number);
+  const { detail, reload } = usePrDetail(repo, number);
   const [diff, setDiff] = useState<string>("");
   const [review, setReview] = useState<string>("");
   const [guide, setGuide] = useState<string>("");
@@ -176,12 +181,18 @@ export function PrReviewView({
   const [requested, setRequested] = useState(false);
   const [guideRequested, setGuideRequested] = useState(false);
   const started = useRef(false);
-  const [upperFrac, setUpperFrac] = usePersistentNumber("den.prDiffFrac", 0.6);
-  const [tab, setTab] = usePersistentString("den.prReviewTab", "guide", [
+  const [upperFrac, setUpperFrac] = usePersistentNumber(work ? "den.ownPrFrac" : "den.prDiffFrac", work ? 0.45 : 0.6);
+  // A taken-on PR opens on its handover: the review is there to look back at.
+  const [tab, setTab] = usePersistentString(work ? "den.ownPrTab" : "den.prReviewTab", work ? "handover" : "guide", [
+    "handover",
     "guide",
     "review",
     "description",
+    "inline",
+    "terminal",
   ] as const);
+  const shown = !work && !["guide", "review", "description"].includes(tab) ? "guide" : tab;
+  const inlineCount = detail?.reviewComments.length ?? 0;
   const rootRef = useRef<HTMLDivElement>(null);
   // The post-to-GitHub preview (#16).
   const [posting, setPosting] = useState(false);
@@ -205,7 +216,7 @@ export function PrReviewView({
   useEffect(() => {
     let stop = false;
     const load = () => {
-      api<{ content: string }>(`/api/notepad/${groupId}`)
+      api<{ content: string }>(`/api/review/notes/${groupId}`)
         .then((d) => !stop && setReview(d.content ?? ""))
         .catch(() => {});
       api<{ content: string }>(`/api/review/guide/${groupId}`)
@@ -230,6 +241,7 @@ export function PrReviewView({
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
+    setTab("guide");
     if (autoReview === "full") setRequested(true);
     setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
@@ -244,40 +256,58 @@ export function PrReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReview]);
 
+  const tabs: { id: typeof tab; label: string; title?: string }[] = [
+    ...(work ? [{ id: "handover" as const, label: "Handover" }] : []),
+    {
+      id: "guide",
+      label: "Guide",
+      title: "The change grouped into sections, each explained above its own diffs",
+    },
+    { id: "review", label: "Review" },
+    { id: "description", label: work ? "Description & comments" : "Description" },
+    ...(work
+      ? [
+          { id: "inline" as const, label: `Inline comments${inlineCount ? ` (${inlineCount})` : ""}` },
+          { id: "terminal" as const, label: `Terminal${work.terminalCount > 1 ? ` (${work.terminalCount})` : ""}` },
+        ]
+      : []),
+  ];
+
   return (
     <div className="pr-review" ref={rootRef}>
       <div className="ws-pane pr-info" style={{ flex: `${upperFrac} 1 0` }}>
         <div className="pr-info-head">
           <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
           <div className="ticket-look-tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={tab === "guide"}
-              className={`look-tab${tab === "guide" ? " active" : ""}`}
-              onClick={() => setTab("guide")}
-              title="The change grouped into sections, each explained above its own diffs"
-            >
-              Guide
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "review"}
-              className={`look-tab${tab === "review" ? " active" : ""}`}
-              onClick={() => setTab("review")}
-            >
-              Review
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "description"}
-              className={`look-tab${tab === "description" ? " active" : ""}`}
-              onClick={() => setTab("description")}
-            >
-              Description
-            </button>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={shown === t.id}
+                className={`look-tab${shown === t.id ? " active" : ""}`}
+                onClick={() => setTab(t.id)}
+                title={t.title}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
-        {tab === "guide" ? (
+        {shown === "handover" && work ? (
+          <div className="pr-tab-fill">{work.handover}</div>
+        ) : shown === "terminal" && work ? (
+          <div className="pr-tab-fill">{work.terminals}</div>
+        ) : shown === "inline" ? (
+          <div className="pr-info-scroll">
+            {detail ? (
+              <InlineComments detail={detail} sessionId={sessionId} onChanged={reload} />
+            ) : (
+              <div className="loading-row">
+                <Fox pose="walk" size={20} /> loading the PR…
+              </div>
+            )}
+          </div>
+        ) : shown === "guide" ? (
           <PrGuideTab
             guide={guide}
             diff={diff}
@@ -290,11 +320,11 @@ export function PrReviewView({
             requested={guideRequested}
             onRequested={() => setGuideRequested(true)}
           />
-        ) : tab === "review" ? (
+        ) : shown === "review" ? (
           <div className="pr-review-scroll">
             <div className="pr-review-overall">
               <div className="pr-review-head">
-                <h4>Owl&apos;s review</h4>
+                <h4>{owned ? "Review" : "Owl's review"}</h4>
                 <ToClaude
                   sessionId={sessionId}
                   text={reviewAsk}
@@ -350,7 +380,16 @@ export function PrReviewView({
           <div className="pr-info-scroll">
             <h4>Description</h4>
             {detail ? (
-              <Md text={detail.body || "_(no description)_"} />
+              <>
+                <Md text={detail.body || "_(no description)_"} />
+                {work && (
+                  <>
+                    <hr />
+                    <h4>Reviews &amp; comments</h4>
+                    <Notes detail={detail} sessionId={sessionId} />
+                  </>
+                )}
+              </>
             ) : (
               <div className="loading-row">
                 <Fox pose="walk" size={20} /> loading the PR…

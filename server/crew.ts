@@ -103,8 +103,8 @@ const tanukiPrompt = (digest: string) =>
   `FYI.\n` +
   `Then go through the digest's Team PRs to pick up section: PRs that ask the ` +
   `developer's team, not them, for a review, already without drafts, ` +
-  `approved ones, failing CI, and ones a session is on. Pick the likely easy ` +
-  `approvals: small, focused, nothing risky (migrations, auth, money, ` +
+  `ones anyone has reviewed, failing CI, and ones a session is on. Pick the likely easy ` +
+  `approvals: small, focused, nothing risky (migrations, auth, security, money, ` +
   `deletions), dependabot bumps of dev dependencies. Size and CI settle most; ` +
   `read the diff with \`gh pr diff <n> --repo <repo>\` for at most five PRs ` +
   `when they don't. Return them under "Easy approvals", one line each with ` +

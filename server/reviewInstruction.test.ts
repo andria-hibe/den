@@ -76,8 +76,11 @@ describe("reviewInstruction", () => {
     expect(INSTRUCTION).toContain("leave both files as they are");
   });
 
-  it("lets a PR the developer has taken on commit and push, under the house rules", () => {
-    const owned = reviewInstruction(NOTEPAD, DIFF, "feature/thing", GUIDE, true);
+  it("lets a PR the developer has taken on commit and push, and keep a handover like a workspace", () => {
+    const handover = "/Users/x/.den/progress/abc-123.md";
+    const owned = reviewInstruction(NOTEPAD, DIFF, "feature/thing", GUIDE, true, handover);
+    expect(owned).toContain(`Keep a handover at the absolute path ${handover}`);
+    expect(owned).toContain("The developer said in Today at HH:MM");
     expect(isAscii(owned)).toBe(true);
     expect(owned).not.toContain("NEVER commit");
     expect(owned).not.toContain("andria/changes-to-");

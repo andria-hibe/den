@@ -37,7 +37,7 @@ export function reviewPrompt(number: number, repo: string, owned = false): strin
         `on the scratch branch named in your instructions. `) +
     `Read the diff, then read the changed files for context. Do the finding pass ` +
     `with the code-review skill as your instructions describe, then write your review ` +
-    `to the notepad as markdown in this shape: first the general review (a short ` +
+    `to the review file named in your instructions, as markdown in this shape: first the general review (a short ` +
     `**Summary**, a line each on the **Ticket**, **Consistency**, and **Intent** ` +
     `checks your instructions list, then any cross-cutting **Risks**), then one \`## <file path>\` ` +
     `heading per file you have comments on, with the exact path as it appears in ` +
@@ -71,8 +71,8 @@ export function hunkRanges(lines: string[]): string[] {
  * thousand duplicated tokens in the most expensive pane den runs.
  *
  * It also says where the answer goes. A session told "the review goes in the
- * notepad, overwrite it" can reasonably answer a one-file question by rewriting
- * the notepad with one file's comments, which destroys the finished review. */
+ * review file, overwrite it" can reasonably answer a one-file question by
+ * rewriting it with one file's comments, which destroys the finished review. */
 export function fileReviewPrompt(
   file: string,
   prNumber: number | undefined,
@@ -90,7 +90,7 @@ export function fileReviewPrompt(
     `diff doesn't have it, the PR may have changed since it was saved, so read ` +
     `\`gh pr diff\` instead. Call out bugs, edge cases, and anything risky. ` +
     `Answer here in the terminal: this is a follow-up question, so leave the ` +
-    `notepad review and the guide file exactly as they are.`
+    `review file and the guide file exactly as they are.`
   );
 }
 
@@ -229,7 +229,7 @@ export function crewAskPrompt(helper: CrewHelper, pane: CrewPane): CrewAsk {
             `the digest, so its Inbox section is current, including the open review threads on my ` +
             `PRs. Tell me what needs me, which PRs have work to do now and which session should do ` +
             `it, and what's worth knowing, and add anything that needs me to the Today list. Have ` +
-            `it pick easy approvals from the Team PRs section too, for Easy approvals to pick up.`,
+            `it pick easy approvals from the Team PRs section too, then update the easy picks file with them.`,
           submit: true,
           digest: true,
         };

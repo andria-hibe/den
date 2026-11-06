@@ -430,12 +430,12 @@ export function App() {
 
   // A sprite in place of a session's colour dot: Fox (there's only one), and
   // a kit for each ticket or PR session (a ticket look included),
-  // its scarf in the session's colour, and Owl for a review.
+  // its scarf in the session's colour, and Owl for a review not taken on.
   const sessionIcon = (s: SessionMeta, size: number) => {
     // The whole sitting fox, not a bust, so Fox never reads as one of its kits.
     if (s.view === "manager") return <Fox pose="sit" size={size} />;
     if (s.shell) return null;
-    if (s.view === "review") return <Critter kind="owl" size={size} bust />;
+    if (s.view === "review" && !s.owned) return <Critter kind="owl" size={size} bust />;
     if (s.ticket === CLEANUP_TICKET) return <Critter kind="beaver" size={size} bust />;
     return <Critter kind="kit" size={size} tint={s.color} bust />;
   };
@@ -497,7 +497,7 @@ export function App() {
           <CrewButtons
             key={s.id}
             sessionId={s.id}
-            pane={s.view === "review" ? "review" : s.view === "manager" ? "manager" : "kit"}
+            pane={s.view === "review" && !s.owned ? "review" : s.view === "manager" ? "manager" : "kit"}
             running={s.status === "running"}
             active={s.status === "running" ? s.crewActive : []}
             onError={setErrMsg}
@@ -510,14 +510,14 @@ export function App() {
             onSwitch={(on) => setOwned(s.id, on)}
           />
         )}
-        {opts?.workspace && (
+        {(opts?.workspace || s.owned) && (
           <SetupButton
             sessionId={s.id}
             status={s.status}
             onSetup={(id) => launchApp(id, "setup")}
           />
         )}
-        {opts?.workspace && (
+        {(opts?.workspace || s.owned) && (
           <AppRunButton
             sessionId={s.id}
             status={s.status}
@@ -575,6 +575,62 @@ export function App() {
         )}
       </span>
     </div>
+  );
+
+  // A workspace's terminal tabs, also shown in a taken-on PR's Terminal tab.
+  const renderShells = (s: SessionMeta) => (
+    <>
+      <div className="shell-tabs">
+        <span className="pane-label">🖥</span>
+        {groupShells.map((sh, i) => (
+          <span
+            key={sh.id}
+            className={`shell-tab${sh.id === activeShell?.id ? " active" : ""}`}
+            onClick={() =>
+              setShellTab((m) => ({ ...m, [s.groupId]: sh.id }))
+            }
+            title={`terminal ${i + 1}`}
+          >
+            <span
+              className="shell-tab-dot"
+              style={{ opacity: sh.status === "exited" ? 0.4 : 1 }}
+            />
+            term {i + 1}
+            {groupShells.length > 1 && (
+              <button
+                className="shell-tab-close"
+                title="close terminal"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeShellTab(sh.id, s.groupId);
+                }}
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+        <button
+          className="shell-tab-add"
+          title="new terminal tab"
+          onClick={() => addShellTab(s.id, s.groupId)}
+        >
+          +
+        </button>
+      </div>
+      {activeShell ? (
+        <TerminalView
+          key={`${activeShell.id}:${activeShell.status}`}
+          session={activeShell}
+          onExit={() => markExited(activeShell.id)}
+          onTitle={() => {}}
+        />
+      ) : (
+        <div className="placeholder">
+          no terminal — click + to open one
+        </div>
+      )}
+    </>
   );
 
   // --- GitHub PR → review / edit ---
@@ -867,12 +923,27 @@ export function App() {
           />
         ) : active.view === "review" && active.pr && active.prRepo ? (
           <PrReviewView
-            key={active.id}
+            key={`${active.id}:${active.owned}`}
             repo={active.prRepo}
             number={active.pr}
             sessionId={active.id}
             groupId={active.groupId}
             owned={active.owned}
+            work={
+              active.owned
+                ? {
+                    handover: (
+                      <NotepadPane
+                        groupId={active.groupId}
+                        handover={active.handover}
+                        onHandover={(on) => setHandover(active.id, on)}
+                      />
+                    ),
+                    terminals: renderShells(active),
+                    terminalCount: groupShells.length,
+                  }
+                : undefined
+            }
             autoReview={autoReviewPr?.pr === active.pr ? autoReviewPr.mode : null}
             onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}
@@ -951,56 +1022,7 @@ export function App() {
               style={{ flex: `${1 - mainFrac} 1 0` }}
             >
               <div className="ws-pane ws-shell" style={{ flex: `${shellFrac} 1 0` }}>
-                <div className="shell-tabs">
-                  <span className="pane-label">🖥</span>
-                  {groupShells.map((sh, i) => (
-                    <span
-                      key={sh.id}
-                      className={`shell-tab${sh.id === activeShell?.id ? " active" : ""}`}
-                      onClick={() =>
-                        setShellTab((m) => ({ ...m, [active.groupId]: sh.id }))
-                      }
-                      title={`terminal ${i + 1}`}
-                    >
-                      <span
-                        className="shell-tab-dot"
-                        style={{ opacity: sh.status === "exited" ? 0.4 : 1 }}
-                      />
-                      term {i + 1}
-                      {groupShells.length > 1 && (
-                        <button
-                          className="shell-tab-close"
-                          title="close terminal"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            closeShellTab(sh.id, active.groupId);
-                          }}
-                        >
-                          ×
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  <button
-                    className="shell-tab-add"
-                    title="new terminal tab"
-                    onClick={() => addShellTab(active.id, active.groupId)}
-                  >
-                    +
-                  </button>
-                </div>
-                {activeShell ? (
-                  <TerminalView
-                    key={`${activeShell.id}:${activeShell.status}`}
-                    session={activeShell}
-                    onExit={() => markExited(activeShell.id)}
-                    onTitle={() => {}}
-                  />
-                ) : (
-                  <div className="placeholder">
-                    no terminal — click + to open one
-                  </div>
-                )}
+                {renderShells(active)}
               </div>
               <Splitter
                 dir="x"

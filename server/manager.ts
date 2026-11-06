@@ -22,7 +22,7 @@ export function managerRefreshPrompt(now: Date): string {
     `subagent, to go through its Inbox section and pick easy approvals from its Team PRs ` +
     `section, then go through the Today list against the digest and what tanuki found: tick ` +
     `what's done, add what's new and needs me, drop what no longer applies, and rewrite ` +
-    `Easy approvals to pick up. Read the list first and keep the boxes I ticked. Send each ` +
+    `the easy picks file. Read the list first and keep the boxes I ticked. Send each ` +
     `session anything new you found for it. Tell me in a few ` +
     `lines what changed, then carry on with me from where we were. I can ask for this any ` +
     `time, so keep it quick.`
