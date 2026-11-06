@@ -239,7 +239,10 @@ export function buildDigest(d: DigestInput): string {
     const link = n.issue?.url ?? n.url;
     out.push(`- ${n.type} from ${n.actor ?? "someone"} on ${about}${link ? ` (${link})` : ""}${n.comment ? `: "${n.comment}"` : ""}`);
   }
-  out.push("", "GitHub, threads I take part in, since yesterday:");
+  out.push(
+    "",
+    "GitHub, threads I take part in, since yesterday (review requests no longer open to me, or to my team with nobody reviewing yet, are left out):",
+  );
   if (!d.inbox.github) out.push("- (GitHub didn't answer)");
   else if (!d.inbox.github.length) out.push("- nothing new");
   for (const n of d.inbox.github ?? []) {

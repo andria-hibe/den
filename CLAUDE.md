@@ -25,8 +25,11 @@ npm run smoke          # end-to-end: real server + UI in headless Electron (node
 > offers the checkout's newer commits. "build" runs `npm run pack` in the
 > checkout (refused while it has uncommitted changes) and stages
 > `/Applications/Den.app.new`; "quit and install" runs
-> `scripts/install-den.sh`, which detaches, quits den, swaps, and reopens
-> (refused mid Hedgehog round). Both are the developer's clicks, so the rule
+> `scripts/install-den.sh` (with `DEN_INSTALL_NO_QUIT`), which detaches and
+> waits, then den quits itself (`StartOptions.quit`, Electron's `app.quit`;
+> not AppleScript from a process den started) and the script swaps and
+> reopens. Refused mid Hedgehog round or idle handover, and unless the
+> staged build (`update-staged.txt`) is the checkout's HEAD. Both are the developer's clicks, so the rule
 > below still holds for sessions.
 >
 > **Don't repackage/reinstall unless andria explicitly asks.** Make changes,
@@ -630,8 +633,9 @@ developer's day across the other sessions instead of them being the glue.
   and lists open review threads on others' PRs too (review-requested +
   pickup, `MAX_OTHERS_THREADS`), since Fox's subagents can't call `gh api`.
   Today matches `(session: X)` on `name` or `agentName` (`isNamed` in App).
-  Changes made while Fox is stopped aren't replayed when it starts: the
-  next digest carries them.
+  Changes made while Fox is stopped, or during Hedgehog's round, aren't
+  sent, and Fox's inbox is cleared when it starts: the digest carries them.
+  Items compare loosely (case, spacing, end punctuation).
   A refresh whose today.md heading is another day (`todayIsOld`) tells Fox
   to start a new list carrying only open items.
 - Fox writes `~/.den/manager/today.md` (Decide / Unblock others / Continue /

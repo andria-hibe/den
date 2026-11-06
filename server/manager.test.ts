@@ -15,6 +15,7 @@ describe("todayIsOld", () => {
     const now = new Date(2026, 10, 7, 9, 0);
     expect(todayIsOld("# Today, Friday 6 November\n## Decide\n", now)).toBe(true);
     expect(todayIsOld("# Today, Saturday 7 November\n## Decide\n", now)).toBe(false);
+    expect(todayIsOld("# Today, Saturday, 7th November\n", now)).toBe(false);
     expect(todayIsOld("", now)).toBe(false);
   });
 });
@@ -24,6 +25,6 @@ describe("waitingChangeMessage", () => {
     const msg = waitingChangeMessage("FAST-1: thing", ["Pick A or B", "Approve the plan"], ["Approve the plan", "Merge #12?"]);
     expect(msg).toContain('no longer waiting on the developer: "Pick A or B"');
     expect(msg).toContain('now waiting on the developer: "Merge #12?"');
-    expect(waitingChangeMessage("x", ["a"], ["a"])).toBeNull();
+    expect(waitingChangeMessage("x", ["Pick A or B."], ["pick a  or B"])).toBeNull();
   });
 });

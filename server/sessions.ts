@@ -38,7 +38,6 @@ import {
   idleHandoverPrompt, lookInstruction, managerInstruction, myPrInstruction, progressInstruction,
   reviewInstruction, testingRules, ticketDiscussionRule, workspaceInstruction,
 } from "./instructions.ts";
-export { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, MANAGER_NAME, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { crewRule, fableHasRoom, kitAgents, managerAgents, reviewAgents } from "./crew.ts";
 
 const CLAUDE_BIN = process.env.MC_CLAUDE_BIN ?? "claude";
@@ -416,8 +415,8 @@ interface SessionInit {
  */
 class DenSession {
   term: pty.IPty | null = null;
-  /** The `-n` name the running Claude was started with, which is how other
-   * sessions address it (ListAgents); `name` follows later retitles. */
+  /** The `-n` name the pane's Claude was last started with, which is how
+   * other sessions address it (ListAgents); `name` follows later retitles. */
   agentName: string | null = null;
   status: "running" | "exited" = "running";
   private buffer: string[] = [];
@@ -505,6 +504,8 @@ class DenSession {
     const n = args.indexOf("-n");
     this.agentName = this.shell || n < 0 ? null : (args[n + 1] ?? null);
     if (!this.shell) clearCrew(this.groupId);
+    // Fox starts each run from a fresh digest; news queued for the last run is stale.
+    if (this.view === "manager") removeInbox(this.groupId);
     // The last process's output would make waitUntilIdle pass before this one has drawn.
     this.lastOutputAt = 0;
     let term: pty.IPty;
@@ -650,7 +651,7 @@ class DenSession {
     return {
       id: this.id,
       name: this.name,
-      agentName: this.status === "running" ? this.agentName : null,
+      agentName: this.agentName,
       color: this.color,
       cwd: this.cwd,
       shell: this.shell,
@@ -759,6 +760,11 @@ class SessionManager {
     }
   }
 
+  /** Whether any headless handover fork is still writing. */
+  handoversRunning(): boolean {
+    return [...this.sessions.values()].some((s) => s.handoverRunning);
+  }
+
   /** The handover's length when it is past HANDOVER_LONG_CHARS, else null. */
   handoverTooLong(groupId: string): number | null {
     try {
@@ -783,6 +789,9 @@ class SessionManager {
    * developer often answers in the session itself, which left Today listing
    * settled items. Not a nudge: Fox reads it on its next prompt or tool call. */
   private tellManagerWaiting() {
+    // Hedgehog's forks rewrite handovers just before Fox is stopped, so
+    // anything queued then would greet tomorrow's Start my day stale.
+    if (this.round && !this.round.finishedAt) return;
     const manager = this.manager();
     const live = new Set<string>();
     for (const s of this.sessions.values()) {

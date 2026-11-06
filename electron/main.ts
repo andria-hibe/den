@@ -84,6 +84,7 @@ function ensureServer(): Promise<RunningServer> {
   // is still in flight must wait for it, not begin another.
   serverStart ??= startServer({
     port: 0,
+    quit: () => app.quit(),
     webDir: app.isPackaged
       ? join(process.resourcesPath, "web")
       : join(__dirname, "..", "web"), // dist/electron -> dist/web

@@ -10,7 +10,8 @@ fi
 set -u
 [ -d /Applications/Den.app.new ] || { echo "$(date) nothing staged at /Applications/Den.app.new"; exit 1; }
 sleep 3
-osascript -e 'tell application "Den" to quit'
+# den quits itself when its update button runs this (DEN_INSTALL_NO_QUIT).
+[ -n "${DEN_INSTALL_NO_QUIT:-}" ] || osascript -e 'tell application "Den" to quit'
 for i in $(seq 1 600); do pgrep -f "/Applications/Den.app/Contents/MacOS/Den" >/dev/null || break; sleep 1; done
 if pgrep -f "/Applications/Den.app/Contents/MacOS/Den" >/dev/null; then echo "$(date) den still running after 10 min; nothing swapped"; exit 1; fi
 sleep 2

@@ -5,12 +5,10 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId, notepadPath, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./sessions.ts";
+import { sessions, isValidGroupId, notepadPath } from "./sessions.ts";
+import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { freshStartPrompt } from "./instructions.ts";
 import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
-
-/** Others' PRs whose open review threads go in the digest: one GitHub call each. */
-const MAX_OTHERS_THREADS = 10;
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
@@ -63,6 +61,9 @@ import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
+
+/** Others' PRs whose open review threads go in the digest: one GitHub call each. */
+const MAX_OTHERS_THREADS = 10;
 
 /** A positive-integer PR number, coerced from untrusted query/body input. */
 const execFileP = promisify(execFile);
@@ -117,6 +118,8 @@ export interface StartOptions {
   host?: string;
   /** Directory of the built web app to serve (for the packaged app). */
   webDir?: string;
+  /** Quits the app, for installing an update; only Electron passes it. */
+  quit?: () => void;
 }
 
 export interface RunningServer {
@@ -1113,7 +1116,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Only the installed app offers it; `npm run app` runs from the checkout.
   const packaged = () => process.execPath.startsWith("/Applications/Den.app/");
   app.get("/api/den/update", async () => {
-    const status = updateStatus(denRepo(), packaged());
+    const status = await updateStatus(denRepo(), packaged());
     return { ...status, log: status.state === "failed" ? updateLogTail() : "" };
   });
   app.post("/api/den/update/build", async (_req, reply) => {
@@ -1122,7 +1125,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       reply.code(409);
       return { error: "not_available", message: "Only the installed den can update itself." };
     }
-    const r = buildUpdate(repo);
+    const r = await buildUpdate(repo);
     if (r === "started") return { ok: true };
     reply.code(409);
     const why = { dirty: "den's checkout has uncommitted changes.", busy: "A build is already running.", failed: "Couldn't read den's checkout." };
@@ -1131,12 +1134,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   app.post("/api/den/update/install", async (_req, reply) => {
     const repo = denRepo();
     const round = sessions.clockOutRound();
-    // Quitting mid-round would cut Hedgehog's handovers off.
-    if (round && !round.finishedAt) {
+    // Quitting mid-round, or mid idle handover, would cut a handover off.
+    if ((round && !round.finishedAt) || sessions.handoversRunning()) {
       reply.code(409);
       return { error: "round_running", message: "Hedgehog is still saving handovers; install once it's done." };
     }
-    const r = repo && packaged() ? installUpdate(repo) : "not_staged";
+    const quit = opts.quit;
+    // The reply goes out before den quits.
+    const r = repo && packaged() && quit ? await installUpdate(repo, () => setTimeout(quit, 500)) : "not_staged";
     if (r === "started") return { ok: true };
     reply.code(409);
     return { error: r, message: "Nothing is built to install yet." };

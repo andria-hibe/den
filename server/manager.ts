@@ -22,8 +22,12 @@ export function dayLabel(now: Date): string {
 /** Whether the Today list is from an earlier day than `now`: its heading
  * names another date. A list with no heading isn't treated as old. */
 export function todayIsOld(md: string, now: Date): boolean {
-  const heading = /^# Today, (.+)$/m.exec(md)?.[1].trim();
-  return !!heading && heading !== dayLabel(now);
+  const heading = /^# Today\b(.*)$/m.exec(md)?.[1];
+  // Day and month only, so "Friday, 6th November" still counts as today.
+  const m = heading && /(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)/.exec(heading);
+  if (!m) return false;
+  const month = now.toLocaleDateString("en-GB", { month: "long" }).toLowerCase();
+  return Number(m[1]) !== now.getDate() || !month.startsWith(m[2].toLowerCase().slice(0, 3));
 }
 
 /** Refresh, from Today's header: any time in the day, not just at the start.
@@ -68,16 +72,22 @@ export function todayItemTexts(md: string): string[] {
 }
 
 /** What den tells the Manager when a session's "Waiting on you" changes, or
- * null when nothing did. Items are compared as written, so a reworded item
- * shows as one gone and one new. */
+ * null when nothing did. */
 export function waitingChangeMessage(session: string, before: string[], after: string[]): string | null {
-  const gone = before.filter((i) => !after.includes(i));
-  const added = after.filter((i) => !before.includes(i));
+  // Whitespace, case, and end punctuation change on every rewrite of a handover.
+  const norm = (i: string) => i.toLowerCase().replace(/\s+/g, " ").replace(/[.;:,!]+$/, "").trim();
+  const was = new Set(before.map(norm));
+  const now = new Set(after.map(norm));
+  const gone = before.filter((i) => !now.has(norm(i)));
+  const added = after.filter((i) => !was.has(norm(i)));
   if (!gone.length && !added.length) return null;
   const list = (items: string[]) => items.map((i) => `"${i.replaceAll('"', "'")}"`).join("; ");
   const parts = [
     gone.length ? `no longer waiting on the developer: ${list(gone)}` : null,
     added.length ? `now waiting on the developer: ${list(added)}` : null,
   ].filter(Boolean);
-  return `Session "${session}" changed the "Waiting on you" in its handover. ${parts.join(". ")}.`;
+  return (
+    `Session "${session}" changed the "Waiting on you" in its handover. ${parts.join(". ")}. ` +
+    `A reworded item shows as one gone and one new: match them by meaning before you tick anything.`
+  );
 }

@@ -3,7 +3,8 @@
 // runs without a click, and the swap itself happens only once den has quit
 // (scripts/install-den.sh): a running den execs node-pty's spawn-helper from
 // its bundle, so replacing the bundle under it breaks every new terminal.
-import { execFile, execFileSync, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { createWriteStream, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "./dataDir.ts";
@@ -49,21 +50,23 @@ export interface UpdateStatus {
   state: UpdateState;
 }
 
-const git = (repo: string, ...args: string[]) =>
-  execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", timeout: 5000 }).trim();
+const run = promisify(execFile);
+// Async: these run on a poll, on the event loop that streams every terminal.
+const git = async (repo: string, ...args: string[]) =>
+  (await run("git", ["-C", repo, ...args], { encoding: "utf8", timeout: 5000 })).stdout.trim();
 
-export function updateStatus(repo: string | null, packaged: boolean): UpdateStatus {
+export async function updateStatus(repo: string | null, packaged: boolean): Promise<UpdateStatus> {
   const installed = installedCommit();
   const none: UpdateStatus = { available: false, installed, head: null, commits: [], dirty: false, state: "idle" };
   if (!repo || !packaged) return none;
   try {
-    const head = git(repo, "rev-parse", "HEAD");
-    const dirty = git(repo, "status", "--porcelain") !== "";
+    const head = await git(repo, "rev-parse", "HEAD");
+    const dirty = (await git(repo, "status", "--porcelain")) !== "";
     let commits: string[] = [];
     if (installed !== head) {
       // An unknown or unstamped install: say there's an update without a list.
-      const range = installed && isAncestor(repo, installed, head) ? `${installed}..${head}` : `${head}~1..${head}`;
-      commits = git(repo, "log", "--format=%s", range).split("\n").filter(Boolean);
+      const range = installed && (await isAncestor(repo, installed, head)) ? `${installed}..${head}` : `${head}~1..${head}`;
+      commits = (await git(repo, "log", "--format=%s", range)).split("\n").filter(Boolean);
     }
     const staged = state === "idle" && stagedCommit() === head && head !== installed;
     return { available: true, installed, head, commits, dirty, state: staged ? "staged" : state };
@@ -73,9 +76,9 @@ export function updateStatus(repo: string | null, packaged: boolean): UpdateStat
   }
 }
 
-function isAncestor(repo: string, a: string, b: string): boolean {
+async function isAncestor(repo: string, a: string, b: string): Promise<boolean> {
   try {
-    execFileSync("git", ["-C", repo, "merge-base", "--is-ancestor", a, b], { timeout: 5000 });
+    await git(repo, "merge-base", "--is-ancestor", a, b);
     return true;
   } catch {
     return false;
@@ -83,18 +86,23 @@ function isAncestor(repo: string, a: string, b: string): boolean {
 }
 
 /** Build den's checkout and stage the bundle at /Applications/Den.app.new.
- * Resolves when the build is under way; `state` says how it went. */
-export function buildUpdate(repo: string): "started" | "busy" | "dirty" | "failed" {
+ * Resolves once the build is under way; `updateStatus` says how it went. */
+export async function buildUpdate(repo: string): Promise<"started" | "busy" | "dirty" | "failed"> {
   if (state === "building") return "busy";
+  state = "building";
   let head: string;
   try {
-    if (git(repo, "status", "--porcelain") !== "") return "dirty";
-    head = git(repo, "rev-parse", "HEAD");
+    const dirty = (await git(repo, "status", "--porcelain")) !== "";
+    head = await git(repo, "rev-parse", "HEAD");
+    if (dirty) {
+      state = "idle";
+      return "dirty";
+    }
   } catch (err) {
     logWarn("den update build", err);
+    state = "idle";
     return "failed";
   }
-  state = "building";
   rmSync(STAGED_COMMIT, { force: true });
   const log = createWriteStream(LOG);
   log.on("error", (err) => logWarn("den update log", err));
@@ -122,20 +130,32 @@ export function buildUpdate(repo: string): "started" | "busy" | "dirty" | "faile
   return "started";
 }
 
-/** Quit den and swap the staged bundle in. The script detaches first, so it
- * outlives den. */
-export function installUpdate(repo: string): "started" | "not_staged" {
-  if (state !== "idle" || !stagedCommit()) return "not_staged";
-  execFile(join(repo, "scripts", "install-den.sh"), (err) => {
-    if (err) logWarn("den install", err);
-  });
+/** Swap the staged bundle in: start the install script, which detaches and
+ * waits for den to exit, then quit den with `quit`. den quits itself rather
+ * than the script asking it to over AppleScript, which macOS may not allow a
+ * process den started to do. */
+export async function installUpdate(repo: string, quit: () => void): Promise<"started" | "not_staged"> {
+  let head = "";
+  try {
+    head = await git(repo, "rev-parse", "HEAD");
+  } catch {
+    // unreadable checkout: nothing to compare the staged build with
+  }
+  if (state !== "idle" || !head || stagedCommit() !== head) return "not_staged";
+  try {
+    await run(join(repo, "scripts", "install-den.sh"), [], { env: { ...process.env, DEN_INSTALL_NO_QUIT: "1" } });
+  } catch (err) {
+    logWarn("den install", err);
+    return "not_staged";
+  }
+  quit();
   return "started";
 }
 
 /** The end of the build log, to show why a build failed. */
 export function updateLogTail(): string {
   try {
-    return execFileSync("tail", ["-n", "15", LOG], { encoding: "utf8" });
+    return readFileSync(LOG, "utf8").trimEnd().split("\n").slice(-15).join("\n");
   } catch {
     return "";
   }
