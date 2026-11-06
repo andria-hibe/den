@@ -465,6 +465,9 @@ class DenSession {
   /** Where the pane's turn is, from Claude Code's hooks (turnState.ts);
    * null for a pane started without them. */
   turn: Turn | null = null;
+  /** The newest turn file den has acted on, so a state den changed itself
+   * isn't put back by re-reading the same file. */
+  private turnSeenAt = 0;
   private spawnedAt = 0;
   /** Claude Code keeps the system prompt a conversation started with, even
    * on resume, until it is compacted: set when den's instructions for this
@@ -567,6 +570,7 @@ class DenSession {
     if (!this.shell) clearCrew(this.groupId);
     this.turn = null;
     this.spawnedAt = Date.now();
+    this.turnSeenAt = this.spawnedAt;
     // Fox starts each run from a fresh digest; news queued for the last run is stale.
     if (this.view === "manager") removeInbox(this.groupId);
     // The last process's output would make waitUntilIdle pass before this one has drawn.
@@ -647,7 +651,8 @@ class DenSession {
   checkTurn() {
     if (this.shell || this.status !== "running") return;
     const t = readTurn(this.groupId, this.claudeSessionId ?? null);
-    if (!t || t.at <= this.spawnedAt || t.at === this.turn?.at) return;
+    if (!t || t.at <= this.turnSeenAt) return;
+    this.turnSeenAt = t.at;
     const before = this.turn;
     this.turn = t;
     if (t.state !== "working" && before?.state !== t.state) this.nudge();
@@ -716,6 +721,9 @@ class DenSession {
     this.term?.write(data);
     this.lastActive = Date.now();
     this.lastInputAt = this.lastActive;
+    // Escape at a prompt fires no hook, so any input ends "waiting on you";
+    // an answered prompt goes on to report working.
+    if (this.turn?.state === "needs-you") this.turn = { state: "done", at: this.lastActive, message: null };
   }
 
   /**

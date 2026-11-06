@@ -26,8 +26,10 @@ export interface Turn {
 }
 
 /** Notification types that mean the pane is waiting on the developer; the
- * rest (auth_success, quota notices, ...) would overwrite a real state. */
-const NEEDS_YOU = "permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input";
+ * rest (auth_success, quota notices, ...) would overwrite a real state.
+ * Not idle_prompt: it fires a minute after every finished turn, which would
+ * turn every idle pane into one "waiting on you". */
+const NEEDS_YOU = "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input";
 
 /** Hooks for a pane's --settings that save each event's input to the pane's
  * turn file (tmp + mv, so den never reads half a file). */

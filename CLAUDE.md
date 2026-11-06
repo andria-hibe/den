@@ -638,11 +638,13 @@ left idle panes' limits and cache state stale), `idleCompaction: false`
 (compacting while the developer is away spends tokens with nobody watching;
 den starts stale chats fresh from the handover instead), and `mergeHooks`
 of `turnHooks` + inbox + crew. `server/turnState.ts`: UserPromptSubmit /
-PostToolUse / Stop / Notification (matcher: the needs-you types) save the
+PostToolUse / Stop / Notification (matcher: the needs-you types, not
+`idle_prompt`, which fires a minute after every finished turn) save the
 hook input to `~/.den/turn/<groupId>.json`; `watchTurns` (fs.watch) and the
 5s timer call `DenSession.checkTurn`, which flags the rail on a turn that
 finishes or stops for the developer while unwatched, and `meta().turn`
-says which ("Waiting for you: <message>" in the rail tip). Clock out's
+says which ("Waiting for you: <message>" in the rail tip; any input
+clears it, since Escape at a prompt fires no hook). Clock out's
 "still working" uses it, plus "waiting on you" as a blocker. The OSC title
 glyph stays as the fallback for panes started without the hooks. Stop was
 verified live in `claude -p`; Notification wasn't (no prompts in -p). The
