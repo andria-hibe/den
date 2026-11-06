@@ -50,22 +50,34 @@ export function lastContext(lines: string[]): number {
   return 0;
 }
 
-const contextCache = new Map<string, { key: string; tokens: number }>();
+const transcriptCache = new Map<string, { key: string; tokens: number; compactions: number }>();
 
-/** lastContext for a conversation's own transcript; 0 before the first reply. */
-export function contextSize(sessionId: string): number {
+/** What den reads from a conversation's own transcript, re-read only when it changes. */
+function readTranscript(sessionId: string): { tokens: number; compactions: number } {
   const file = transcriptFiles(sessionId)[0];
-  if (!file) return 0;
+  if (!file) return { tokens: 0, compactions: 0 };
   try {
     const st = statSync(file);
     const key = `${st.mtimeMs}:${st.size}`;
-    let hit = contextCache.get(file);
+    let hit = transcriptCache.get(file);
     if (hit?.key !== key) {
-      hit = { key, tokens: lastContext(readFileSync(file, "utf8").split("\n")) };
-      contextCache.set(file, hit);
+      const lines = readFileSync(file, "utf8").split("\n");
+      const compactions = lines.filter((l) => l.includes('"subtype":"compact_boundary"')).length;
+      hit = { key, tokens: lastContext(lines), compactions };
+      transcriptCache.set(file, hit);
     }
-    return hit.tokens;
+    return hit;
   } catch {
-    return 0;
+    return { tokens: 0, compactions: 0 };
   }
+}
+
+/** lastContext for a conversation's own transcript; 0 before the first reply. */
+export function contextSize(sessionId: string): number {
+  return readTranscript(sessionId).tokens;
+}
+
+/** How many times a conversation has been compacted. */
+export function compactions(sessionId: string): number {
+  return readTranscript(sessionId).compactions;
 }

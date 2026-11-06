@@ -552,6 +552,18 @@ export function App() {
           </button>
         )}
         {s.status === "running" && s.context && <ContextChip context={s.context} canFresh={canStartFresh(s)} />}
+        {s.promptStale && (
+          <span
+            className="ledger-chip context-chip stale-prompt"
+            title={
+              "den's instructions for this session have changed since its conversation started, and Claude Code " +
+              "keeps the old ones until the conversation is compacted. " +
+              (canStartFresh(s) ? "Start fresh (✦) to pick them up." : "Close and reopen the session to pick them up.")
+            }
+          >
+            old instructions
+          </span>
+        )}
         {canStartFresh(s) && (
           <FreshStartButton running={s.status === "running"} onFresh={() => restartFresh(s.id)} />
         )}

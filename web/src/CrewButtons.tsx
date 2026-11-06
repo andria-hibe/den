@@ -117,6 +117,19 @@ export function CrewButtons({
       .finally(() => setAsking((prev) => prev.filter((h) => h !== helper)));
   };
 
+  const [checking, setChecking] = useState(false);
+  const doneCheck = () => {
+    setChecking(true);
+    const job = (queueBy.get(sessionId) ?? Promise.resolve()).then(() =>
+      api(`/api/sessions/${sessionId}/done-check`, { method: "POST" }),
+    );
+    queueBy.set(sessionId, job.catch(() => {}));
+    job
+      .then(() => setCalled((prev) => ({ ...prev, badger: Date.now(), owl: Date.now() })))
+      .catch((e) => onError((e as Error).message))
+      .finally(() => setChecking(false));
+  };
+
   const helpers = crewFor(pane);
   const name = (h: CrewHelper) => CREW.find((c) => c.kind === h)?.name ?? h;
   const onWay = (h: CrewHelper) => !active.includes(h) && (asking.includes(h) || called[h] !== undefined);
@@ -167,6 +180,25 @@ export function CrewButtons({
               </div>
             );
           })}
+          {pane === "kit" && (
+            <div className="crew-row crew-done-check">
+              <div className="crew-row-text">
+                <strong>Done check</strong>
+                {checking && <span className="crew-working">asking...</span>}
+                <div className="crew-card-job">
+                  Badger and Owl at once, plus Hare or Wolf when the change needs them, with each serious finding
+                  double-checked. Up to about ten helpers, so it costs more than one ask.
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost-outline crew-ask"
+                disabled={!running || checking}
+                onClick={doneCheck}
+              >
+                {checking ? "asking..." : "run"}
+              </button>
+            </div>
+          )}
           {!running && <div className="crew-card-note">Restart the session to ask its helpers.</div>}
         </div>
       )}

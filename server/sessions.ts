@@ -14,7 +14,8 @@ import {
 } from "../shared/handover.ts";
 import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
-import { contextSize } from "./usage.ts";
+import { compactions, contextSize } from "./usage.ts";
+import { createHash } from "node:crypto";
 import { setupHint } from "./apprun.ts";
 import {
   readLimits, readPaneContext, removeLimits, statusLineSettings, type PaneContext, type PlanLimits,
@@ -169,6 +170,30 @@ function readClockedOut(): string[] {
 function writeClockedOut(ids: string[]): void {
   mkdirSync(MANAGER_DIR, { recursive: true });
   writeFileSync(clockedOutPath, JSON.stringify(ids));
+}
+
+// The hash of the system prompt each workspace's conversation started with
+// (see DenSession.promptStale).
+const PROMPTS_DIR = join(DATA_DIR, "prompts");
+type PromptRecord = { sessionId: string; hash: string };
+
+function readPromptRecord(groupId: string): PromptRecord | null {
+  if (!isValidGroupId(groupId)) return null;
+  try {
+    return JSON.parse(readFileSync(join(PROMPTS_DIR, `${groupId}.json`), "utf8")) as PromptRecord;
+  } catch {
+    return null;
+  }
+}
+
+function writePromptRecord(groupId: string, rec: PromptRecord): void {
+  if (!isValidGroupId(groupId)) return;
+  try {
+    mkdirSync(PROMPTS_DIR, { recursive: true });
+    writeFileSync(join(PROMPTS_DIR, `${groupId}.json`), JSON.stringify(rec));
+  } catch (err) {
+    logWarn("prompt record", err);
+  }
 }
 
 // The rail polls every few seconds, so a notepad is re-read only when it changes.
@@ -347,6 +372,8 @@ export interface SessionMeta {
   name: string;
   /** See DenSession.agentName. */
   agentName: string | null;
+  /** See DenSession.promptStale. */
+  promptStale: boolean;
   color: string;
   cwd: string;
   shell: boolean;
@@ -415,6 +442,15 @@ interface SessionInit {
  */
 class DenSession {
   term: pty.IPty | null = null;
+  /** Claude Code keeps the system prompt a conversation started with, even
+   * on resume, until it is compacted: set when den's instructions for this
+   * pane have changed since. */
+  promptStale = false;
+  /** The resumed conversation's compactions at spawn, to tell when it next
+   * compacts and takes up the current prompt. */
+  private compactionsAtSpawn = 0;
+  /** The current prompt's hash while the conversation still runs an older one. */
+  private pendingHash: string | null = null;
   /** The `-n` name the pane's Claude was last started with, which is how
    * other sessions address it (ListAgents); `name` follows later retitles. */
   agentName: string | null = null;
@@ -503,6 +539,7 @@ class DenSession {
     const args = this.spawnArgs ?? (this.shell ? [] : ["-n", this.name]);
     const n = args.indexOf("-n");
     this.agentName = this.shell || n < 0 ? null : (args[n + 1] ?? null);
+    if (!this.shell) this.notePrompt(args);
     if (!this.shell) clearCrew(this.groupId);
     // Fox starts each run from a fresh digest; news queued for the last run is stale.
     if (this.view === "manager") removeInbox(this.groupId);
@@ -560,6 +597,34 @@ class DenSession {
 
   /** Follow this pane's output from den itself. Unlike attach(), it isn't a
    * viewer, so the bell still raises attention. Returns the unsubscribe. */
+  /** Record the prompt a new conversation starts with, or, on resume, note
+   * whether it differs from the one the conversation kept. */
+  private notePrompt(args: string[]) {
+    const at = args.indexOf("--append-system-prompt");
+    const hash = createHash("sha1").update(at >= 0 ? (args[at + 1] ?? "") : "").digest("hex");
+    const fresh = args.indexOf("--session-id");
+    const resume = args.indexOf("--resume");
+    this.promptStale = false;
+    if (fresh >= 0) writePromptRecord(this.groupId, { sessionId: args[fresh + 1], hash });
+    else if (resume >= 0) {
+      const id = args[resume + 1];
+      const rec = readPromptRecord(this.groupId);
+      // A conversation from before den kept records is left unflagged.
+      this.promptStale = rec?.sessionId === id && rec.hash !== hash;
+      this.compactionsAtSpawn = compactions(id);
+      if (this.promptStale) this.pendingHash = hash;
+    }
+  }
+
+  /** Once a stale conversation compacts, it runs on the current prompt. */
+  checkCompacted() {
+    if (!this.promptStale || !this.claudeSessionId || !this.pendingHash) return;
+    if (compactions(this.claudeSessionId) <= this.compactionsAtSpawn) return;
+    writePromptRecord(this.groupId, { sessionId: this.claudeSessionId, hash: this.pendingHash });
+    this.promptStale = false;
+    this.pendingHash = null;
+  }
+
   watch(fn: (data: string) => void): () => void {
     this.watchers.add(fn);
     return () => this.watchers.delete(fn);
@@ -652,6 +717,7 @@ class DenSession {
       id: this.id,
       name: this.name,
       agentName: this.agentName,
+      promptStale: this.status === "running" && this.promptStale,
       color: this.color,
       cwd: this.cwd,
       shell: this.shell,
@@ -747,6 +813,7 @@ class SessionManager {
       for (const s of this.sessions.values()) {
         s.persistScrollback();
         this.keepTicket(s);
+        s.checkCompacted();
       }
       this.tellManagerWaiting();
     }, SCROLLBACK_FLUSH_MS);
@@ -1549,6 +1616,7 @@ class SessionManager {
       }
       rmSync(notepad, { force: true });
       rmSync(ticketCopyPath(groupId), { force: true });
+      rmSync(join(PROMPTS_DIR, `${groupId}.json`), { force: true });
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });

@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, notepadPath } from "./sessions.ts";
+import { worksLikeWorkspace } from "../shared/handover.ts";
 import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { freshStartPrompt } from "./instructions.ts";
 import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
@@ -47,6 +48,7 @@ import {
 } from "./linear.ts";
 import { roots, listDirs, makeDir, isDir, baseBranchOverride, denRepo } from "./fs.ts";
 import { buildUpdate, installUpdate, updateLogTail, updateStatus } from "./denUpdate.ts";
+import { doneCheckPrompt, ensureDoneCheckScript } from "./doneCheck.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
@@ -133,6 +135,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const webDir = opts.webDir ?? process.env.DEN_WEB_DIR;
 
   sessions.hydrate();
+  ensureDoneCheckScript();
 
   const app = Fastify({ logger: false });
   await app.register(websocket);
@@ -600,6 +603,24 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     const ready = await paste(session, text, !!submit);
     return { ok: true, submitted: !!submit, ready };
+  });
+
+  // The crew card's done check: the developer's click asks the pane to run it.
+  app.post("/api/sessions/:id/done-check", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    if (!session || session.status !== "running" || session.shell) {
+      reply.code(409);
+      return { error: "not_running", message: "Start the session to run its done check." };
+    }
+    // Only panes with the whole crew as subagents (kitAgents) can run it.
+    if (!worksLikeWorkspace(session) && session.view !== "mypr") {
+      reply.code(409);
+      return { error: "not_a_kit", message: "Only a work session can run the done check." };
+    }
+    ensureDoneCheckScript();
+    const base = session.meta().stack?.parent ?? null;
+    const ready = await paste(session, doneCheckPrompt(base), true);
+    return { ok: true, ready };
   });
 
   // Which shell tab den launched each workspace's app in (#28), by group.

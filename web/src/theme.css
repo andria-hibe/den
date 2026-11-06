@@ -798,6 +798,10 @@ body {
   gap: 10px;
   align-items: center;
 }
+.crew-done-check {
+  border-top: 1.5px dashed var(--border);
+  padding-top: 8px;
+}
 .crew-row-face {
   flex: none;
   width: 36px;
@@ -3012,4 +3016,8 @@ body {
 }
 .context-chip.full .ledger-fill {
   background: var(--pink-deep);
+}
+.context-chip.stale-prompt {
+  border-color: var(--peach);
+  white-space: nowrap;
 }

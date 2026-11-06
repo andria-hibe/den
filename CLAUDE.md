@@ -105,7 +105,8 @@ WebSocket; everything else is REST.
   guide (`~/.den/review/<groupId>.guide.md`, grouped by purpose) and the review
   (the notepad, filed per file). **Every Claude pane gets a system prompt from
   one builder per kind**, shared by `create()` and `restartArgs` so a revived
-  pane gets exactly what a fresh one did: `workspaceArgs` →
+  pane is started with exactly what a fresh one was (a resumed conversation
+  only uses it once compacted; see Restarting exited sessions): `workspaceArgs` →
   `workspaceInstruction` (notepad + house rules) for a workspace main, and
   `singlePaneArgs` for the rest — `reviewArgs` for a review pane,
   `myPrInstruction` (which PR/repo/branch, act on pasted comments, draft
@@ -544,6 +545,17 @@ ticket/PR context. Claude args are **rebuilt** from the persisted context
 (`restartArgs`, via the same `workspaceArgs` / `singlePaneArgs` builders
 `create()` uses, so every pane keeps its system prompt), so restart never re-injects the one-time initial
 prompt, and it works even after a server restart wiped the in-memory `spawnArgs`.
+**But a resumed conversation keeps the system prompt it started with**
+(Claude Code records it on the first request; `--system-prompt-snapshot`,
+default on) until it is compacted, so a plain restart after den's
+instructions change still runs the old ones. Turning the snapshot off
+re-renders the prompt every request, which would cost cache hits, so den
+flags it instead: `DenSession.notePrompt` records a hash of the
+`--append-system-prompt` text for each new conversation in
+`~/.den/prompts/<groupId>.json`, a resume with a different hash sets
+`promptStale` (header chip "old instructions": start fresh to pick them
+up), and a later `compact_boundary` in the transcript (`compactions` in
+`usage.ts`) clears it. Conversations from before the records aren't flagged.
 The scrollback is cleared (fresh process). The frontend keys each `TerminalView`
 by `` `${id}:${status}` `` so the flip to "running" remounts it and reconnects to
 the new PTY; restart buttons (`↻`) appear on exited rail rows + in the workspace
@@ -701,6 +713,23 @@ developer's day across the other sessions instead of them being the glue.
   even pace), else Opus; full model ids work in `--agents` (verified: a
   subagent with `"model": "claude-fable-5-1"` ran on Fable). Panes pick
   their crew up at spawn, so existing ones need a restart.
+- **Done check** (2026-11-06): a kit's crew card has a "run" row that asks
+  the pane to run den's done check, a Claude Code **workflow** (the Workflow
+  tool), not a single subagent: `server/doneCheck.ts` holds the script
+  (`DONE_CHECK_SCRIPT`, plain JS, no template literals, no `Date.now()`),
+  written to `~/.den/workflows/done-check.js` at startup, and
+  `POST /api/sessions/:id/done-check` pastes `doneCheckPrompt`. The script
+  scopes the diff (one low-effort agent), runs badger + owl, plus hare/wolf
+  when the scope says performance/security, as the pane's own subagent
+  types (`agentType`), then a skeptic per high/medium finding, most serious
+  first across all helpers, capped at `DONE_CHECK_MAX_VERIFY`, and returns
+  confirmed / unverified / refuted plus which helpers failed. The route
+  passes the pane's base (`meta().stack.parent`) and only serves kits.
+  Verified live 2026-11-06: agent types resolve and a run on its own diff
+  took 9 agents, ~5 minutes, and about 700k subagent tokens.
+  Only from the button: a session runs a workflow only when the developer
+  asks, so `crewRule` still names the helpers one by one.
+  `doneCheck.test.ts` runs the script against fake hooks.
 - **Clock out**: the topbar's "clock out" opens `ClockOutDialog`,
   fed by `GET /api/manager/clockout` (`sessions.clockOutVerdicts`: every
   running Claude pane, reviews, my-PR and look panes included, with pure
