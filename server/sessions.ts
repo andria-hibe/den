@@ -134,7 +134,7 @@ const ticketCopyPath = (groupId: string) => {
 
 // A review pane's diff, guide, and settings file; remove() deletes them.
 const REVIEW_DIR = join(DATA_DIR, "review");
-const reviewDiffPath = (groupId: string) => {
+export const reviewDiffPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.diff`);
 };
@@ -1711,6 +1711,7 @@ class SessionManager {
       rmSync(ticketCopyPath(groupId), { force: true });
       rmSync(join(PROMPTS_DIR, `${groupId}.json`), { force: true });
       removeTurn(groupId);
+      rmSync(join(REVIEW_DIR, `${groupId}.lines.json`), { force: true });
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });

@@ -11,6 +11,7 @@ import {
   fileReviewPrompt,
   guidePrompt,
   hunkRanges,
+  lineAnswerPrompt,
   notePrompt,
   reviewPrompt,
   ticketBrief,
@@ -58,6 +59,7 @@ describe("paste prompts", () => {
     denPrompt: denPrompt(),
     cleanupWithSkill: cleanupPrompt("runn-cleanup"),
     cleanupGeneric: cleanupPrompt(null),
+    lineAnswer: lineAnswerPrompt("server/git.ts", 12, "Q: why?\nA: because."),
     ...Object.fromEntries(
       (["kit", "review", "manager"] as const).flatMap((pane) =>
         crewFor(pane).map((h) => [`crewAsk ${h} (${pane})`, crewAskPrompt(h, pane).text]),

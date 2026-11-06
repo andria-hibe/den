@@ -374,6 +374,7 @@ export function PrReviewView({
               sessionId={sessionId}
               prNumber={number}
               startCollapsed={startCollapsed}
+              ask
             />
           </div>
         ) : (

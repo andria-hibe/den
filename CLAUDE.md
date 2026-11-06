@@ -370,6 +370,18 @@ WebSocket; everything else is REST.
     bottom — nothing is ever hidden. Unit-tested in `reviewGuide.test.ts`.
     Why its own file and not the notepad: the review's `## <path>` headings and
     the guide's `## <section title>` ones would otherwise share a parser.
+  - **Ask about a line** (andria, 2026-11-06, after acorn): in a review
+    pane's Guide and Review diffs (`DiffView ask`), each numbered line has a
+    "?" on hover that opens a box under it; the question goes to a small
+    headless chat of its own (`server/lineAsk.ts` `askLine`: `claude -p`,
+    Sonnet, effort low, read-only tools, cwd the PR checkout, the diff and
+    guide paths in its prompt; a follow-up `--resume`s that line's chat), so
+    the review pane's conversation is never touched. Threads persist in
+    `~/.den/review/<groupId>.lines.json` (`POST /api/sessions/:id/ask-line`,
+    `GET .../line-threads`; shared client store in `LineAsk.tsx`), and
+    "-> review" pastes an exchange into the review pane
+    (`lineAnswerPrompt`). Verified live: about 12s for an answer citing
+    path:line.
   - `PrViews.tsx`: `PrReviewView` (others' PRs — **two regions, one splitter**, so
     it works on a small screen: a tabbed pane above (**Guide** / **Review** /
     **Description**) and the session below. The Review tab is one scroll region — the general review

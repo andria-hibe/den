@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.ts";
 import { highlightLines, languageFor } from "./highlight.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { fileReviewPrompt } from "./prompts.ts";
+import { LineThreadView, threadKey, useLineThreads, type LineAt } from "./LineAsk.tsx";
+import type { LineThreads } from "../../server/lineAsk.ts";
 
 interface FileBlock {
   file: string | null;
@@ -67,6 +69,8 @@ function DiffLine({
   nos,
   className,
   html,
+  onAsk,
+  asked = false,
 }: {
   line: string;
   nos: LineNos;
@@ -74,6 +78,10 @@ function DiffLine({
   /** Highlighted HTML for the line's code (without its +/-/space marker),
    * escaped by highlight.js. Absent: render the line as plain text. */
   html?: string;
+  /** Open this line's question box; absent where asking isn't offered. */
+  onAsk?: () => void;
+  /** The line has questions on it already. */
+  asked?: boolean;
 }) {
   return (
     <div className={className}>
@@ -81,6 +89,15 @@ function DiffLine({
         <span className="diff-num">{nos.old ?? ""}</span>
         <span className="diff-num diff-num-new">{nos.new ?? ""}</span>
       </span>
+      {onAsk && (
+        <button
+          className={`diff-ask${asked ? " asked" : ""}`}
+          title={asked ? "Show the questions on this line" : "Ask about this line"}
+          onClick={onAsk}
+        >
+          {asked ? "💬" : "?"}
+        </button>
+      )}
       {html === undefined ? (
         <span className="diff-text">{line || " "}</span>
       ) : (
@@ -114,6 +131,17 @@ function useHighlighted(file: string | null, lines: string[], nums: LineNos[], o
   }, [file, lines, nums, on]);
 }
 
+/** The hunk a line sits in, as context for a question about it, capped
+ * around the line for a long hunk. */
+export function hunkAround(lines: string[], i: number, max = 80): string {
+  let start = i;
+  while (start > 0 && !lines[start].startsWith("@@")) start--;
+  let end = i + 1;
+  while (end < lines.length && !lines[end].startsWith("@@") && !lines[end].startsWith("diff --git")) end++;
+  const from = Math.max(start, i - max / 2);
+  return lines.slice(from, Math.min(end, from + max)).join("\n");
+}
+
 /** Added and removed line counts for a file's collapsed header. */
 function changeCounts(lines: string[]) {
   let add = 0;
@@ -135,6 +163,7 @@ function DiffFileBlock({
   prNumber,
   collapsed,
   onToggle,
+  threads,
 }: {
   block: FileBlock;
   note?: string;
@@ -143,8 +172,17 @@ function DiffFileBlock({
   prNumber?: number;
   collapsed: boolean;
   onToggle: () => void;
+  /** Questions asked at lines of this diff; absent where asking isn't offered. */
+  threads?: LineThreads;
 }) {
   const b = block;
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const nums = useMemo(() => lineNumbers(b.lines), [b.lines]);
   // Only expanded files are highlighted, so collapsed ones cost nothing.
   const html = useHighlighted(b.file, b.lines, nums, !collapsed);
@@ -191,15 +229,27 @@ function DiffFileBlock({
             <span className="diff-del-count">−{del}</span> · show
           </button>
         ) : (
-          b.lines.map((line, i) => (
-            <DiffLine
-              key={i}
-              line={line}
-              nos={nums[i]}
-              className={`diff-line ${classify(line)}`}
-              html={html?.get(i)}
-            />
-          ))
+          b.lines.map((line, i) => {
+            const side = nums[i].new !== null ? "new" : "old";
+            const no = nums[i].new ?? nums[i].old;
+            const key = threads && sessionId && b.file && no !== null ? threadKey(b.file, side, no) : null;
+            const at: LineAt | null = key ? { file: b.file!, side, line: no!, quote: line.slice(1), hunk: hunkAround(b.lines, i) } : null;
+            return (
+              <Fragment key={i}>
+                <DiffLine
+                  line={line}
+                  nos={nums[i]}
+                  className={`diff-line ${classify(line)}`}
+                  html={html?.get(i)}
+                  onAsk={key ? () => toggle(key) : undefined}
+                  asked={!!(key && threads?.[key])}
+                />
+                {key && at && open.has(key) && (
+                  <LineThreadView sessionId={sessionId!} at={at} thread={threads?.[key]} onClose={() => toggle(key)} />
+                )}
+              </Fragment>
+            );
+          })
         )}
       </div>
     </div>
@@ -271,6 +321,7 @@ export function DiffView({
   sessionId,
   prNumber,
   startCollapsed,
+  ask = false,
 }: {
   diff: string;
   /** The review's comments per file (markdown), shown in the left column. */
@@ -285,8 +336,11 @@ export function DiffView({
   /** Files to start collapsed (churn: lockfiles, generated code). A file with
    * review comments starts open anyway, so a finding is never folded away. */
   startCollapsed?: (file: string) => boolean;
+  /** Offer "ask about this line" (a review pane's diffs). */
+  ask?: boolean;
 }) {
   const blocks = useMemo(() => parseFiles(diff), [diff]);
+  const threads = useLineThreads(ask ? sessionId : undefined);
   // Files the reader folded or unfolded, overriding the default.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   if (!diff.trim()) return <div className="placeholder">No diff.</div>;
@@ -324,6 +378,7 @@ export function DiffView({
             prNumber={prNumber}
             collapsed={collapsed}
             onToggle={() => b.file && setToggled((t) => ({ ...t, [b.file!]: !collapsed }))}
+            threads={ask && sessionId ? threads : undefined}
           />
         );
       })}

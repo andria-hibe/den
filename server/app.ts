@@ -5,7 +5,8 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { sessions, isValidGroupId, notepadPath } from "./sessions.ts";
+import { sessions, isValidGroupId, notepadPath, reviewDiffPath, reviewGuidePath } from "./sessions.ts";
+import { askLine, readThreads } from "./lineAsk.ts";
 import { worksLikeWorkspace } from "../shared/handover.ts";
 import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { freshStartPrompt } from "./instructions.ts";
@@ -877,6 +878,41 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   // Read-only from the client: only the review session writes the review and the guide.
+  // Questions about one line of a PR under review, each its own small chat.
+  app.get("/api/sessions/:id/line-threads", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    if (!session) {
+      reply.code(404);
+      return { error: "not_found" };
+    }
+    return { threads: readThreads(session.groupId) };
+  });
+  app.post("/api/sessions/:id/ask-line", async (req, reply) => {
+    const session = sessions.get((req.params as { id: string }).id);
+    const b = (req.body ?? {}) as { file?: unknown; side?: unknown; line?: unknown; quote?: unknown; hunk?: unknown; question?: unknown };
+    const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : null);
+    const file = str(b.file, 500);
+    const quote = str(b.quote, 2000);
+    const hunk = str(b.hunk, 20_000);
+    const question = str(b.question, 2000)?.trim();
+    const side = b.side === "old" || b.side === "new" ? b.side : null;
+    const line = typeof b.line === "number" && Number.isInteger(b.line) && b.line > 0 ? b.line : null;
+    if (!session || session.view !== "review") {
+      reply.code(404);
+      return { error: "not_a_review" };
+    }
+    if (!file || quote === null || hunk === null || !question || !side || !line) {
+      reply.code(400);
+      return { error: "bad_request" };
+    }
+    const thread = await askLine(
+      { groupId: session.groupId, cwd: session.cwd, pr: session.pr ?? null, diffPath: reviewDiffPath(session.groupId), guidePath: reviewGuidePath(session.groupId) },
+      { file, side, line, quote, hunk },
+      question,
+    );
+    return { thread };
+  });
+
   app.get("/api/review/notes/:groupId", async (req, reply) => {
     const { groupId } = req.params as { groupId: string };
     if (!isValidGroupId(groupId)) {

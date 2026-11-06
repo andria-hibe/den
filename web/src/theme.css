@@ -3035,3 +3035,74 @@ body {
   border-color: var(--peach);
   white-space: nowrap;
 }
+
+/* Asking about one line of a PR (LineAsk.tsx): a "?" beside the numbers on
+   hover, and the line's questions and answers in a card under it. */
+.diff-ask {
+  flex: none;
+  width: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--lilac);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+}
+.diff-line:hover .diff-ask,
+.diff-ask:focus-visible,
+.diff-ask.asked {
+  opacity: 1;
+}
+.line-thread {
+  position: sticky;
+  left: 0;
+  width: min(680px, calc(100% - 24px));
+  margin: 4px 0 8px 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  font-size: 12px;
+  white-space: normal;
+  color: var(--ink);
+  background: var(--bg-panel);
+  border: 2px solid var(--lilac);
+  border-radius: 10px;
+}
+.line-q {
+  font-weight: 700;
+}
+.line-a p {
+  margin: 0 0 4px;
+}
+.line-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+.line-err {
+  color: var(--pink-deep);
+}
+.line-ask-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.line-ask-input {
+  flex: 1;
+  resize: vertical;
+  min-height: 26px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+.line-ask-close {
+  color: var(--ink-soft);
+}

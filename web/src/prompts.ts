@@ -273,3 +273,13 @@ export function crewAskPrompt(helper: CrewHelper, pane: CrewPane): CrewAsk {
       return ask(`Ask ${helper} now and tell me briefly what it found.`);
   }
 }
+
+/** Hands a line question and its answer (asked beside the diff, in its own
+ * small chat) to the review session. */
+export function lineAnswerPrompt(file: string, line: number, transcript: string): string {
+  return (
+    `About ${file}:${line}, I asked a quick question beside the diff and got this:\n` +
+    `${transcript}\n` +
+    `Take it into account in the review if it changes anything.`
+  );
+}

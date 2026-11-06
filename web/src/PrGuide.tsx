@@ -49,6 +49,7 @@ function Section({
           noteState={noteState}
           sessionId={sessionId}
           prNumber={prNumber}
+          ask
           startCollapsed={(f) => churnSection || isChurnPath(f)}
         />
       )}
@@ -146,6 +147,7 @@ export function PrGuideTab({
             noteState={noteState}
             sessionId={sessionId}
             prNumber={prNumber}
+            ask
             startCollapsed={isChurnPath}
           />
         </details>
