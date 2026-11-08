@@ -50,6 +50,14 @@ describe("myPrInstruction", () => {
     expect(isAscii(bare)).toBe(true);
     expect(bare).toContain("the developer's own pull request, inside");
   });
+
+  it("keeps a handover when given a notepad, which starting fresh picks up from", () => {
+    expect(text).not.toContain("Read it before you start");
+    const kept = myPrInstruction(123, "org/repo", "b", NOTEPAD);
+    expect(isAscii(kept)).toBe(true);
+    expect(kept).toContain(NOTEPAD);
+    expect(kept).toContain("Read it before you start");
+  });
 });
 
 describe("lookInstruction", () => {

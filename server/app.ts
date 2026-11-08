@@ -710,7 +710,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       return { error: "not_running", message: "Start the session to run its done check." };
     }
     // Only panes with the whole crew as subagents (kitAgents) can run it.
-    if (!worksLikeWorkspace(session) && session.view !== "mypr") {
+    if (!worksLikeWorkspace(session)) {
       reply.code(409);
       return { error: "not_a_kit", message: "Only a work session can run the done check." };
     }

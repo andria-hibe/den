@@ -520,12 +520,14 @@ export function myPrInstruction(
   pr: number | null,
   repo: string | null,
   branch: string | null,
+  notepad = "",
   manager = true,
 ): string {
   const relay = manager ? `\n${managerRelayRule()}` : "";
   const which = `pull request${pr ? ` #${pr}` : ""}${repo ? ` (${repo})` : ""}`;
   const where = branch ? `, checked out on branch ${branch}` : "";
   return (
+    (notepad ? `${progressInstruction(notepad)}\n` : "") +
     `You're working on the developer's own ${which}${where}, inside a tool ` +
     `called "den". den shows the PR's description, reviews, and comments beside ` +
     `you, and the developer pastes individual comments into this session for ` +

@@ -1061,7 +1061,8 @@ class SessionManager {
   private runIdleHandover(s: DenSession, reason: "quiet" | "fresh" = "quiet"): Promise<boolean> {
     const id = s.claudeSessionId;
     if (!id || !hasSession(id)) return Promise.resolve(true); // nothing said in the pane yet
-    const notepad = notepadPath(s.groupId);
+    // The fork may only Edit, and a my-PR pane opened before it kept a handover has no notepad.
+    const notepad = this.ensureNotepad(s.groupId);
     s.handoverRunning = true;
     const startedAt = Date.now();
     s.lastHandoverAt = startedAt;
@@ -1474,10 +1475,13 @@ class SessionManager {
     if (s.view === "manager") return this.managerArgs(s);
     const settings = ["--settings", JSON.stringify(paneSettings(s.groupId, { inbox: false, crew: false }))];
     if (s.view === "mypr") {
-      const prompt = myPrInstruction(s.pr, s.prRepo, s.branch);
+      // Like a workspace, the notepad stays for the developer when the handover is off.
+      const notepad = this.ensureNotepad(s.groupId);
+      const prompt = myPrInstruction(s.pr, s.prRepo, s.branch, s.handover ? notepad : "");
       const hint = setupHint(s.cwd);
       return [
         "--settings", JSON.stringify(paneSettings(s.groupId)),
+        "--add-dir", PROGRESS_DIR,
         "--add-dir", ensureChecksDir(),
         "--agents", JSON.stringify(kitAgents(fableHasRoom())),
         "--append-system-prompt", hint ? `${prompt}\n${hint}` : prompt,
@@ -1989,7 +1993,7 @@ class SessionManager {
    * my-PR panes. */
   stackTargets(baseOverride: string | null): StackTarget[] {
     return [...this.sessions.values()]
-      .filter((s) => (worksLikeWorkspace(s) || s.view === "mypr") && s.status === "running")
+      .filter((s) => worksLikeWorkspace(s) && s.status === "running")
       .map((s) => ({ id: s.id, groupId: s.groupId, cwd: s.cwd, base: repoBaseName(s.cwd, baseOverride) }));
   }
 

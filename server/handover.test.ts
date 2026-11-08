@@ -11,12 +11,12 @@ describe("waitingItems", () => {
 
 describe("canStartFresh", () => {
   const pane = { shell: false, role: "main", look: false, view: null as string | null, owned: false, handover: true };
-  it("covers workspaces, a PR taken on as your own, and Fox, but no other pane", () => {
+  it("covers workspaces, your own PRs, a PR taken on as your own, and Fox, but no other pane", () => {
     expect(canStartFresh(pane)).toBe(true);
     expect(canStartFresh({ ...pane, view: "review", owned: true })).toBe(true);
     expect(canStartFresh({ ...pane, view: "manager" })).toBe(true);
     expect(canStartFresh({ ...pane, view: "review" })).toBe(false);
-    expect(canStartFresh({ ...pane, view: "mypr", owned: true })).toBe(false);
+    expect(canStartFresh({ ...pane, view: "mypr" })).toBe(true);
     expect(canStartFresh({ ...pane, look: true })).toBe(false);
     expect(canStartFresh({ ...pane, handover: false })).toBe(false);
   });

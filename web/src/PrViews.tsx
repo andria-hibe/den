@@ -470,17 +470,19 @@ export function PrReviewView({
   );
 }
 
-/** Your own PR: description + colleagues' reviews/comments on top, session below. */
+/** Your own PR: handover, description + colleagues' reviews/comments on top, session below. */
 export function PrMyView({
   repo,
   number,
   sessionId,
+  handover,
   header,
   terminal,
 }: {
   repo: string;
   number: number;
   sessionId: string;
+  handover: ReactNode;
   header: ReactNode;
   terminal: ReactNode;
 }) {
@@ -488,6 +490,7 @@ export function PrMyView({
   const [infoFrac, setInfoFrac] = usePersistentNumber("den.myPrFrac", 0.42);
   // Persisted because the my-PR view remounts on every session switch.
   const [tab, setTab] = usePersistentString("den.myPrTab", "overview", [
+    "handover",
     "overview",
     "inline",
   ] as const);
@@ -500,6 +503,14 @@ export function PrMyView({
         <div className="pr-info-head">
           <div className="pr-info-title">{detail?.title ?? `PR #${number}`}</div>
           <div className="ticket-look-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "handover"}
+              className={`look-tab${tab === "handover" ? " active" : ""}`}
+              onClick={() => setTab("handover")}
+            >
+              Handover
+            </button>
             <button
               role="tab"
               aria-selected={tab === "overview"}
@@ -518,23 +529,27 @@ export function PrMyView({
             </button>
           </div>
         </div>
-        <div className="pr-info-scroll">
-          {!detail ? (
-            <div className="loading-row">
-              <Fox pose="walk" size={20} /> loading the PR…
-            </div>
-          ) : tab === "overview" ? (
-            <>
-              <h4>Description</h4>
-              <Md text={detail.body || "_(no description)_"} />
-              <hr />
-              <h4>Reviews &amp; comments</h4>
-              <Notes detail={detail} sessionId={sessionId} />
-            </>
-          ) : (
-            <InlineComments detail={detail} sessionId={sessionId} onChanged={reload} />
-          )}
-        </div>
+        {tab === "handover" ? (
+          <div className="pr-tab-fill">{handover}</div>
+        ) : (
+          <div className="pr-info-scroll">
+            {!detail ? (
+              <div className="loading-row">
+                <Fox pose="walk" size={20} /> loading the PR…
+              </div>
+            ) : tab === "overview" ? (
+              <>
+                <h4>Description</h4>
+                <Md text={detail.body || "_(no description)_"} />
+                <hr />
+                <h4>Reviews &amp; comments</h4>
+                <Notes detail={detail} sessionId={sessionId} />
+              </>
+            ) : (
+              <InlineComments detail={detail} sessionId={sessionId} onChanged={reload} />
+            )}
+          </div>
+        )}
       </div>
       <Splitter
         dir="y"

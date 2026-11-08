@@ -564,8 +564,12 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   ticket (`ticketBrief`, sent as `notepadSeed`) to the group's notepad path so
   `lookInstruction` can point the session at it — the same file on restart,
   deleted by `remove()`. It's a reference file, not a progress log, and the
-  look layout doesn't render it. A **my-PR** pane has no notepad (its layout
-  has nowhere to show one; the PR's commits are the record).
+  look layout doesn't render it. A **my-PR** pane keeps a handover like a
+  workspace (`worksLikeWorkspace`), so it can start fresh and clock out onto
+  a fresh chat: `singlePaneArgs` ensures its notepad and passes it to
+  `myPrInstruction` while the handover is on, and `PrMyView` shows it on a
+  Handover tab. A my-PR pane opened before that has no notepad until its
+  next start; `runIdleHandover` creates one, since its fork may only Edit.
 The rail shows only `role === "main"`. The frontend polls `/api/sessions` (~4s)
 to sync names/status/attention — the poll **only merges existing rows, never
 adds new ones**, so any code that creates a session out-of-band must refetch the
@@ -620,7 +624,8 @@ when the notepad is older than the pane's last output or transcript write
 (`handoverBehind`, shared with Hedgehog's round), and leaves the pane
 running with a `handover_failed` 409 if that fails; Start my day's wakes
 skip it, since clock out just wrote the handovers. Only panes `canStartFresh`
-(`shared/handover.ts`: a workspace main with its handover on). Route:
+(`shared/handover.ts`: a workspace main, my-PR, or taken-on review pane with
+its handover on, or Fox). Route:
 `POST /api/sessions/:id/restart` with `{ fresh: true }`; UI: the header's
 `FreshStartButton` (confirm in a `ConfirmCard` under the button, like
 `OwnPrToggle`'s: inline confirm text in the never-shrinking `.term-actions`
@@ -1217,8 +1222,8 @@ developer's day across the other sessions instead of them being the glue.
   doesn't group sits in a collapsed block at the bottom, so no change is hidden.
   Guide and review are separate asks: `build guide` on the Guide tab, `review in
   session` on the Review tab; the auto pre-review asks for both, guide first.
-- **Inline comments → Claude** (your PRs). The my-PR info pane has **two tabs**
-  (`PrMyView`): *Description & comments* (description + top-level reviews/comments)
+- **Inline comments → Claude** (your PRs). The my-PR info pane has a *Handover* tab
+  (see Data model) and **two PR tabs** (`PrMyView`): *Description & comments* (description + top-level reviews/comments)
   and *Inline comments* — line-level review comments grouped by file, each rendered
   **with the diff hunk it points at** (anchored line marked) so you see the code
   it's about. Every review / comment / inline comment has a **"→ Claude"** button

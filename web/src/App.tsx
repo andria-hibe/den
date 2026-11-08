@@ -1000,6 +1000,13 @@ export function App() {
             repo={active.prRepo}
             number={active.pr}
             sessionId={active.id}
+            handover={
+              <NotepadPane
+                groupId={active.groupId}
+                handover={active.handover}
+                onHandover={(on) => setHandover(active.id, on)}
+              />
+            }
             header={renderHeader(active)}
             terminal={
               <TerminalView

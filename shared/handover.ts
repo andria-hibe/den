@@ -77,10 +77,11 @@ type PaneKind = {
 };
 
 /** A pane that works like a workspace and so writes a handover: a workspace
- * main pane, or a review pane the developer has taken on as their own PR. */
+ * main pane, a my-PR pane, or a review pane the developer has taken on as
+ * their own PR. */
 export function worksLikeWorkspace(s: PaneKind): boolean {
   if (s.shell || s.role !== "main" || s.look) return false;
-  return !s.view || (s.view === "review" && !!s.owned);
+  return !s.view || s.view === "mypr" || (s.view === "review" && !!s.owned);
 }
 
 /** Only a pane keeping a handover, or the Manager (which always keeps one),
