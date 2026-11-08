@@ -3424,6 +3424,13 @@ body {
   max-height: 160px;
   overflow: auto;
 }
+.crew-run-report {
+  max-height: min(420px, 55vh);
+}
+.crew-run-cmds {
+  max-height: 64px;
+  overflow: auto;
+}
 .crew-run-cmd {
   display: block;
   font-size: 10px;

@@ -8,30 +8,35 @@ const minutes = (r: CrewRun) =>
   r.startedAt && r.endedAt ? `${Math.max(1, Math.round((r.endedAt - r.startedAt) / 60_000))} min` : "";
 const model = (m: string | null) => (m ? m.replace(/^claude-/, "").replace(/-\d+(-\d+)?$/, "") : "");
 
-/** What a helper was asked, the commands it ran, and what it reported. */
+/** What a helper reported, what it was asked, and the commands it ran. */
 export function CrewRunDetails({ run }: { run: CrewRun }) {
   return (
     <div className="crew-run-body">
+      <div className="crew-run-label">Reported</div>
+      <div
+        className="md crew-run-text crew-run-report"
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(run.report || "(no report)") }}
+      />
       <div className="crew-run-label">Asked</div>
       <div className="crew-run-text">{run.brief || "(not recorded)"}</div>
       {run.commands.length > 0 && (
         <>
-          <div className="crew-run-label">Ran</div>
-          {run.commands.map((c, i) => (
-            <code key={i} className="crew-run-cmd">
-              {c}
-            </code>
-          ))}
+          <div className="crew-run-label">Ran ({run.commands.length})</div>
+          <div className="crew-run-cmds">
+            {run.commands.map((c, i) => (
+              <code key={i} className="crew-run-cmd">
+                {c}
+              </code>
+            ))}
+          </div>
         </>
       )}
-      <div className="crew-run-label">Reported</div>
-      <div className="md crew-run-text" dangerouslySetInnerHTML={{ __html: renderMarkdown(run.report || "(no report)") }} />
     </div>
   );
 }
 
-/** The helpers this pane called, newest first: what each was asked, the
- * commands it ran, and what it reported, so a finding can be traced to its run. */
+/** The helpers this pane called, newest first: what each reported, what it
+ * was asked, and the commands it ran, so a finding can be traced to its run. */
 export function CrewRuns({ sessionId }: { sessionId: string }) {
   const [runs, setRuns] = useState<CrewRun[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);

@@ -938,7 +938,9 @@ developer's day across the other sessions instead of them being the glue.
   (kept across restarts, removed with the workspace), and `summarizeRun`
   reads each run's transcript for its brief, the shell commands it ran, its
   model, tool count, duration, and report (the SubagentHandback message
-  when it handed one back).
+  when it handed one back). `CrewRunDetails` (here and in the Checks tab)
+  shows the report first and tallest, then the brief, then the commands in
+  a short scroll box, since the report is what the developer reads.
 - **Clock out**: the topbar's "clock out" opens `ClockOutDialog`,
   fed by `GET /api/manager/clockout` (`sessions.clockOutVerdicts`: every
   running Claude pane, reviews, my-PR and look panes included, with pure
