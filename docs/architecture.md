@@ -122,7 +122,14 @@ WebSocket; everything else is REST.
   Fox and a review pane) hands text the developer pastes elsewhere over in a
   fenced code block, never a block quote: Claude Code's TUI hard-wraps, draws
   a bar on quote lines, and drops backticks, so screen copies came out
-  broken, while `/copy` offers each block verbatim. **`ticketDiscussionRule()`**
+  broken, while `/copy` offers each block verbatim. **`prDescriptionRule()`**
+  (house rule 5, 2026-11-09 at andria's ask) shapes a PR description for
+  the human reviewer: Description (200 words at most), then Testing with
+  Manual steps (concise, for an engineer who knows the app) and Risks a
+  person should test; then a collapsed `<details>` "Agent notes" section
+  for what only an agent needs, What was verified included, titled with `&#x1F916;` (GitHub draws the robot emoji, and the
+  prompt stays ASCII). Emoji are allowed in PR descriptions only; the ready
+  check's description update follows the same shape. **`ticketDiscussionRule()`**
   (workspace, my-PR, and look panes; the review pane's `REVIEW_CHECKS` and
   Squirrel say the same) has a pane read the Linear ticket's **comments**
   as well as its description, with its Linear tools, since den only hands

@@ -343,8 +343,9 @@ export function doneCheckPrompt(base: string | null, resultPath: string, scriptP
     `value, or undo a change it says nobody asked for, only where you agree, and list ` +
     `what you cut or undid. For each PR comment or thread still waiting on an answer, ` +
     `make the change or draft a reply for me to post. If there is a PR, bring its ` +
-    `description up to date: what and why, how it was tested (commands and results ` +
-    `from what the check ran), and the blast-radius risks a human must test; for ` +
+    `description up to date in the shape your house rules give: what and why, the ` +
+    `blast-radius risks a person must test, and in its agent notes what was ` +
+    `verified (the commands and results the check ran, marked as run by an agent); for ` +
     `screenshots of a visual change, give me the file paths to attach. Leave the PR ` +
     `a draft, and if there is no PR yet, don't open one: tell me. If ` +
     `it returned an error or a helper failed, say so: that part wasn't checked. Don't ` +

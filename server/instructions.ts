@@ -193,7 +193,7 @@ export function houseRules(): string {
     `1. Write it in plain ASCII. Use "-" for a dash, "'" for an apostrophe, '"' ` +
     `for a quote, "->" for an arrow, and "..." for an ellipsis. Never write an ` +
     `em dash, an en dash, a curly quote, a real arrow, a non-breaking space, or ` +
-    `an emoji.\n` +
+    `an emoji, except that a PR description may use emoji.\n` +
     `2. Open every pull request as a draft: always pass --draft to ` +
     `\`gh pr create\`. Never run \`gh pr ready\` or mark a PR ready for review ` +
     `any other way. The developer decides when reviewers are notified.\n` +
@@ -202,7 +202,28 @@ export function houseRules(): string {
     `run the same commit again with the sandbox disabled. If that fails too, ` +
     `ask the developer to unlock or approve the signing agent, then retry the ` +
     `commit yourself. Don't hand them a script to run instead.\n` +
-    `4. ${pasteRule()}`
+    `4. ${pasteRule()}\n` +
+    `5. ${prDescriptionRule()}`
+  );
+}
+
+/** The shape of a PR description: a short body for the human reviewer, and
+ * what only an agent needs folded away at the end. */
+export function prDescriptionRule(): string {
+  return (
+    `Write a PR description for the human reviewer, in plain, short sentences, ` +
+    `leaving out what the code already shows. "## Description", at most 200 ` +
+    `words: what changed and why, the few decisions a reviewer must judge, and ` +
+    `anything accepted and left as is. "## Testing": **Manual steps**, as long ` +
+    `as the change needs but concise, for another engineer who knows the app ` +
+    `well (no basic steps such as logging in or finding a page), then **Risks a ` +
+    `person should test** (the blast-radius items an agent can't check). Put ` +
+    `what an agent needs and a reviewer doesn't last, in a collapsed section: ` +
+    `**What was verified** (each check, and whether an agent or a person ran ` +
+    `it), the files, patterns followed, invariants such as check or lock ` +
+    `order, what's out of scope, and how to run the tests locally. Write it as ` +
+    `<details><summary><b>&#x1F916; Agent notes</b></summary>, a blank line, ` +
+    `the notes, then </details>. GitHub draws &#x1F916; as the robot emoji.`
   );
 }
 
