@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clockOutBlockers } from "./sessions.ts";
+import { clockOutBlockers, draftAfter } from "./sessions.ts";
 import { houseRules, isAscii, lookInstruction, myPrInstruction, denIssueRule, reviewInstruction, testingRules, commentRules, workspaceInstruction, managerInstruction, managerRelayRule, buildManagerPermissions } from "./instructions.ts";
 import { crewRule, kitAgents, managerAgents } from "./crew.ts";
 
@@ -133,6 +133,17 @@ describe("the crew", () => {
     expect(kitAgents(true).owl.model).toBe("claude-fable-5-1");
     expect(kitAgents(false).owl.model).toBe("opus");
     expect(workspaceInstruction(NOTEPAD, true)).toContain(crewRule());
+  });
+});
+
+describe("draftAfter", () => {
+  it("counts only text left unsent in the prompt", () => {
+    expect(draftAfter(0, "\x1b[<64;40;12M\x1b[<0;10;5m\x1b[B\x1b[I\x1b]11;rgb:0000/0000/0000\x1b\\")).toBe(0);
+    expect(draftAfter(0, "\x1b[A")).toBe(1);
+    expect(draftAfter(0, "hi\x7f\x7f")).toBe(0);
+    expect(draftAfter(0, "hi")).toBe(2);
+    expect(draftAfter(2, "\x1b[200~a\rb\x1b[201~")).toBe(5);
+    expect(draftAfter(5, "\r")).toBe(0);
   });
 });
 

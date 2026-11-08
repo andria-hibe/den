@@ -1604,6 +1604,13 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch (err) {
       return linearError(reply, err);
     }
+    let fox = sessions.manager();
+    const running = fox?.status === "running";
+    const route = running ? sessions.freshBriefRoute() : null;
+    if (running && !route) {
+      reply.code(409);
+      return { error: "fox_busy", message: sessions.freshBriefBlocker() };
+    }
     mkdirSync(MANAGER_DIR, { recursive: true });
     writeFileSync(`${BUG_QUEUE_PATH}.tmp`, JSON.stringify(queue));
     renameSync(`${BUG_QUEUE_PATH}.tmp`, BUG_QUEUE_PATH);
@@ -1612,25 +1619,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       queue.queue.slice(0, SCOUT_BUGS).map((i) => i.identifier),
       queue.triage.slice(0, SCOUT_TRIAGE).map((i) => i.identifier),
     );
-    let fox = sessions.manager();
-    if (!fox || fox.status !== "running") {
+    if (route) {
+      if (route.via === "paste") await paste(route.manager, prompt, true);
+      else tellPane(route.manager.groupId, prompt);
+    } else {
       fox = await sessions.startManager();
       if (!fox || fox.status !== "running") {
         reply.code(500);
         return { error: "manager_not_started", message: "Fox didn't start." };
       }
       void deliverStart(fox, prompt);
-    } else {
-      const route = sessions.freshBriefRoute();
-      if (!route) {
-        reply.code(409);
-        return {
-          error: "fox_busy",
-          message: "Fox is waiting on you, has a draft in its prompt, or hasn't had a message yet: talk to Fox, then start again.",
-        };
-      }
-      if (route.via === "paste") await paste(fox, prompt, true);
-      else tellPane(fox.groupId, prompt);
     }
     saveBugState({ ...bugState(), on: true, scoutedAt: queue.fetchedAt });
     return bugView();

@@ -633,9 +633,11 @@ pushed its buttons off screen). The new conversation then gets its first
 message **through Fox** (andria's pick, 2026-11-06), so it hears anything
 new Fox knows for it: `freshBriefRoute` types `freshBriefPrompt` into Fox
 when its turn state is done and the developer has no draft in its prompt
-(`DenSession.draft`, from typed input: set by text but not escape
-  sequences or backspace, cleared by Enter or
-Ctrl+C), or leaves it in Fox's inbox while Fox works. Fox waiting on the
+(`DenSession.draft`: `draftAfter` counts typed characters, minus
+backspaces, ignoring escape sequences (keys, focus and SGR or X10 mouse
+reports, OSC and DCS replies; a bracketed paste counts as text), zeroed by
+Enter or Ctrl+C; Up, Ctrl+R, and Ctrl+Y count as a draft, and editing keys
+it can't follow leave the count, so it errs toward a draft), or leaves it in Fox's inbox while Fox works. Fox waiting on the
 developer, a draft, or no Fox: the route pastes and submits
 `freshStartPrompt` (read the handover, say where it stands, carry on)
 into the pane itself, and so does a timer when the pane still has no turn
@@ -878,7 +880,8 @@ developer's day across the other sessions instead of them being the glue.
   else, PR-linked, or already-open-in-den tickets, with why), writes it to
   `BUG_QUEUE_PATH`, and hands Fox `bugScoutPrompt`: ids only, typed in
   when Fox's turn is done, left in its inbox while it works, refused
-  (`fox_busy`) while it waits on the developer (`freshBriefRoute`); a Fox
+  (`fox_busy`, naming the cause from `freshBriefBlocker`) while it waits on
+  the developer (`freshBriefRoute`), before the queue file is touched; a Fox
   that isn't running is started for it. Fox runs the **`den-bugs`**
   workflow (`BUGS_SCRIPT`, written to `~/.den/workflows/den-bugs.js`, read
   only): a Sonnet scout at high effort per bug (cause, files, plan, S/M/L,

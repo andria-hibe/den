@@ -294,6 +294,32 @@ export function chooseResume(
   return { resume: false, id: randomUUID() };
 }
 
+// One token of terminal input: a bracketed paste (its body captured), an
+// escape sequence (X10 mouse report, OSC or DCS reply, CSI with any private
+// prefix such as an SGR mouse report "\x1b[<", SS3 key, or Alt plus a key),
+// or one character.
+const INPUT_TOKENS =
+  /\x1b\[200~([\s\S]*?)\x1b\[201~|\x1b(?:\[M[\s\S]{3}|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|\[[0-?]*[ -/]*[@-~]|O.|[\s\S])?|[\s\S]/gu;
+// Up (history), Ctrl+R (history search), and Ctrl+Y (yank) can fill the prompt without typing.
+const FILLS_PROMPT = new Set(["\x1b[A", "\x1bOA", "\x12", "\x19"]);
+
+/** About how many characters the developer's input `data` leaves unsent in
+ * the prompt, from `len` before it. Enter and Ctrl+C empty it and backspace
+ * takes one off; keys, focus and mouse reports, and terminal replies add
+ * nothing. Line-editing keys den can't follow leave it as it is, so it errs
+ * toward a draft: den must never submit over one. */
+export function draftAfter(len: number, data: string): number {
+  for (const m of data.matchAll(INPUT_TOKENS)) {
+    const t = m[0];
+    if (m[1] !== undefined) len += [...m[1]].length;
+    else if (t === "\r" || t === "\x03") len = 0;
+    else if (t === "\x7f" || t === "\b") len = Math.max(0, len - 1);
+    else if (FILLS_PROMPT.has(t)) len = Math.max(len, 1);
+    else if (t >= " ") len += 1;
+  }
+  return len;
+}
+
 /** Why a pane must stay up at clock out (#46), or [] when it's safe to end.
  * The running sessions' own list: never end one mid-work, mid-merge, with
  * something staged, or while CI is running. A question waiting for the
@@ -748,15 +774,18 @@ class DenSession {
     };
   }
 
-  /** The developer may have left a draft in the prompt: their last typed
-   * input submitted nothing and didn't clear it. Den never submits over one. */
-  draft = false;
+  /** About how many characters the developer has typed into the prompt and
+   * not sent (see draftAfter). */
+  private draftLen = 0;
+
+  /** The developer may have left a draft in the prompt. Den never submits over one. */
+  get draft(): boolean {
+    return this.draftLen > 0;
+  }
 
   /** Input the developer typed in the terminal (not den's own pastes). */
   typed(data: string) {
-    if (/[\r\x03]/.test(data)) this.draft = false;
-    // Focus reports, arrow keys, and backspace are not text.
-    else if (/[^\x7f]/.test(data.replace(/\x1b(\[[0-9;?]*[ -/]*[@-~]|O.|.)?/g, ""))) this.draft = true;
+    this.draftLen = draftAfter(this.draftLen, data);
     this.write(data);
   }
 
@@ -1649,6 +1678,15 @@ class SessionManager {
     // A pinned id with no transcript starts a new conversation (chooseResume).
     s.claudeSessionId = randomUUID();
     return this.restart(id);
+  }
+
+  /** Why freshBriefRoute has no route, for the developer. */
+  freshBriefBlocker(): string {
+    const m = this.manager();
+    if (!m || m.status !== "running") return "Fox isn't running.";
+    if (m.draft) return "Fox's prompt may hold text you haven't sent: send it, or press Ctrl+C in Fox to clear it, then start again.";
+    if (m.turn?.state === "needs-you") return "Fox is waiting on you: answer it, then start again.";
+    return "Fox hasn't had a message yet: say hello to Fox, then start again.";
   }
 
   /** How a pane the developer just started fresh gets its first message:
