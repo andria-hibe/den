@@ -1137,7 +1137,8 @@ developer's day across the other sessions instead of them being the glue.
   host `turbo:dev`. Two full runn stacks can't run at once (a fixed jaeger
   port), so `runn up` fails while another worktree's stack is up. The workspace pane's system prompt
   gets `setupHint`: the command and whether the worktree looks set up, so
-  Claude suggests it when something fails for environment reasons. Setup is
+  Claude suggests it when something fails for environment reasons. A my-PR
+  pane (your own PR, opened from GitHub) gets the same buttons and hint. Setup is
   per worktree (several of the maintainer's were never set up), so it's a
   button, not a one-time step.
 - **Clean up the work repo with Claude** (issue 29): the rail's beaver button (Beaver, the clean-up worker)

@@ -1474,11 +1474,13 @@ class SessionManager {
     if (s.view === "manager") return this.managerArgs(s);
     const settings = ["--settings", JSON.stringify(paneSettings(s.groupId, { inbox: false, crew: false }))];
     if (s.view === "mypr") {
+      const prompt = myPrInstruction(s.pr, s.prRepo, s.branch);
+      const hint = setupHint(s.cwd);
       return [
         "--settings", JSON.stringify(paneSettings(s.groupId)),
         "--add-dir", ensureChecksDir(),
         "--agents", JSON.stringify(kitAgents(fableHasRoom())),
-        "--append-system-prompt", myPrInstruction(s.pr, s.prRepo, s.branch),
+        "--append-system-prompt", hint ? `${prompt}\n${hint}` : prompt,
       ];
     }
     if (s.look) {

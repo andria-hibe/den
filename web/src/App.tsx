@@ -522,14 +522,14 @@ export function App() {
             onSwitch={(on) => setOwned(s.id, on)}
           />
         )}
-        {(opts?.workspace || s.owned) && (
+        {(opts?.workspace || s.owned || s.view === "mypr") && (
           <SetupButton
             sessionId={s.id}
             status={s.status}
             onSetup={(id) => launchApp(id, "setup")}
           />
         )}
-        {(opts?.workspace || s.owned) && (
+        {(opts?.workspace || s.owned || s.view === "mypr") && (
           <AppRunButton
             sessionId={s.id}
             status={s.status}
