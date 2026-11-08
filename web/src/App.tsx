@@ -11,6 +11,7 @@ import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { useClockOutRound } from "./useClockOutRound.ts";
 import type { ClockOutRound } from "../../server/sessions.ts";
 import { TicketDialog } from "./TicketDialog.tsx";
+import { BugDialog } from "./BugDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
@@ -35,7 +36,7 @@ import { useNotifications } from "./useNotifications.ts";
 import { useSessions } from "./useSessions.ts";
 import { useWorkData } from "./WorkData.tsx";
 import type { PullRequest } from "../../server/github.ts";
-import type { LinearIssue } from "../../server/linear.ts";
+import type { BugIssue, LinearIssue } from "../../server/linear.ts";
 import { cleanupPrompt, denPrompt, ticketBrief, ticketDetails, ticketNotesSeed, ticketPrompt } from "./prompts.ts";
 import { WorktreeCleanupDialog, type StackToStop } from "./WorktreeCleanupDialog.tsx";
 import type { WorktreeInfo } from "../../server/git.ts";
@@ -169,7 +170,10 @@ export function App() {
   const [ticketModal, setTicketModal] = useState<{
     issue: LinearIssue;
     startAtWork: boolean;
+    /** A bug's Linear id, to assign it to the developer once they start work. */
+    assign?: string;
   } | null>(null);
+  const [bugModal, setBugModal] = useState<{ issue: BugIssue; note: string | null } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   // The PR whose review session should start on its own, and how (#11).
   const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "guide" } | null>(null);
@@ -270,7 +274,7 @@ export function App() {
   useKeyboardShortcuts({
     rail,
     activeId,
-    blocked: showNew || !!ticketModal || !!prModal || !!cleanup || editingId !== null,
+    blocked: showNew || !!ticketModal || !!bugModal || !!prModal || !!cleanup || editingId !== null,
     onNewClaude: () => setShowNew(true),
     onNewShell: () => addSession({ shell: true }),
     onClose: closeAndOfferCleanup,
@@ -1114,6 +1118,7 @@ export function App() {
               foldTitle={`Fold the work panel (${MOD}+\\)`}
               onOpenTicket={openTicket}
               onOpenPr={openPr}
+              onOpenBug={(issue, note) => setBugModal({ issue, note })}
               ticketColor={ticketColor}
               prColor={prColor}
             />
@@ -1147,7 +1152,33 @@ export function App() {
           startAtWork={ticketModal.startAtWork}
           onClose={() => setTicketModal(null)}
           onLook={lookAtTicket}
-          onWork={workOnTicket}
+          onWork={async (issue, env, base) => {
+            const assign = ticketModal.assign;
+            setTicketModal(null);
+            // Assigned first, so a failure to start the session isn't hidden behind this one's banner.
+            if (assign) {
+              try {
+                await api("/api/bugs/assign", { method: "POST", body: JSON.stringify({ uuid: assign }) });
+              } catch (e) {
+                setErrMsg(`Couldn't assign ${issue.identifier} to you in Linear (${(e as Error).message}): assign it yourself.`);
+              }
+            }
+            workOnTicket(issue, env, base);
+          }}
+        />
+      )}
+
+      {bugModal && (
+        <BugDialog
+          issue={bugModal.issue}
+          note={bugModal.note}
+          onClose={() => setBugModal(null)}
+          onWork={(issue) => {
+            setBugModal(null);
+            const existing = sessionForTicket(issue, { work: true });
+            if (existing) selectSession(existing.id);
+            else setTicketModal({ issue, startAtWork: true, assign: issue.assignee?.isMe ? undefined : issue.uuid });
+          }}
         />
       )}
 

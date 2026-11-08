@@ -1695,6 +1695,25 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     };
   });
 
+  // Assign one bug to the developer, from the Bugs tab's "assign to me and
+  // work on it"; the client then opens the ticket's workspace as usual.
+  app.post("/api/bugs/assign", async (req, reply) => {
+    const uuid = ((req.body ?? {}) as { uuid?: unknown }).uuid;
+    if (typeof uuid !== "string" || !/^[0-9a-f-]{36}$/i.test(uuid)) {
+      reply.code(400);
+      return { error: "uuid_required" };
+    }
+    try {
+      if (!(await assignToMe([uuid])).length) {
+        reply.code(502);
+        return { error: "not_assigned", message: "Linear didn't assign it." };
+      }
+    } catch (err) {
+      return linearError(reply, err);
+    }
+    return { ok: true };
+  });
+
   // Turn bug buster off: no more scouting or starting. Bug sessions already
   // at work carry on, and claimed bugs not yet started are let go.
   app.post("/api/bugs/stop", async () => {

@@ -31,7 +31,7 @@ interface BugView {
 /** Bug buster (server/bugBuster.ts): the developer turns it on when they're
  * on rapid response, claims bugs from the ranked queue, and reads the triage
  * cards; Fox scouts and leads the bug sessions. */
-export function BugsTab() {
+export function BugsTab({ onOpenBug }: { onOpenBug: (issue: BugIssue, note: string | null) => void }) {
   const [view, setView] = useState<BugView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -149,31 +149,34 @@ export function BugsTab() {
             <span className="pr-count">{queue.length}</span>
           </div>
           {!queue.length && <div className="placeholder">none right now</div>}
-          {queue.map((b) => (
-            <BugRow
-              key={b.identifier}
-              bug={b}
-              card={cards.get(b.identifier)}
-              status={
-                held.has(b.identifier) ? `not started: ${held.get(b.identifier)}`
-                : atWork.has(b.identifier) ? "at work"
-                : started.has(b.identifier) ? "started"
-                : claimed.has(b.identifier) ? "claimed, waiting for a slot"
-                : null
-              }
-              picked={picked.has(b.identifier)}
-              onPick={
-                view.on && !claimed.has(b.identifier)
-                  ? (on) => setPicked((p) => {
-                      const n = new Set(p);
-                      if (on) n.add(b.identifier);
-                      else n.delete(b.identifier);
-                      return n;
-                    })
-                  : undefined
-              }
-            />
-          ))}
+          {queue.map((b) => {
+            const status =
+              held.has(b.identifier) ? `not started: ${held.get(b.identifier)}`
+              : atWork.has(b.identifier) ? "at work"
+              : started.has(b.identifier) ? "started"
+              : claimed.has(b.identifier) ? "claimed, waiting for a slot"
+              : null;
+            return (
+              <BugRow
+                key={b.identifier}
+                bug={b}
+                card={cards.get(b.identifier)}
+                status={status}
+                onOpen={() => onOpenBug(b, status)}
+                picked={picked.has(b.identifier)}
+                onPick={
+                  view.on && !claimed.has(b.identifier)
+                    ? (on) => setPicked((p) => {
+                        const n = new Set(p);
+                        if (on) n.add(b.identifier);
+                        else n.delete(b.identifier);
+                        return n;
+                      })
+                    : undefined
+                }
+              />
+            );
+          })}
           {view.on && (
             <button
               className="btn bugs-claim"
@@ -206,8 +209,18 @@ export function BugsTab() {
             <details className="bugs-skipped">
               <summary>skipped ({view.queue.skipped.length})</summary>
               {view.queue.skipped.map((s) => (
-                <div key={s.identifier}>
-                  {s.identifier} {s.title}: {s.why}
+                <div key={s.identifier} className="bugs-skipped-row">
+                  <span className="bugs-skipped-top">
+                    {s.issue ? (
+                      <button className="bugs-id" onClick={() => onOpenBug(s.issue!, `Skipped: ${s.why}`)} title={`read ${s.identifier} here`}>
+                        {s.identifier}
+                      </button>
+                    ) : (
+                      <span className="bugs-id-plain">{s.identifier}</span>
+                    )}
+                    <span className="bugs-skipped-title">{s.title}</span>
+                  </span>
+                  <span className="bugs-skipped-why">{s.why}</span>
                 </div>
               ))}
             </details>
@@ -219,7 +232,12 @@ export function BugsTab() {
           </div>
           {!view.queue.triage.length && <div className="placeholder">the triage queue is empty</div>}
           {view.queue.triage.map((t) => (
-            <TriageRow key={t.identifier} issue={t} card={view.result?.triage.find((c) => c.id === t.identifier)} />
+            <TriageRow
+              key={t.identifier}
+              issue={t}
+              card={view.result?.triage.find((c) => c.id === t.identifier)}
+              onOpen={() => onOpenBug(t, "In triage")}
+            />
           ))}
         </>
       )}
@@ -282,12 +300,14 @@ function BugRow({
   status,
   picked,
   onPick,
+  onOpen,
 }: {
   bug: BugIssue;
   card: BugCard | undefined;
   status: string | null;
   picked: boolean;
   onPick?: (on: boolean) => void;
+  onOpen: () => void;
 }) {
   const scouted = card && !card.failed;
   return (
@@ -300,9 +320,9 @@ function BugRow({
         )}
         <span className="checks-entry-text">
           <span className="checks-entry-top">
-            <a href={bug.url} target="_blank" rel="noreferrer" className="checks-entry-session">
+            <button className="bugs-id checks-entry-session" onClick={onOpen} title={`read ${bug.identifier} here`}>
               {bug.identifier}
-            </a>
+            </button>
             <span className="src-chip">{bug.priorityLabel}</span>
             {scouted && <span className="src-chip">{card.size}</span>}
             {scouted && <span className={`src-chip${card.simple ? " verified" : ""}`}>{card.simple ? "simple" : "ask first"}</span>}
@@ -328,16 +348,16 @@ function BugRow({
   );
 }
 
-function TriageRow({ issue, card }: { issue: BugIssue; card: TriageCard | undefined }) {
+function TriageRow({ issue, card, onOpen }: { issue: BugIssue; card: TriageCard | undefined; onOpen: () => void }) {
   const carded = card && !card.failed;
   return (
     <div className="checks-entry bugs-entry">
       <div className="bugs-entry-head">
         <span className="checks-entry-text">
           <span className="checks-entry-top">
-            <a href={issue.url} target="_blank" rel="noreferrer" className="checks-entry-session">
+            <button className="bugs-id checks-entry-session" onClick={onOpen} title={`read ${issue.identifier} here`}>
               {issue.identifier}
-            </a>
+            </button>
             {carded && (
               <>
                 <span className="src-chip">{card.isBug ? card.suggestedPriority : "not a bug"}</span>

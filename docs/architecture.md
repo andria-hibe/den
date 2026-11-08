@@ -892,9 +892,16 @@ developer's day across the other sessions instead of them being the glue.
   who, severity, priority, repro, area, duplicates, size, easy, next step),
   `SCOUT_BUGS` and `SCOUT_TRIAGE` at most. Fox saves it to `BUGS_PATH`
   (its settings allow `Workflow` and that file) and the tab shows it
-  (`validBugsResult`). **Claim and start** (`POST /api/bugs/claim`)
+  (`validBugsResult`). Every ticket id on the tab (queue, skipped, which
+  carry their `issue` for this, and triage) opens **`BugDialog`** for a quick
+  read (description and comments); its "Assign to me and work on it" goes
+  through `TicketDialog`'s workspace step like an assigned ticket
+  (`workOnTicket`, a plain ticket session, not a bug-buster one) and then
+  `POST /api/bugs/assign` (a failure says to assign it yourself; already
+  yours, it's just "Work on it"). **Claim and start** (`POST /api/bugs/claim`)
   re-ranks against Linear, assigns the unassigned picks to the key's owner
-  (`assignToMe`, den's only Linear write, on that click), and
+  (`assignToMe`, den's only Linear write, on that click or the bug
+  dialog's below), and
   `fillBugSlots` (queued, one run at a time) starts a worktree session per
   claimed bug through `app.inject` on `POST /api/sessions`. **Ticket text
   never goes in a message**: the ticket and the scout's card are the

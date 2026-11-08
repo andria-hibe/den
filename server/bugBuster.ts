@@ -79,6 +79,8 @@ export interface SkippedBug {
   identifier: string;
   title: string;
   why: string;
+  /** The whole ticket, so the Bugs tab can show it; absent on a claim's skips. */
+  issue?: BugIssue;
 }
 
 /** The project's bugs that nobody has started, most urgent first and oldest
@@ -97,7 +99,7 @@ export function rankBugQueue(issues: BugIssue[], busyTickets: Set<string>): { qu
       : busyTickets.has(i.identifier) ? "already open in a den session"
       : "";
     if (why === null) continue;
-    if (why) skipped.push({ identifier: i.identifier, title: i.title, why });
+    if (why) skipped.push({ identifier: i.identifier, title: i.title, why, issue: i });
     else queue.push(i);
   }
   // Linear's priority 0 is "none", which goes last.

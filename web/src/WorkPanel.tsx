@@ -251,12 +251,14 @@ export function WorkPanel({
   prColor,
   onFold,
   foldTitle,
+  onOpenBug,
 }: {
   /** Fold the panel to its strip; the button sits at the head's right edge. */
   onFold?: () => void;
   foldTitle?: string;
   onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
   onOpenPr: (pr: PullRequest) => void;
+  onOpenBug: (issue: import("../../server/linear.ts").BugIssue, note: string | null) => void;
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {
@@ -326,7 +328,7 @@ export function WorkPanel({
 
       <div className="pr-scroll">
         {source === "bugs" ? (
-          <BugsTab />
+          <BugsTab onOpenBug={onOpenBug} />
         ) : source === "checks" ? (
           <ChecksTab />
         ) : source === "linear" ? (

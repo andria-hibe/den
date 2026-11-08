@@ -3457,6 +3457,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-top: 8px;
 }
 .checks-filters {
   display: flex;
@@ -3560,6 +3561,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-top: 8px;
 }
 .bugs-head {
   display: flex;
@@ -3611,11 +3613,19 @@ body {
 .bugs-entry .checks-entry-where {
   overflow-wrap: anywhere;
 }
-.bugs-entry a {
+.bugs-id {
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  /* Room for the focus ring inside .checks-entry-session's overflow: hidden. */
+  outline-offset: -2px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--info-ink);
-  text-decoration: none;
+  cursor: pointer;
 }
-.bugs-entry a:hover {
+.bugs-id:hover {
   text-decoration: underline;
 }
 .bugs-pick {
@@ -3633,11 +3643,76 @@ body {
   align-self: flex-start;
 }
 .bugs-skipped {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 .bugs-skipped summary {
   cursor: pointer;
+  margin-bottom: 4px;
+}
+.bugs-skipped-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 4px;
+  border-top: 1.5px solid var(--border);
+}
+.bugs-skipped-top {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+.bugs-id-plain {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.bugs-skipped-top .bugs-id {
+  flex-shrink: 0;
+}
+.bugs-skipped-title {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.bugs-skipped-why {
+  font-size: 11px;
+}
+
+/* A bug opened from the Bugs tab (BugDialog.tsx). */
+.modal.bug-read {
+  width: 640px;
+}
+.bug-read-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bug-read-link {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  padding: 2px 8px;
+  font-size: 12px;
+  text-decoration: none;
+  color: var(--info-ink);
+}
+.bug-read-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 0 4px;
+}
+.bug-read-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+}
+.bug-read-warn {
+  font-size: 12px;
+  color: var(--ink-soft);
 }
 .bugs-setup {
   display: flex;
