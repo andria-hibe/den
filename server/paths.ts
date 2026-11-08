@@ -16,3 +16,11 @@ export const DIGEST_PATH = join(MANAGER_DIR, "digest.md");
 export const PRS_PATH = join(MANAGER_DIR, "prs.md");
 /** The sessions in the last digest, so the next one can say which are new. */
 export const DIGEST_SESSIONS_PATH = join(MANAGER_DIR, "digest-sessions.json");
+/** Where a pane saves the object a check returned, for den to show. */
+export const CHECKS_DIR = join(DATA_DIR, "checks");
+/** Bug buster: the scout workflow's last result, which Fox writes and the Bugs tab shows. */
+export const BUGS_PATH = join(MANAGER_DIR, "bugs.json");
+/** Bug sessions bug buster keeps going at once. */
+export const BUG_SLOTS = 5;
+/** Bug buster: the last ranked queue, kept so the Bugs tab survives a restart. */
+export const BUG_QUEUE_PATH = join(MANAGER_DIR, "bug-queue.json");

@@ -9,15 +9,15 @@
 // report with each finding's source instead of merging helpers' answers.
 // The helpers are the pane's own subagents (kitAgents / reviewAgents in crew.ts).
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DATA_DIR } from "./dataDir.ts";
 import { logWarn } from "./log.ts";
+import { CHECKS_DIR } from "./paths.ts";
 import { commentRules, testingRules } from "./instructions.ts";
 
 export const DONE_CHECK_PATH = join(DATA_DIR, "workflows", "den-check.js");
 
-/** Where a pane saves the object a check returned, for den to show. */
-export const CHECKS_DIR = join(DATA_DIR, "checks");
+export { CHECKS_DIR };
 export const checkResultPath = (groupId: string) => join(CHECKS_DIR, `${groupId}.json`);
 
 /** Serious findings double-checked per run; the rest come back unverified.
@@ -375,18 +375,23 @@ const baseArg = (base: string | null) =>
 
 /** Write the script where panes can run it by path, when it has changed. */
 export function ensureDoneCheckScript(): void {
+  ensureScript(DONE_CHECK_PATH, DONE_CHECK_SCRIPT);
+}
+
+/** Write a workflow script to `path` when its text has changed. */
+export function ensureScript(path: string, script: string): void {
   try {
     let current = "";
     try {
-      current = readFileSync(DONE_CHECK_PATH, "utf8");
+      current = readFileSync(path, "utf8");
     } catch {
       // not written yet
     }
-    if (current === DONE_CHECK_SCRIPT) return;
-    mkdirSync(join(DATA_DIR, "workflows"), { recursive: true });
-    writeFileSync(`${DONE_CHECK_PATH}.tmp`, DONE_CHECK_SCRIPT);
-    renameSync(`${DONE_CHECK_PATH}.tmp`, DONE_CHECK_PATH);
+    if (current === script) return;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(`${path}.tmp`, script);
+    renameSync(`${path}.tmp`, path);
   } catch (err) {
-    logWarn("done check script", err);
+    logWarn("workflow script", err);
   }
 }

@@ -321,3 +321,133 @@ export async function getInboxNotifications(): Promise<LinearNotification[]> {
       createdAt: n.createdAt,
     }));
 }
+
+// --- Bug buster -------------------------------------------------------------
+
+/** An open ticket in the bug buster's project or triage queue: enough to rank
+ * it, claim it, and start a workspace on it. */
+export interface BugIssue extends LinearIssue {
+  /** Linear's own id, which mutations take. */
+  uuid: string;
+  createdAt: string;
+  assignee: { name: string; isMe: boolean } | null;
+  /** GitHub pull requests linked to the ticket. */
+  prLinks: string[];
+}
+
+interface RawBugIssue extends RawIssue {
+  id: string;
+  createdAt: string;
+  assignee: { name: string; isMe: boolean } | null;
+  attachments: { nodes: { url: string }[] };
+}
+
+const BUG_FIELDS = `
+  id identifier title url priority branchName description createdAt updatedAt
+  state { name type color }
+  project { name }
+  assignee { name isMe }
+  attachments(first: 20) { nodes { url } }
+`;
+
+const toBugIssue = (n: RawBugIssue): BugIssue => ({
+  uuid: n.id,
+  identifier: n.identifier,
+  title: n.title,
+  url: n.url,
+  priority: n.priority,
+  priorityLabel: PRIORITY_LABELS[n.priority] ?? "none",
+  branchName: n.branchName ?? undefined,
+  description: n.description ?? undefined,
+  state: n.state,
+  project: n.project?.name,
+  updatedAt: n.updatedAt,
+  ticketHint: n.identifier.toLowerCase(),
+  createdAt: n.createdAt,
+  assignee: n.assignee ? { name: n.assignee.name, isMe: n.assignee.isMe } : null,
+  prLinks: n.attachments.nodes.map((a) => a.url).filter((u) => /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(u)),
+});
+
+/** A project's name from the id at the end of its URL slug, or null. */
+export async function findProject(slugId: string): Promise<string | null> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const data = await graphql<{ projects: { nodes: { name: string }[] } }>(
+    `query project($slugId: String!) { projects(filter: { slugId: { eq: $slugId } }, first: 1) { nodes { name } } }`,
+    key,
+    { slugId },
+  );
+  return data.projects.nodes[0]?.name ?? null;
+}
+
+/** The team whose key or name is `input`, ignoring case, or null. */
+export async function findTeam(input: string): Promise<{ key: string; name: string } | null> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const data = await graphql<{ teams: { nodes: { key: string; name: string }[] } }>(
+    `query { teams(first: 250) { nodes { key name } } }`,
+    key,
+  );
+  const want = input.trim().toLowerCase();
+  return data.teams.nodes.find((t) => t.key.toLowerCase() === want || t.name.toLowerCase() === want) ?? null;
+}
+
+/** Every open ticket in a project (by the id at the end of its URL slug). */
+export async function getProjectIssues(slugId: string): Promise<BugIssue[]> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const out: BugIssue[] = [];
+  let after: string | null = null;
+  // Up to 500 open tickets: a page is 100, and ranking needs all of them.
+  for (let page = 0; page < 5; page++) {
+    const data: { issues: { nodes: RawBugIssue[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } =
+      await graphql(
+        `query projectIssues($slugId: String!, $after: String) {
+          issues(
+            filter: { project: { slugId: { eq: $slugId } }, state: { type: { nin: ["completed", "canceled", "duplicate"] } } }
+            first: 100
+            after: $after
+          ) { nodes { ${BUG_FIELDS} } pageInfo { hasNextPage endCursor } }
+        }`,
+        key,
+        { slugId, after },
+      );
+    out.push(...data.issues.nodes.map(toBugIssue));
+    if (!data.issues.pageInfo.hasNextPage) break;
+    after = data.issues.pageInfo.endCursor;
+  }
+  return out;
+}
+
+/** The tickets waiting in a team's triage queue, oldest first. */
+export async function getTriageIssues(teamKey: string): Promise<BugIssue[]> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const data = await graphql<{ issues: { nodes: RawBugIssue[] } }>(
+    `query triage($teamKey: String!) {
+      issues(filter: { team: { key: { eq: $teamKey } }, state: { type: { eq: "triage" } } }, first: 50) {
+        nodes { ${BUG_FIELDS} }
+      }
+    }`,
+    key,
+    { teamKey },
+  );
+  return data.issues.nodes.map(toBugIssue).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Assign tickets (by Linear id) to the key's owner; returns the ids that took. */
+export async function assignToMe(uuids: string[]): Promise<string[]> {
+  const key = getKey();
+  if (!key) throw new Error("not_connected");
+  const me = (await graphql<{ viewer: { id: string } }>(`query { viewer { id } }`, key)).viewer.id;
+  const done: string[] = [];
+  for (const id of uuids) {
+    const r = await graphql<{ issueUpdate: { success: boolean } }>(
+      `mutation assign($id: String!, $me: String!) { issueUpdate(id: $id, input: { assigneeId: $me }) { success } }`,
+      key,
+      { id, me },
+    );
+    if (r.issueUpdate.success) done.push(id);
+  }
+  return done;
+}

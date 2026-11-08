@@ -854,6 +854,56 @@ developer's day across the other sessions instead of them being the glue.
   `GET /api/checks`, and in `sessions.remove` before the workspace's files
   go. `GET /api/checks/:id` returns one row's body (a `CrewRun` or a check
   result, opened in `CheckResultsDialog`).
+- **Bug buster** (2026-11-09, for rapid response weeks; off unless the
+  developer starts it): the work panel's **Bugs** tab (`BugsTab.tsx`). A
+  first-run form takes the Linear project's URL (`projectSlugId` keeps the id
+  at the end of its slug) and the team whose triage queue to card, saved in
+  the `bug_buster` setting (`bugState` in `server/bugBuster.ts`), never
+  hardcoded, since den is public. **Start** (`POST /api/bugs/start`) ranks the
+  project's open tickets with pure `rankBugQueue` (urgent first, priority
+  "none" last, oldest first within a priority; leaves out started, on-hold
+  (a state name with wait / block / hold / feedback), assigned to someone
+  else, PR-linked, or already-open-in-den tickets, with why), writes it to
+  `BUG_QUEUE_PATH`, and hands Fox `bugScoutPrompt`: ids only, typed in
+  when Fox's turn is done, left in its inbox while it works, refused
+  (`fox_busy`) while it waits on the developer (`freshBriefRoute`); a Fox
+  that isn't running is started for it. Fox runs the **`den-bugs`**
+  workflow (`BUGS_SCRIPT`, written to `~/.den/workflows/den-bugs.js`, read
+  only): a Sonnet scout at high effort per bug (cause, files, plan, S/M/L,
+  and whether the fix is simple, which needs no tripwire from the repo's
+  blast radius skill, if it has one; the bug session re-sizes it too), an Opus skeptic at medium effort on each
+  "simple" call (that call lets a session fix without asking), and a Sonnet
+  triage card at medium effort per triage report (Fox's fields: symptom,
+  who, severity, priority, repro, area, duplicates, size, easy, next step),
+  `SCOUT_BUGS` and `SCOUT_TRIAGE` at most. Fox saves it to `BUGS_PATH`
+  (its settings allow `Workflow` and that file) and the tab shows it
+  (`validBugsResult`). **Claim and start** (`POST /api/bugs/claim`)
+  re-ranks against Linear, assigns the unassigned picks to the key's owner
+  (`assignToMe`, den's only Linear write, on that click), and
+  `fillBugSlots` (queued, one run at a time) starts a worktree session per
+  claimed bug through `app.inject` on `POST /api/sessions`. **Ticket text
+  never goes in a message**: the ticket and the scout's card are the
+  notepad's ticket section (`bugNotesSeed` / `bugTicketSection`), and
+  `bugSessionPrompt` is den's words plus the id: reproduce, size the blast
+  radius, fix if simple (never CI, workflows, dependencies, build or install
+  scripts, or secrets) else options under "Waiting on you", badger, den's
+  ready check against the repo base (a second run allowed), then "Ready for
+  a draft PR". **The developer approves each PR**: Fox weighs the
+  session-written check result with the diff, puts "open the draft PR" under
+  Decide, and passes their yes on in the relay form. A bug isn't started,
+  and lands in `held` with why, when Linear gives no valid branch name, its
+  branch is already on origin (`remoteHasBranch`: someone may have started),
+  or the create fails. Pure `bugSlots` keeps `BUG_SLOTS` (5) at work: a
+  workspace for a started ticket holds its slot, running or not (clock out
+  and restarts stop panes), until its branch has a PR or it is removed. The
+  filler runs on claim and every minute, only while Fox runs and the field
+  mouse isn't tight; claiming a bug again resets it. Fox leads by
+  `bugLeadRule` (in its system prompt, and carried in `bugsStartedMessage`
+  when Fox's prompt is stale); that message names ticket ids only, and a
+  session is never named like Fox. Fox's settings deny the Linear
+  connector's write tools (`LINEAR_WRITES`), which binds its scouts too.
+  **Stop** lets unstarted claims go; sessions at work carry on. The three
+  app stacks cap is an instruction in the bug prompt, not enforced.
 - **Deep review, check results, and helper runs** (2026-11-06, after
   acorn): the check script has a review mode (`args.mode: "review"`): a
   `code-review` pass (the skill plus the consistency check and the repo's
@@ -1373,6 +1423,14 @@ local control plane, not a public API:
   reaching the client (`server/log.ts` `logWarn` keeps details server-side).
 - Electron: `sandbox:true`, `contextIsolation:true`, navigation pinned to the app
   origin, and only `http(s)` URLs reach `shell.openExternal`.
+
+- **Bug buster routes** (`/api/bugs/*`) are reachable by curl from any
+  pane, like the other routes: the worst a pane can do is point bug buster
+  at another project, assign open unstarted bugs to the developer, or start
+  bug sessions whose first message is den's own text. Fox's `Workflow` allow
+  covers any workflow, not only `den-bugs.js`. A session named after a
+  ticket or PR title elsewhere can still be called "Fox"; only bug buster
+  guards against it.
 
 ### Verifying changes (how this project has been tested)
 `npm run check` (typecheck + eslint + vitest) is the automated gate.

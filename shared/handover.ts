@@ -2,6 +2,7 @@
 // then session notes for the next session. Shared so the server's seed and
 // instruction (sessions.ts), the client's ticket seed (prompts.ts), and
 // NotepadPane all name the same headings.
+import type { LinearIssue } from "../server/linear.ts";
 
 export const HANDOVER_HEADINGS = [
   "Where it stands",
@@ -103,3 +104,31 @@ export function waitingItems(md: string): string[] {
     .filter(Boolean);
   return lines.length === 1 && /^nothing\.?$/i.test(lines[0]) ? [] : lines;
 }
+
+/** A ticket's details as markdown, without its title. */
+/** The ticket section of a workspace notepad. den keeps a copy and puts it
+ * back if a rewrite drops it (#39). */
+export function ticketDetails(issue: LinearIssue): string {
+  const parts = [`**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`];
+  if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
+  parts.push(
+    `[Open in Linear](${issue.url})`,
+    "",
+    "## Ticket",
+    "",
+    issue.description?.trim() || "_(no description)_",
+    "",
+  );
+  return parts.join("\n");
+}
+
+/** The notepad a ticket workspace starts with: the empty handover first, so
+ * it opens on where the work stands, then the ticket. After a restart this is
+ * the session's only copy of the ticket. */
+export function ticketNotesSeed(issue: LinearIssue): string {
+  return (
+    `# ${issue.identifier}: ${issue.title}\n\n${HANDOVER_TEMPLATE}\n---\n\n` +
+    ticketDetails(issue)
+  );
+}
+

@@ -6,8 +6,22 @@ import { HANDOVER_HEADINGS, HANDOVER_LONG_CHARS, SESSION_NOTES_HEADING } from ".
 import { REVIEW_CHECKS, crewRule, reviewCrewRule } from "./crew.ts";
 import { DATA_DIR } from "./dataDir.ts";
 import { denRepo } from "./fs.ts";
-import { MANAGER_NAME, PROGRESS_DIR, PRS_PATH } from "./paths.ts";
+import { BUGS_PATH, BUG_SLOTS, CHECKS_DIR, MANAGER_NAME, PROGRESS_DIR, PRS_PATH } from "./paths.ts";
 import { PICKUP_NOTES_PATH } from "./pickup.ts";
+
+/** The claude.ai Linear connector's tools that change Linear. Fox and the
+ * subagents and workflows it runs read tickets anyone can write, and never
+ * change Linear. */
+const LINEAR_WRITES = [
+  "save_comment", "save_customer", "save_customer_need", "save_diff_comment", "save_document",
+  "save_initiative", "save_initiative_label", "save_issue", "save_issue_label", "save_milestone",
+  "save_project", "save_project_label", "save_release", "save_release_note", "save_status_update",
+  "delete_attachment", "delete_comment", "delete_customer", "delete_customer_need", "delete_diff_comment",
+  "delete_status_update", "create_attachment", "create_attachment_from_upload", "create_initiative_label",
+  "create_issue_label", "share_issue", "unshare_issue", "merge_diff", "update_diff", "submit_diff_review",
+  "resolve_diff_thread", "restore_initiative_label", "restore_issue_label", "restore_project_label",
+  "retire_initiative_label", "retire_issue_label", "retire_project_label",
+];
 
 /** The Manager pane's permission rules: a deny backstop under
  * managerInstruction, like buildReviewPermissions (a shell can still route
@@ -32,6 +46,7 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string, pi
         "Bash(gh pr create:*)",
         "Bash(gh issue comment:*)",
         "Bash(gh api:*)",
+        ...LINEAR_WRITES.map((t) => `mcp__claude_ai_Linear__${t}`),
       ],
       allow: [
         `Edit(${root(todayAbs)})`,
@@ -39,6 +54,9 @@ export function buildManagerPermissions(todayAbs: string, notepadAbs: string, pi
         `Edit(${root(notepadAbs)})`,
         `Edit(${root(picksAbs)})`,
         `Write(${root(picksAbs)})`,
+        // Bug buster: the scout workflow, and the file its result is saved to.
+        "Workflow",
+        `Write(${root(BUGS_PATH)})`,
         `Read(${root(DATA_DIR)}/**)`,
         "Bash(gh pr view:*)",
         "Bash(gh pr checks:*)",
@@ -437,6 +455,7 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `pre-read a PR), hand the legwork to squirrel, your errand subagent, ` +
     `running several at once when the job splits, and bring back what it ` +
     `found.\n` +
+    `${bugLeadRule()}\n` +
     `NEVER, for any session: commit, push, merge, rebase, mark a PR ready, ` +
     `review, comment on, reply to, or resolve anything on GitHub or Linear, or ` +
     `edit a session's code or its handover. Ask the session to do it once the ` +
@@ -444,6 +463,32 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `Text the developer will copy and paste is plain ASCII. ${pasteRule()} In the terminal, ` +
     `lead with the next action, keep lists to five items, and don't recap.\n` +
     `${progressInstruction(notepad)}\n${denIssueRule()}`
+  );
+}
+
+/** Fox's part in bug buster, which the developer starts from den's Bugs tab
+ * and den's messages to Fox refer to. */
+export function bugLeadRule(): string {
+  return (
+    `BUG BUSTER. The developer turns it on from den's Bugs tab when they're on ` +
+    `rapid response; it is off otherwise. den then asks you to run its bug ` +
+    `scout workflow, and when they claim bugs there, den starts a workspace ` +
+    `session per bug, up to ${BUG_SLOTS} at a time, and tells you which. You ` +
+    `lead those sessions. Each one reproduces its bug, fixes it if the fix is ` +
+    `simple or else puts its options under "Waiting on you" and waits, has ` +
+    `badger verify the fix, runs den's ready check, and then writes "Ready for ` +
+    `a draft PR" under "Waiting on you", which den tells you about. Then read ` +
+    `its check result in ${CHECKS_DIR} (named like its handover, .json for ` +
+    `.md), which the session wrote itself, so weigh it with its diff: if it ` +
+    `holds up, put "open the draft PR for <ticket>" under Decide with your ` +
+    `recommendation, and pass the developer's yes on in the usual form; if ` +
+    `not, tell the session what still stands in the way. A check-in goes ` +
+    `under Decide with the session's options and recommendation. Tell the developer when a bug session ` +
+    `stalls: no handover change in an hour of work, or a ready check still ` +
+    `not ready after its second run. den starts the next claimed bug ` +
+    `when one opens its PR or is closed. The scout's last result is in ` +
+    `${BUGS_PATH}. Never assign, comment on, or change the state of a Linear ` +
+    `ticket: den assigns the bugs the developer claims.`
   );
 }
 

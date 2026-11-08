@@ -8,9 +8,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, w
 import type { AddressInfo } from "node:net";
 import { sessions, isValidGroupId, notepadPath, reviewDiffPath, reviewGuidePath } from "./sessions.ts";
 import { StillAnswering, askLine, readThreads } from "./lineAsk.ts";
-import { worksLikeWorkspace } from "../shared/handover.ts";
-import { DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
-import { freshBriefPrompt, freshStartPrompt } from "./instructions.ts";
+import { BUGS_PATH, BUG_QUEUE_PATH, MANAGER_NAME, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
+import { bugLeadRule, freshBriefPrompt, freshStartPrompt } from "./instructions.ts";
 import { tellPane } from "./inbox.ts";
 import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
@@ -49,17 +48,44 @@ import {
   setKey,
   clearKey,
   hasKey,
+  assignToMe,
+  findProject,
+  findTeam,
+  getProjectIssues,
+  getTriageIssues,
+  type BugIssue,
   type LinearData,
 } from "./linear.ts";
+import {
+  BUGS_SCRIPT,
+  BUGS_SCRIPT_PATH,
+  SCOUT_BUGS,
+  SCOUT_TRIAGE,
+  bugNotesSeed,
+  bugScoutPrompt,
+  bugSessionPrompt,
+  bugTicketSection,
+  bugSlots,
+  bugState,
+  bugsStartedMessage,
+  claimedFrom,
+  projectSlugId,
+  rankBugQueue,
+  readBugsResult,
+  saveBugState,
+  type HeldBug,
+  type SkippedBug,
+} from "./bugBuster.ts";
+import { worksLikeWorkspace } from "../shared/handover.ts";
 import { roots, listDirs, makeDir, isDir, baseBranchOverride, denRepo } from "./fs.ts";
 import { buildUpdate, installUpdate, updateLogTail, updateStatus } from "./denUpdate.ts";
-import { checkResultPath, deepReviewPrompt, doneCheckPrompt, ensureDoneCheckScript, validCheckResult } from "./doneCheck.ts";
+import { checkResultPath, deepReviewPrompt, doneCheckPrompt, ensureDoneCheckScript, ensureScript, validCheckResult } from "./doneCheck.ts";
 import { crewRuns } from "./crewActivity.ts";
 import { currentWatch } from "./fieldMouse.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
-  repoBaseName, isValidBranch,
+  repoBaseName, isValidBranch, remoteHasBranch, baseRef,
   type WorkEnv,
 } from "./git.ts";
 import { detectAppRunner, appRunnerStatus, detectSetup, setupScript, portHolder, runnPortsFile } from "./apprun.ts";
@@ -1416,6 +1442,267 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     } catch {
       return { content: "", writtenAt: 0 };
     }
+  });
+
+  // --- Bug buster ---
+  type BugQueue = { fetchedAt: string; queue: BugIssue[]; skipped: SkippedBug[]; triage: BugIssue[] };
+  const readBugQueue = (): BugQueue | null => {
+    try {
+      return JSON.parse(readFileSync(BUG_QUEUE_PATH, "utf8")) as BugQueue;
+    } catch {
+      return null;
+    }
+  };
+  const busyTickets = () =>
+    new Set(sessions.list().flatMap((m) => (m.role === "main" && !m.look && m.ticket ? [m.ticket] : [])));
+  const prBranches = async () => {
+    const prs = await prCache.get(false).catch(() => null);
+    return new Set((prs?.authored ?? []).flatMap((p) => (p.branch ? [p.branch] : [])));
+  };
+  const bugView = async () => {
+    const state = bugState();
+    let resultAt: number | null = null;
+    try {
+      resultAt = statSync(BUGS_PATH).mtimeMs;
+    } catch {
+      // no scout result yet
+    }
+    return {
+      on: state.on,
+      project: state.project,
+      triageTeam: state.triageTeam,
+      scoutedAt: state.scoutedAt,
+      claimed: state.claimed.map((c) => c.identifier),
+      started: state.started,
+      held: state.held,
+      atWork: bugSlots(state, sessions.list(), await prBranches()).atWork,
+      queue: readBugQueue(),
+      result: readBugsResult(),
+      resultAt,
+    };
+  };
+  const linearError = (reply: { code: (n: number) => void }, err: unknown) => {
+    const msg = (err as Error).message;
+    if (msg === "not_connected") {
+      reply.code(409);
+      return { error: msg, message: "Connect Linear first, in the Linear tab." };
+    }
+    reply.code(msg === "unauthorized" ? 401 : 502);
+    return { error: msg, message: msg === "unauthorized" ? "Linear refused den's key." : `Linear: ${msg}` };
+  };
+
+  // Start the claimed bugs while slots are free and the field mouse isn't
+  // worried: on a claim, and every minute, since a slot frees when a bug
+  // session opens its PR or closes. Runs one at a time, queued, so a claim
+  // made during the timer's run still starts its bugs.
+  const baseRefOrNull = () => {
+    try {
+      return baseRef(roots().workRepo, baseBranchOverride());
+    } catch {
+      return null;
+    }
+  };
+  let fillQueue: Promise<string[]> = Promise.resolve([]);
+  const fillBugSlots = (): Promise<string[]> => (fillQueue = fillQueue.then(fillOnce, fillOnce));
+  const fillOnce = async (): Promise<string[]> => {
+    // Fox leads the bug sessions, so none start without it: clock out stops it.
+    if (!bugState().on || currentWatch().level === "tight" || sessions.manager()?.status !== "running") return [];
+    const { next } = bugSlots(bugState(), sessions.list(), await prBranches());
+    const cards = readBugsResult()?.bugs ?? [];
+    const started: string[] = [];
+    const held: HeldBug[] = [];
+    for (const bug of next) {
+      if (!bug.branchName || !isValidBranch(bug.branchName)) {
+        held.push({ identifier: bug.identifier, why: "Linear gives it no usable branch name" });
+        continue;
+      }
+      // A branch pushed with no PR yet means someone may have started; its
+      // code would run unreviewed in the session's tests.
+      if (remoteHasBranch(roots().workRepo, bug.branchName)) {
+        held.push({ identifier: bug.identifier, why: "its branch is already on origin" });
+        continue;
+      }
+      const card = cards.find((c) => c.id === bug.identifier) ?? null;
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/sessions",
+        headers: { host: "127.0.0.1" },
+        payload: {
+          ticket: bug.identifier,
+          branch: bug.branchName,
+          env: "worktree",
+          // Fox's name is how sessions address it: no ticket may take it.
+          name: bug.title.trim().toLowerCase() === MANAGER_NAME.toLowerCase() ? bug.identifier : bug.title,
+          notepadSeed: bugNotesSeed(bug, card),
+          notepadTicket: bugTicketSection(bug, card),
+          initialPrompt: bugSessionPrompt(bug.identifier, baseRefOrNull()),
+        },
+      });
+      if (res.statusCode < 300) started.push(bug.identifier);
+      else {
+        logWarn("bug buster", `${bug.identifier}: ${res.statusCode} ${res.body}`);
+        let why = "den couldn't start its session";
+        try {
+          why = (res.json() as { message?: string }).message ?? why;
+        } catch {
+          // not JSON
+        }
+        held.push({ identifier: bug.identifier, why });
+      }
+    }
+    if (!started.length && !held.length) return [];
+    // Re-read: a claim may have saved while the sessions were starting.
+    const state = bugState();
+    state.started = [...new Set([...state.started, ...started])];
+    state.held = [...state.held.filter((h) => !held.some((n) => n.identifier === h.identifier)), ...held];
+    saveBugState(state);
+    const fox = sessions.manager();
+    // A Fox resumed from before bug buster existed has no BUG BUSTER rules
+    // until it starts fresh, so they travel with the news.
+    const rules = fox?.meta().promptStale ? `\n${bugLeadRule()}` : "";
+    if (fox?.status === "running") tellPane(fox.groupId, bugsStartedMessage(started, held) + rules);
+    return started;
+  };
+  const bugTimer = setInterval(() => void fillBugSlots().catch((err) => logWarn("bug buster", err)), 60_000);
+  bugTimer.unref?.();
+  app.addHook("onClose", async () => clearInterval(bugTimer));
+
+  app.get("/api/bugs", async () => bugView());
+
+  app.post("/api/bugs/settings", async (req, reply) => {
+    const { project, triageTeam } = (req.body ?? {}) as { project?: unknown; triageTeam?: unknown };
+    // An empty project keeps the one set up, so the team can change alone.
+    const slugId = typeof project === "string" && project.trim() ? projectSlugId(project) : (bugState().project?.slugId ?? null);
+    if (!slugId || typeof triageTeam !== "string" || !triageTeam.trim()) {
+      reply.code(400);
+      return { error: "bad_settings", message: "Paste the project's Linear URL and name the triage team." };
+    }
+    try {
+      const [name, team] = await Promise.all([findProject(slugId), findTeam(triageTeam)]);
+      if (!name) return (reply.code(404), { error: "no_project", message: "Linear has no project with that URL." });
+      if (!team) return (reply.code(404), { error: "no_team", message: "Linear has no team with that key or name." });
+      saveBugState({ ...bugState(), project: { slugId, name }, triageTeam: team });
+      return bugView();
+    } catch (err) {
+      return linearError(reply, err);
+    }
+  });
+
+  // Turn bug buster on: rank the project's bugs and have Fox scout the top
+  // ones and card the triage queue. The developer's click is the ask.
+  app.post("/api/bugs/start", async (_req, reply) => {
+    const state = bugState();
+    if (!state.project || !state.triageTeam) {
+      reply.code(409);
+      return { error: "not_set_up", message: "Pick the project and the triage team first." };
+    }
+    let queue: BugQueue;
+    try {
+      const [issues, triage] = await Promise.all([getProjectIssues(state.project.slugId), getTriageIssues(state.triageTeam.key)]);
+      const ranked = rankBugQueue(issues, busyTickets());
+      queue = { fetchedAt: new Date().toISOString(), queue: ranked.queue.slice(0, 30), skipped: ranked.skipped, triage };
+    } catch (err) {
+      return linearError(reply, err);
+    }
+    mkdirSync(MANAGER_DIR, { recursive: true });
+    writeFileSync(`${BUG_QUEUE_PATH}.tmp`, JSON.stringify(queue));
+    renameSync(`${BUG_QUEUE_PATH}.tmp`, BUG_QUEUE_PATH);
+    ensureScript(BUGS_SCRIPT_PATH, BUGS_SCRIPT);
+    const prompt = bugScoutPrompt(
+      queue.queue.slice(0, SCOUT_BUGS).map((i) => i.identifier),
+      queue.triage.slice(0, SCOUT_TRIAGE).map((i) => i.identifier),
+    );
+    let fox = sessions.manager();
+    if (!fox || fox.status !== "running") {
+      fox = await sessions.startManager();
+      if (!fox || fox.status !== "running") {
+        reply.code(500);
+        return { error: "manager_not_started", message: "Fox didn't start." };
+      }
+      void deliverStart(fox, prompt);
+    } else {
+      const route = sessions.freshBriefRoute();
+      if (!route) {
+        reply.code(409);
+        return {
+          error: "fox_busy",
+          message: "Fox is waiting on you, has a draft in its prompt, or hasn't had a message yet: talk to Fox, then start again.",
+        };
+      }
+      if (route.via === "paste") await paste(fox, prompt, true);
+      else tellPane(fox.groupId, prompt);
+    }
+    saveBugState({ ...bugState(), on: true, scoutedAt: queue.fetchedAt });
+    return bugView();
+  });
+
+  // Claim bugs from the queue: assign the unassigned ones to the developer,
+  // then start sessions for them as slots allow. Only bugs nobody has started
+  // are claimed, checked against Linear again now.
+  app.post("/api/bugs/claim", async (req, reply) => {
+    const ids = ((req.body ?? {}) as { ids?: unknown }).ids;
+    const state = bugState();
+    if (!state.on || !state.project) {
+      reply.code(409);
+      return { error: "not_on", message: "Start bug buster first." };
+    }
+    if (!Array.isArray(ids) || !ids.length || ids.some((i) => typeof i !== "string")) {
+      reply.code(400);
+      return { error: "ids_required" };
+    }
+    let fresh: ReturnType<typeof rankBugQueue>;
+    try {
+      fresh = rankBugQueue(await getProjectIssues(state.project.slugId), busyTickets());
+    } catch (err) {
+      return linearError(reply, err);
+    }
+    // Claimed and still going, or started: a bug claimed again after its
+    // session closed is in neither.
+    const going = new Set(sessions.list().flatMap((m) => (m.role === "main" && !m.look && m.ticket ? [m.ticket] : [])));
+    const already = new Set(state.claimed.filter((c) => !state.started.includes(c.identifier) || going.has(c.identifier)).map((c) => c.identifier));
+    const take = fresh.queue.filter((i) => ids.includes(i.identifier) && !already.has(i.identifier));
+    const skipped = (ids as string[]).flatMap((id) => {
+      if (already.has(id) || take.some((i) => i.identifier === id)) return [];
+      return [fresh.skipped.find((s) => s.identifier === id) ?? { identifier: id, title: "", why: "no longer open" }];
+    });
+    const want = take.filter((i) => !i.assignee);
+    const done = new Set<string>();
+    let assignError: string | null = null;
+    for (const i of want) {
+      try {
+        if ((await assignToMe([i.uuid])).length) done.add(i.uuid);
+      } catch (err) {
+        logWarn("bug buster assign", err);
+        assignError = (err as Error).message;
+      }
+    }
+    const assigned = want.filter((i) => done.has(i.uuid)).map((i) => i.identifier);
+    const notAssigned = want.filter((i) => !done.has(i.uuid)).map((i) => i.identifier);
+    const now = bugState();
+    const taken = new Set(take.map((i) => i.identifier));
+    now.claimed = [...now.claimed, ...take.filter((i) => !now.claimed.some((c) => c.identifier === i.identifier)).map(claimedFrom)];
+    // A bug claimed again (its session closed with no PR) starts afresh.
+    now.started = now.started.filter((id) => !taken.has(id));
+    now.held = now.held.filter((h) => !taken.has(h.identifier));
+    saveBugState(now);
+    const started = await fillBugSlots();
+    return {
+      claimed: take.map((i) => i.identifier),
+      assigned,
+      notAssigned,
+      assignError,
+      skipped,
+      started,
+      view: await bugView(),
+    };
+  });
+
+  // Turn bug buster off: no more scouting or starting. Bug sessions already
+  // at work carry on, and claimed bugs not yet started are let go.
+  app.post("/api/bugs/stop", async () => {
+    const state = bugState();
+    saveBugState({ ...state, on: false, held: [], claimed: state.claimed.filter((c) => state.started.includes(c.identifier)) });
+    return bugView();
   });
 
   // --- Linear (cached) ---

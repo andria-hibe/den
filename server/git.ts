@@ -157,6 +157,21 @@ function fetchRemoteBranch(repo: string, branch: string): boolean {
   }
 }
 
+/** Whether origin has `branch`, without fetching it; false when offline or
+ * there's no origin. */
+export function remoteHasBranch(repo: string, branch: string): boolean {
+  assertValidBranch(branch);
+  try {
+    execFileSync("git", ["-C", repo, "ls-remote", "--exit-code", "--heads", "origin", branch], {
+      timeout: 30000,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Branch names to try as the base for a new branch, most trusted first. The
  * override (see `baseBranchOverride` in fs.ts) exists because the branch a
  * team works off is not always the one GitHub calls the default. Invalid

@@ -3547,3 +3547,99 @@ body {
 .checks-open {
   margin: 0 9px 9px;
 }
+
+/* The work panel's Bugs tab (BugsTab.tsx); entries reuse the Checks tab's. */
+.bugs-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bugs-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.bugs-status {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.bugs-sub {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.bugs-change {
+  width: auto;
+  height: auto;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.bugs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bugs-note {
+  font-size: 12px;
+}
+.bugs-entry-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 9px;
+}
+.bugs-entry .checks-entry-top {
+  flex-wrap: wrap;
+}
+.bugs-entry .src-chip {
+  margin-left: 0;
+}
+.bugs-entry .checks-entry-summary,
+.bugs-entry .checks-entry-where {
+  overflow-wrap: anywhere;
+}
+.bugs-entry a {
+  color: var(--info-ink);
+  text-decoration: none;
+}
+.bugs-entry a:hover {
+  text-decoration: underline;
+}
+.bugs-pick {
+  display: flex;
+  padding: 4px;
+  margin: -4px 0 -4px -4px;
+  cursor: pointer;
+}
+.bugs-pick input {
+  margin: 0;
+  accent-color: var(--pink-deep);
+  cursor: pointer;
+}
+.bugs-claim {
+  align-self: flex-start;
+}
+.bugs-skipped {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.bugs-skipped summary {
+  cursor: pointer;
+}
+.bugs-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bugs-setup label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}

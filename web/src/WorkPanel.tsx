@@ -7,6 +7,7 @@ import { Fox } from "./Fox.tsx";
 import { accentStyle, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
 import { usePersistentString } from "./usePersistent.ts";
+import { BugsTab } from "./BugsTab.tsx";
 import { ChecksTab } from "./ChecksTab.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
@@ -270,7 +271,7 @@ export function WorkPanel({
 
   // Linear and GitHub each get the whole column on a small screen, rather
   // than GitHub sitting below every ticket.
-  const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github", "checks"] as const);
+  const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github", "checks", "bugs"] as const);
   const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine", "open"] as const);
   const open = useOpenReviewPrs(source === "github");
   const linearBang = (linear?.unreadNotifications ?? 0) > 0 ? " !" : "";
@@ -312,10 +313,21 @@ export function WorkPanel({
         >
           Checks
         </button>
+        <button
+          role="tab"
+          aria-selected={source === "bugs"}
+          className={`look-tab${source === "bugs" ? " active" : ""}`}
+          onClick={() => setSource("bugs")}
+          title="Bug buster: work through a project's bugs with Fox"
+        >
+          Bugs
+        </button>
       </div>
 
       <div className="pr-scroll">
-        {source === "checks" ? (
+        {source === "bugs" ? (
+          <BugsTab />
+        ) : source === "checks" ? (
           <ChecksTab />
         ) : source === "linear" ? (
           <LinearSection onOpenTicket={onOpenTicket} ticketColor={ticketColor} />

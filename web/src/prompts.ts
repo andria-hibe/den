@@ -6,7 +6,9 @@
 // sets, so den can render what the session writes. Change them together.
 import type { PrReviewNote } from "../../server/github.ts";
 import type { LinearIssue } from "../../server/linear.ts";
-import { HANDOVER_TEMPLATE } from "../../shared/handover.ts";
+import { ticketDetails } from "../../shared/handover.ts";
+
+export { ticketDetails, ticketNotesSeed } from "../../shared/handover.ts";
 
 /** Ask a review pane for the reading guide: the change grouped into sections by
  * purpose, most important first. A separate, cheaper ask than the review; it
@@ -123,37 +125,10 @@ export function notePrompt(prNumber: number, n: PrReviewNote & { kind: string })
   );
 }
 
-/** A ticket's details as markdown, without its title. */
-/** The ticket section of a workspace notepad. den keeps a copy and puts it
- * back if a rewrite drops it (#39). */
-export function ticketDetails(issue: LinearIssue): string {
-  const parts = [`**State:** ${issue.state.name} | **Priority:** ${issue.priorityLabel}`];
-  if (issue.branchName) parts.push(`**Branch:** \`${issue.branchName}\``);
-  parts.push(
-    `[Open in Linear](${issue.url})`,
-    "",
-    "## Ticket",
-    "",
-    issue.description?.trim() || "_(no description)_",
-    "",
-  );
-  return parts.join("\n");
-}
-
 /** A ticket as markdown: the file a look pane's system prompt points at
  * (lookInstruction). */
 export function ticketBrief(issue: LinearIssue): string {
   return `# ${issue.identifier}: ${issue.title}\n\n${ticketDetails(issue)}`;
-}
-
-/** The notepad a ticket workspace starts with: the empty handover first, so
- * it opens on where the work stands, then the ticket. After a restart this is
- * the session's only copy of the ticket. */
-export function ticketNotesSeed(issue: LinearIssue): string {
-  return (
-    `# ${issue.identifier}: ${issue.title}\n\n${HANDOVER_TEMPLATE}\n---\n\n` +
-    ticketDetails(issue)
-  );
 }
 
 /** Claude's first message when you start work on a ticket: the ticket, then a
@@ -169,7 +144,8 @@ export function ticketPrompt(issue: LinearIssue): string {
     "",
     "Read the ticket's comments in Linear too: decisions and scope changes " +
       "often live only there. Then, before writing any code, explain the issue " +
-      "in your own words and propose a solution or approach. Don't make changes " +
+      "in your own words and propose a solution or approach, with its blast radius " +
+      "sized by the repo's skill for that if it has one. Don't make changes " +
       "yet. I'll decide the next step after your proposal.",
   ].join("\n");
 }
