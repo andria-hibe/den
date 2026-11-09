@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
 import { relTimeAgo } from "./format.ts";
 import type { BugCard, SkippedBug, TriageCard } from "../../server/bugBuster.ts";
+import type { BugFinding } from "./BugDialog.tsx";
 
 interface ClaimResult {
   claimed: string[];
@@ -31,7 +32,11 @@ interface BugView {
 /** Bug buster (server/bugBuster.ts): the developer turns it on when they're
  * on rapid response, claims bugs from the ranked queue, and reads the triage
  * cards; Fox scouts and leads the bug sessions. */
-export function BugsTab({ onOpenBug }: { onOpenBug: (issue: BugIssue, note: string | null) => void }) {
+export function BugsTab({
+  onOpenBug,
+}: {
+  onOpenBug: (issue: BugIssue, note: string | null, findings: BugFinding[]) => void;
+}) {
   const [view, setView] = useState<BugView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -162,7 +167,7 @@ export function BugsTab({ onOpenBug }: { onOpenBug: (issue: BugIssue, note: stri
                 bug={b}
                 card={cards.get(b.identifier)}
                 status={status}
-                onOpen={() => onOpenBug(b, status)}
+                onOpen={() => onOpenBug(b, status, scoutFindings(cards.get(b.identifier)))}
                 picked={picked.has(b.identifier)}
                 onPick={
                   view.on && !claimed.has(b.identifier)
@@ -212,7 +217,7 @@ export function BugsTab({ onOpenBug }: { onOpenBug: (issue: BugIssue, note: stri
                 <div key={s.identifier} className="bugs-skipped-row">
                   <span className="bugs-skipped-top">
                     {s.issue ? (
-                      <button className="bugs-id" onClick={() => onOpenBug(s.issue!, `Skipped: ${s.why}`)} title={`read ${s.identifier} here`}>
+                      <button className="bugs-id" onClick={() => onOpenBug(s.issue!, `Skipped: ${s.why}`, scoutFindings(cards.get(s.identifier)))} title={`read ${s.identifier} here`}>
                         {s.identifier}
                       </button>
                     ) : (
@@ -236,7 +241,7 @@ export function BugsTab({ onOpenBug }: { onOpenBug: (issue: BugIssue, note: stri
               key={t.identifier}
               issue={t}
               card={view.result?.triage.find((c) => c.id === t.identifier)}
-              onOpen={() => onOpenBug(t, "In triage")}
+              onOpen={() => onOpenBug(t, "In triage", triageFindings(view.result?.triage.find((c) => c.id === t.identifier)))}
             />
           ))}
         </>
@@ -324,24 +329,12 @@ function BugRow({
               {bug.identifier}
             </button>
             <span className="src-chip">{bug.priorityLabel}</span>
-            {scouted && <span className="src-chip">{card.size}</span>}
+            {scouted && card.size && <span className="src-chip">{card.size}</span>}
             {scouted && <span className={`src-chip${card.simple ? " verified" : ""}`}>{card.simple ? "simple" : "ask first"}</span>}
+            {card?.failed && <span className="src-chip">scout failed</span>}
             {status && <span className="checks-entry-when">{status}</span>}
           </span>
           <span className="checks-entry-summary">{bug.title}</span>
-          {scouted ? (
-            <>
-              {card.symptom && <span className="checks-entry-where">{card.symptom}</span>}
-              {card.plan && <span className="checks-entry-where">Plan: {card.plan}</span>}
-              <span className="checks-entry-where">
-                {card.simple ? "Simple" : "Ask first"}: {card.simpleWhy}
-              </span>
-              {card.secondOpinion && <span className="checks-entry-where">Second opinion: {card.secondOpinion}</span>}
-              {card.startedElsewhere && <span className="checks-entry-where">May already be started: {card.startedElsewhere}</span>}
-            </>
-          ) : (
-            card?.failed && <span className="checks-entry-where">The scout failed on this one.</span>
-          )}
         </span>
       </div>
     </div>
@@ -361,24 +354,41 @@ function TriageRow({ issue, card, onOpen }: { issue: BugIssue; card: TriageCard 
             {carded && (
               <>
                 <span className="src-chip">{card.isBug ? card.suggestedPriority : "not a bug"}</span>
-                <span className="src-chip">{card.size}</span>
+                {card.size && <span className="src-chip">{card.size}</span>}
                 {card.easy && <span className="src-chip verified">easy</span>}
               </>
             )}
+            {card?.failed && <span className="src-chip">triage failed</span>}
             <span className="checks-entry-when">{relTimeAgo(issue.createdAt)}</span>
           </span>
           <span className="checks-entry-summary">{issue.title}</span>
-          {carded && (
-            <>
-              {card.symptom && <span className="checks-entry-where">{card.symptom}</span>}
-              {card.who && <span className="checks-entry-where">Who: {card.who}</span>}
-              {card.related?.length ? <span className="checks-entry-where">Related: {card.related.join(", ")}</span> : null}
-              {card.nextStep && <span className="checks-entry-where">Next: {card.nextStep}</span>}
-            </>
-          )}
-          {card?.failed && <span className="checks-entry-where">The triage helper failed on this one.</span>}
         </span>
       </div>
     </div>
   );
+}
+
+/** What the scout found, for the bug's popup. */
+function scoutFindings(card: BugCard | undefined): BugFinding[] {
+  if (!card) return [];
+  if (card.failed) return [{ label: "Scout", text: "The scout failed on this one." }];
+  return [
+    { label: "Symptom", text: card.symptom },
+    { label: "Plan", text: card.plan },
+    { label: card.simple ? "Simple" : "Ask first", text: card.simpleWhy },
+    { label: "Second opinion", text: card.secondOpinion },
+    { label: "May already be started", text: card.startedElsewhere },
+  ].filter((f): f is BugFinding => !!f.text);
+}
+
+/** What the triage helper found, for the report's popup. */
+function triageFindings(card: TriageCard | undefined): BugFinding[] {
+  if (!card) return [];
+  if (card.failed) return [{ label: "Triage", text: "The triage helper failed on this one." }];
+  return [
+    { label: "Symptom", text: card.symptom },
+    { label: "Who", text: card.who },
+    { label: "Related", text: card.related?.join(", ") },
+    { label: "Next", text: card.nextStep },
+  ].filter((f): f is BugFinding => !!f.text);
 }

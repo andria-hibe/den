@@ -895,7 +895,8 @@ developer's day across the other sessions instead of them being the glue.
   (its settings allow `Workflow` and that file) and the tab shows it
   (`validBugsResult`). Every ticket id on the tab (queue, skipped, which
   carry their `issue` for this, and triage) opens **`BugDialog`** for a quick
-  read (description and comments); its "Assign to me and work on it" goes
+  read (the scout's or triage helper's findings, the description, and
+  comments; the rows stay to the id, chips, and title); its "Assign to me and work on it" goes
   through `TicketDialog`'s workspace step like an assigned ticket
   (`workOnTicket`, a plain ticket session, not a bug-buster one) and then
   `POST /api/bugs/assign` (a failure says to assign it yourself; already

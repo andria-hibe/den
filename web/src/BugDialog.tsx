@@ -2,16 +2,21 @@ import type { BugIssue } from "../../server/linear.ts";
 import { Md } from "./Md.tsx";
 import { TicketComments } from "./TicketComments.tsx";
 
+/** One line of what Fox's scout or triage helper found. */
+export type BugFinding = { label: string; text: string };
+
 /** A bug from the Bugs tab, for a quick read before taking it on. */
 export function BugDialog({
   issue,
   note,
+  findings = [],
   onWork,
   onClose,
 }: {
   issue: BugIssue;
   /** Why bug buster left it out, or where it stands. */
   note?: string | null;
+  findings?: BugFinding[];
   onWork: (issue: BugIssue) => void;
   onClose: () => void;
 }) {
@@ -42,6 +47,15 @@ export function BugDialog({
           {note && <div className="ticket-summary-meta">{note}</div>}
         </div>
         <div className="bug-read-scroll">
+          {findings.length > 0 && (
+            <div className="bug-read-findings">
+              {findings.map((f) => (
+                <div key={f.label}>
+                  <span className="bug-read-label">{f.label}:</span> {f.text}
+                </div>
+              ))}
+            </div>
+          )}
           <Md text={issue.description?.trim() || "_(no description)_"} />
           <TicketComments ticketId={issue.identifier} />
         </div>

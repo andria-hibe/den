@@ -3702,6 +3702,19 @@ body {
   flex: 1;
   padding: 0 4px;
 }
+.bug-read-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1.5px solid var(--border);
+}
+.bug-read-label {
+  font-weight: 700;
+  color: var(--ink-soft);
+}
 .bug-read-actions {
   display: flex;
   flex-wrap: wrap;

@@ -8,6 +8,7 @@ import { accentStyle, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
 import { usePersistentString } from "./usePersistent.ts";
 import { BugsTab } from "./BugsTab.tsx";
+type BugsTabProps = Parameters<typeof BugsTab>[0];
 import { ChecksTab } from "./ChecksTab.tsx";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
@@ -258,7 +259,7 @@ export function WorkPanel({
   foldTitle?: string;
   onOpenTicket: (issue: import("../../server/linear.ts").LinearIssue) => void;
   onOpenPr: (pr: PullRequest) => void;
-  onOpenBug: (issue: import("../../server/linear.ts").BugIssue, note: string | null) => void;
+  onOpenBug: BugsTabProps["onOpenBug"];
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
 }) {

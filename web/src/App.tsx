@@ -11,7 +11,7 @@ import { ClockOutDialog } from "./ClockOutDialog.tsx";
 import { useClockOutRound } from "./useClockOutRound.ts";
 import type { ClockOutRound } from "../../server/sessions.ts";
 import { TicketDialog } from "./TicketDialog.tsx";
-import { BugDialog } from "./BugDialog.tsx";
+import { BugDialog, type BugFinding } from "./BugDialog.tsx";
 import { PrDialog, type PreReview } from "./PrDialog.tsx";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
@@ -173,7 +173,7 @@ export function App() {
     /** A bug's Linear id, to assign it to the developer once they start work. */
     assign?: string;
   } | null>(null);
-  const [bugModal, setBugModal] = useState<{ issue: BugIssue; note: string | null } | null>(null);
+  const [bugModal, setBugModal] = useState<{ issue: BugIssue; note: string | null; findings: BugFinding[] } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   // The PR whose review session should start on its own, and how (#11).
   const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "guide" } | null>(null);
@@ -1118,7 +1118,7 @@ export function App() {
               foldTitle={`Fold the work panel (${MOD}+\\)`}
               onOpenTicket={openTicket}
               onOpenPr={openPr}
-              onOpenBug={(issue, note) => setBugModal({ issue, note })}
+              onOpenBug={(issue, note, findings) => setBugModal({ issue, note, findings })}
               ticketColor={ticketColor}
               prColor={prColor}
             />
@@ -1172,6 +1172,7 @@ export function App() {
         <BugDialog
           issue={bugModal.issue}
           note={bugModal.note}
+          findings={bugModal.findings}
           onClose={() => setBugModal(null)}
           onWork={(issue) => {
             setBugModal(null);
