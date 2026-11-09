@@ -128,7 +128,8 @@ WebSocket; everything else is REST.
   Manual steps (concise, for an engineer who knows the app) and Risks a
   person should test; then a collapsed `<details>` "Agent notes" section
   for what only an agent needs, What was verified included, titled with `&#x1F916;` (GitHub draws the robot emoji, and the
-  prompt stays ASCII). Emoji are allowed in PR descriptions only; the ready
+  prompt stays ASCII), with Claude Code's "Generated with Claude Code"
+  attribution as its last line rather than the description's. Emoji are allowed in PR descriptions only; the ready
   check's description update follows the same shape. **`ticketDiscussionRule()`**
   (workspace, my-PR, and look panes; the review pane's `REVIEW_CHECKS` and
   Squirrel say the same) has a pane read the Linear ticket's **comments**

@@ -223,7 +223,10 @@ export function prDescriptionRule(): string {
     `it), the files, patterns followed, invariants such as check or lock ` +
     `order, what's out of scope, and how to run the tests locally. Write it as ` +
     `<details><summary><b>&#x1F916; Agent notes</b></summary>, a blank line, ` +
-    `the notes, then </details>. GitHub draws &#x1F916; as the robot emoji.`
+    `the notes, then </details>. GitHub draws &#x1F916; as the robot emoji. ` +
+    `The "Generated with Claude Code" attribution line goes inside the agent ` +
+    `notes, as their last line before </details>, not at the end of the ` +
+    `description.`
   );
 }
 
