@@ -15,7 +15,7 @@ import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./diges
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
-import { managerRefreshPrompt, managerStartPrompt, todayIsOld, toggleTodayItem } from "./manager.ts";
+import { managerRefreshPrompt, managerStartPrompt, setTodayItem, todayIsOld } from "./manager.ts";
 import { cleanupSkill } from "./cleanup.ts";
 import {
   getMyPullRequests,
@@ -1415,14 +1415,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     return { round };
   });
 
-  // The developer ticks a Today item themselves. Fox is told to read the
-  // list before it edits it, so the tick survives Fox's next write.
-  app.post("/api/manager/today/toggle", async (req, reply) => {
-    const { item, text } = (req.body ?? {}) as { item?: unknown; text?: unknown };
+  // The developer ticks a Today item, or marks it won't do, themselves. Fox
+  // is told to read the list before it edits it, so the mark survives Fox's
+  // next write.
+  app.post("/api/manager/today/mark", async (req, reply) => {
+    const { item, text, state } = (req.body ?? {}) as { item?: unknown; text?: unknown; state?: unknown };
     let next: string | null = null;
     try {
-      if (typeof item === "number" && Number.isInteger(item) && item >= 0) {
-        next = toggleTodayItem(readFileSync(TODAY_PATH, "utf8"), item, typeof text === "string" ? text : undefined);
+      if (
+        typeof item === "number" && Number.isInteger(item) && item >= 0 &&
+        (state === "open" || state === "done" || state === "wontdo")
+      ) {
+        next = setTodayItem(readFileSync(TODAY_PATH, "utf8"), item, state, typeof text === "string" ? text : undefined);
       }
     } catch {
       // no list yet

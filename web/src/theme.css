@@ -2529,6 +2529,8 @@ body {
 /* A plain bullet, such as With sessions, has no box to mark it. */
 .today-list li:not(:has(> .today-tick))::before {
   content: "\2022";
+  /* Inline-block keeps a won't-do detail's line-through off its bullet. */
+  display: inline-block;
   margin-right: 8px;
   color: var(--ink-soft);
 }
@@ -2545,8 +2547,17 @@ body {
 .today-tick:hover {
   color: var(--accent-ink);
 }
-.today-tick.done {
+.today-tick.done,
+.today-tick.wontdo {
   color: var(--ink-soft);
+}
+.today-tick {
+  user-select: none;
+}
+.today-list li:has(> .today-tick.wontdo),
+.today-list li.today-wontdo {
+  color: var(--ink-soft);
+  text-decoration: line-through;
 }
 
 /* The week's token pace (LedgerChip), on the topbar's tinted background. */

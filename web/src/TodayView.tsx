@@ -7,18 +7,33 @@ import { usePersistentNumber } from "./usePersistent.ts";
 import { Fox } from "./Fox.tsx";
 import { Critter } from "./Critter.tsx";
 import { CREW } from "./critterSprites.ts";
-import { todayItemTexts } from "../../server/manager.ts";
+import { todayItems, type TodayItemState } from "../../server/manager.ts";
 
 // Private-use characters mark where each checklist box goes, so a ☐ or ☑
 // in an item's own text can't be taken for one.
 const OPEN_MARK = "\uE000";
 const DONE_MARK = "\uE001";
+const WONTDO_MARK = "\uE002";
+const WONTDO_DETAIL = "\uE003";
 
-/** Checklist marks as box markers: markdown.ts has no task-list syntax. */
+/** Checklist marks as box markers: markdown.ts has no task-list syntax. A
+ * won't-do item's indented detail bullets are marked too, since markdown.ts
+ * renders them as sibling items rather than nesting them. */
 export function todayMarkdown(md: string): string {
+  let wontdoIndent = -1;
   return md
-    .replace(/^(\s*)- \[ \] /gm, `$1- ${OPEN_MARK} `)
-    .replace(/^(\s*)- \[[xX]\] /gm, `$1- ${DONE_MARK} `);
+    .split("\n")
+    .map((line) => {
+      const indent = line.length - line.trimStart().length;
+      if (wontdoIndent >= 0 && line.trim() && indent <= wontdoIndent) wontdoIndent = -1;
+      if (/^\s*- \[-\] /.test(line)) wontdoIndent = indent;
+      else if (wontdoIndent >= 0 && /^\s*- (?!\[[ xX-]\] )/.test(line)) return line.replace("- ", `- ${WONTDO_DETAIL}`);
+      return line
+        .replace(/^(\s*)- \[ \] /, `$1- ${OPEN_MARK} `)
+        .replace(/^(\s*)- \[[xX]\] /, `$1- ${DONE_MARK} `)
+        .replace(/^(\s*)- \[-\] /, `$1- ${WONTDO_MARK} `);
+    })
+    .join("\n");
 }
 
 /** Turns each "(session: Name)" in rendered Today HTML into a button that
@@ -32,14 +47,24 @@ export function linkSessions(html: string): string {
 }
 
 /** Turns each box marker in rendered Today HTML into a button carrying its
- * index, counted in file order like toggleTodayItem (server/manager.ts)
- * counts the items it flips. */
+ * index, counted in file order like setTodayItem (server/manager.ts) counts
+ * the items it marks. */
 export function tickBoxes(html: string): string {
   let i = 0;
-  return html.replace(/[\uE000\uE001]/g, (mark) => {
-    const done = mark === DONE_MARK;
-    return `<button class="today-tick${done ? " done" : ""}" data-item="${i++}" aria-label="${done ? "untick" : "tick"} this item">${done ? "☑" : "☐"}</button>`;
+  return html.replace(/<li>\uE003/g, '<li class="today-wontdo">').replace(/[\uE000-\uE002]/g, (mark) => {
+    const [cls, glyph, label] =
+      mark === DONE_MARK ? [" done", "☑", "done"] : mark === WONTDO_MARK ? [" wontdo", "☒", "won't do"] : ["", "☐", "open"];
+    return (
+      `<button class="today-tick${cls}" data-item="${i++}" aria-label="${label}: click to tick, double-click for won't do" ` +
+      `title="Click to tick, double-click for won't do">${glyph}</button>`
+    );
   });
+}
+
+/** What a click (`clicks` 1) or double-click (2) on a box makes an item. */
+export function nextTodayState(now: TodayItemState, clicks: 1 | 2): TodayItemState {
+  if (clicks === 2) return now === "wontdo" ? "open" : "wontdo";
+  return now === "open" ? "done" : "open";
 }
 
 /** The sessions the open items name, in list order, each once. */
@@ -112,19 +137,40 @@ export function TodayView({
     }
   };
 
-  const tick = async (item: number) => {
-    const text = todayItemTexts(today?.content ?? "")[item];
+  const tick = async (item: number, clicks: 1 | 2) => {
+    const now = todayItems(today?.content ?? "")[item];
+    if (!now) return;
     try {
       setToday(
-        await api<{ content: string; writtenAt: number }>("/api/manager/today/toggle", {
+        await api<{ content: string; writtenAt: number }>("/api/manager/today/mark", {
           method: "POST",
-          body: JSON.stringify({ item, text }),
+          body: JSON.stringify({ item, text: now.text, state: nextTodayState(now.state, clicks) }),
         }),
       );
     } catch {
       // Fox rewrote the list after it was shown, so nothing was flipped: show the new one.
       api<{ content: string; writtenAt: number }>("/api/manager/today").then(setToday).catch(() => {});
     }
+  };
+
+  // A click waits out the double-click window, so a double-click doesn't tick first.
+  const pendingClick = useRef<{ item: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const onBox = (item: number, detail: number) => {
+    const pending = pendingClick.current;
+    pendingClick.current = null;
+    if (pending) {
+      clearTimeout(pending.timer);
+      // A click on another box lands now rather than being dropped.
+      if (pending.item !== item) void tick(pending.item, 1);
+    }
+    if (detail >= 2) return void tick(item, 2);
+    pendingClick.current = {
+      item,
+      timer: setTimeout(() => {
+        pendingClick.current = null;
+        void tick(item, 1);
+      }, 250),
+    };
   };
 
   const content = today?.content.trim() ?? "";
@@ -173,7 +219,7 @@ export function TodayView({
             onClick={(e) => {
               const target = e.target as HTMLElement;
               const item = target.closest<HTMLElement>(".today-tick")?.dataset.item;
-              if (item !== undefined) return void tick(Number(item));
+              if (item !== undefined) return onBox(Number(item), e.detail);
               const name = target.closest<HTMLElement>(".today-session")?.dataset.session;
               if (name) onOpenSession(name);
             }}

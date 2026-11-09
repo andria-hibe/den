@@ -463,10 +463,11 @@ export function managerInstruction(notepad: string, today: string, digest: strin
     `use jumps or a limit is set to run out before it resets, naming the ` +
     `sessions spending the most: tell the developer at the top of your next ` +
     `reply and suggest what to pause or start fresh. ` +
-    `The developer can tick items in den's Today view too, so ` +
-    `read ${today} before you change it and keep their ticks. Keep ${today} ` +
-    `current: mark an item "- [x]" when it's ` +
-    `done and add new ones as they come up. When a refresh or a subagent turns ` +
+    `The developer can tick items in den's Today view too, or mark them won't ` +
+    `do, so read ${today} before you change it and keep their marks. Keep ` +
+    `${today} current: mark an item "- [x]" when it's done, "- [-]" when the ` +
+    `developer decides not to do it (it stays on the list, crossed out, so ` +
+    `you don't raise it again), and add new ones as they come up. When a refresh or a subagent turns ` +
     `up something new for a session, send it to that session the same way. Talk to a session with ` +
     `SendMessage, using its name. When the developer answers something for a ` +
     `session, pass it on as "The developer said in Today at HH:MM: <their ` +

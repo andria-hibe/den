@@ -754,7 +754,14 @@ developer's day across the other sessions instead of them being the glue.
   FYI, `- [ ]` items with `(session: <name>)`, then With sessions: plain
   bullets for session-owned "Waiting on you" items, never presented); `TodayView` renders it above
   the Fox pane (each box is a button: `tickBoxes` numbers them in file order to
-  match `toggleTodayItem`, and a click posts `/api/manager/today/toggle`) (review-view layout, one splitter), polls
+  match `setTodayItem`; a click ticks or unticks, a double-click marks won't
+  do (`- [-]`, crossed out with its detail bullets, which `todayMarkdown`
+  marks since markdown.ts renders them as siblings, kept so Fox doesn't raise
+  it again) or undoes it (`nextTodayState`), and the click waits 250 ms so a
+  double-click doesn't tick first (a click on another box meanwhile lands the
+  pending one at once); it posts `/api/manager/today/mark` with the item's text, refused
+  if Fox rewrote the list meanwhile. Fox marks won't do too, and keeps the
+  developer's marks) (review-view layout, one splitter), polls
   `GET /api/manager/today`, and turns `(session: X)` into a button that opens
   that rail session (`linkSessions`). Fox is pinned to the top of the rail.
 - Fox talks to sessions with Claude Code's own `SendMessage` (den panes show
