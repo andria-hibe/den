@@ -148,6 +148,8 @@ export const reviewDiffPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.diff`);
 };
+/** Named so the pane can find it from the diff path its instructions give. */
+export const reviewPrevDiffPath = (groupId: string) => reviewDiffPath(groupId).replace(/\.diff$/, ".prev.diff");
 const reviewSettingsPath = (groupId: string) => {
   if (!isValidGroupId(groupId)) throw new Error("bad_group_id");
   return join(REVIEW_DIR, `${groupId}.settings.json`);
@@ -1865,6 +1867,7 @@ class SessionManager {
       rmSync(socketDir(groupId), { recursive: true, force: true });
       rmSync(reviewDiffPath(groupId), { force: true });
       rmSync(reviewDiffPath(groupId).replace(/\.diff$/, ".head"), { force: true });
+      rmSync(reviewPrevDiffPath(groupId), { force: true });
       rmSync(reviewSettingsPath(groupId), { force: true });
       rmSync(reviewGuidePath(groupId), { force: true });
       rmSync(reviewNotesPath(groupId), { force: true });
@@ -1890,9 +1893,22 @@ class SessionManager {
     }
   }
 
-  /** Replace it, when the developer asks for the review to catch up with new commits. */
+  /** Replace it, when the developer asks for the review to catch up with new
+   * commits. The diff it replaces is kept as the `.prev.diff` beside it, so
+   * the re-review can look at what changed since. */
   writeReviewDiff(groupId: string, diff: string): void {
+    const old = this.readReviewDiff(groupId);
+    if (old && old !== diff) writeFileSync(reviewPrevDiffPath(groupId), old);
     this.ensureReviewDiff(groupId, diff);
+  }
+
+  /** The diff the last review was written against, before the latest catch-up. */
+  readReviewPrevDiff(groupId: string): string {
+    try {
+      return readFileSync(reviewPrevDiffPath(groupId), "utf8");
+    } catch {
+      return "";
+    }
   }
 
   /** The PR head commit the saved diff was taken at; empty if not recorded. */

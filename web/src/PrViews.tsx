@@ -13,6 +13,7 @@ import { CheckResultsButton, DeepReviewButton } from "./CheckResults.tsx";
 import { buildReviewPost } from "./reviewPost.ts";
 import { churnFromGuide, isChurnPath } from "../../shared/churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
+import { sinceLastReview } from "./interdiff.ts";
 import { autoReviewPrompt, guidePrompt, notePrompt, refreshReviewPrompt, reviewPrompt, type ReviewFocus } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
@@ -200,6 +201,21 @@ export function PrReviewView({
   // The post-to-GitHub preview (#16).
   const [posting, setPosting] = useState(false);
 
+  // The diffs saved before and at the last catch-up, to show only what changed.
+  const [saved, setSaved] = useState<{ prev: string; current: string } | null>(null);
+  const [sinceOnly, setSinceOnly] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    setSinceOnly(false);
+    api<{ prev: string; current: string }>(`/api/sessions/${sessionId}/review-prev-diff`)
+      .then((d) => !stop && setSaved(d))
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [sessionId, diffVersion]);
+  const since = useMemo(() => (saved?.prev && saved.current ? sinceLastReview(saved.prev, saved.current) : null), [saved]);
+  const sinceShown = sinceOnly && since && shown === "review";
   const files = useMemo(() => diffFiles(diff), [diff]);
   const { overall, byFile, checked } = useMemo(() => parseReview(review, files), [review, files]);
   const guideChurn = useMemo(() => churnFromGuide(parseGuide(guide, files).sections), [guide, files]);
@@ -341,6 +357,21 @@ export function PrReviewView({
             </button>
           </div>
         )}
+        {since && shown === "review" && (
+          <div className="review-since">
+            <label>
+              <input type="checkbox" checked={sinceOnly} onChange={(e) => setSinceOnly(e.target.checked)} />
+              only what changed since the last review ({since.changed.length}{" "}
+              {since.changed.length === 1 ? "file" : "files"})
+            </label>
+            {sinceOnly && (
+              <div className="review-since-note">
+                {since.changed.length === 0 ? "Nothing new in the diff. " : "Comments on other files are hidden. "}
+                {since.dropped.length > 0 && `No longer changed: ${since.dropped.join(", ")}.`}
+              </div>
+            )}
+          </div>
+        )}
         {shown === "handover" && work ? (
           <div className="pr-tab-fill">{work.handover}</div>
         ) : shown === "terminal" && work ? (
@@ -426,7 +457,7 @@ export function PrReviewView({
               )}
             </div>
             <DiffView
-              diff={diff}
+              diff={sinceShown ? since.diff : diff}
               notes={byFile}
               noteState={noteState}
               sessionId={sessionId}

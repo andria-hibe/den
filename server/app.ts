@@ -1070,6 +1070,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (!saved) sessions.writeReviewHead(r.s.groupId, head);
     return { stale: !!saved && saved !== head };
   });
+  app.get("/api/sessions/:id/review-prev-diff", async (req, reply) => {
+    const r = reviewOf((req.params as { id: string }).id);
+    if (!r) {
+      reply.code(404);
+      return { error: "not_a_review" };
+    }
+    // Both saved copies, so "since" compares what the pane reviewed each time,
+    // not GitHub's live diff, which may hold commits pushed since.
+    return { prev: sessions.readReviewPrevDiff(r.s.groupId), current: sessions.readReviewDiff(r.s.groupId) };
+  });
   app.post("/api/sessions/:id/review-diff/refresh", async (req, reply) => {
     const r = reviewOf((req.params as { id: string }).id);
     if (!r) {

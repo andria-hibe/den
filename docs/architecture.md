@@ -385,6 +385,21 @@ WebSocket; everything else is REST.
     puts the same chip on that PR's card in the GitHub panel. Medium and
     moderate read as typical; low is sky so it isn't a second "approved".
     `guidePrompt` asks for the line too, so any pane's next guide has it.
+  - **Catching a review up** with new commits: `GET .../review-stale`
+    compares the PR head with the one the saved diff was taken at (a
+    5-minute check while a guide or review exists); "update them" posts
+    `.../review-diff/refresh`, which saves the new diff and keeps the one
+    it replaces as `<groupId>.prev.diff` (`writeReviewDiff`), then pastes
+    `refreshReviewPrompt`, which tells the pane to review only new or
+    changed hunks. While a `.prev.diff` exists the Review tab offers "only
+    what changed since the last review": `GET .../review-prev-diff` returns
+    both saved diffs (what the pane reviewed each time, not GitHub's live
+    diff), and pure `sinceLastReview` (`web/src/interdiff.ts`, tested) keeps
+    hunks whose lines aren't in the old diff, compared without their `@@`
+    positions so a rebase doesn't make the whole PR look new; files match
+    by their `diff --git` line, and a hunkless file (binary, mode) by its
+    header. It notes that comments on other files are hidden and lists
+    files the PR no longer changes. The Guide tab keeps the whole diff.
   - **Where findings came from** (2026-11-06, after acorn): the review
     ends each finding with a source tag (`[hare]`, `[code-review, verified]`,
     `[ticket]`, `[reviewer]` ...; `SOURCE_TAG` in `reviewNotes.ts`), drawn as

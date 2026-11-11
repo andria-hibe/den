@@ -79,10 +79,12 @@ export function reviewPrompt(number: number, repo: string, owned = false, focus:
 export function refreshReviewPrompt(number: number, repo: string): string {
   return (
     `Pull request #${number} (${repo}) has new commits since you wrote the guide ` +
-    `and review. den has saved the new full diff over the old one at the same path. ` +
+    `and review. den has saved the new full diff over the old one at the same path, ` +
+    `and kept the old one beside it with .prev.diff in place of .diff. ` +
     `Bring the checked-out branch up to date with the PR (pull it; don't commit), ` +
-    `then update the guide and the review for what changed: review the new changes ` +
-    `the same way, drop findings the new commits fixed, and keep what still holds. ` +
+    `then compare the two diffs and review only the hunks that are new or changed, ` +
+    `the same way as before: drop findings the new commits fixed, keep what still ` +
+    `holds, and update the guide only where the change moved. ` +
     `Keep the source tags and the Checked section current. Say in a line or two ` +
     `what changed in your verdict.`
   );

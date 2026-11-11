@@ -3459,6 +3459,21 @@ body {
   font-size: 12px;
   padding: 2px 0;
 }
+.review-since {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-bottom: 1.5px dashed var(--border);
+}
+.review-since-note {
+  margin: 2px 0 0 22px;
+}
+.review-since label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
 .review-stale {
   display: flex;
   align-items: center;
