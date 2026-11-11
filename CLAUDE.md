@@ -93,8 +93,10 @@ npm run test-server -- --port 4399 [--dir <data dir>]   # isolated server, stub 
 ## Writing code here
 
 - **Comments say why, and only what you verified**: no restating code, no
-  narrating the change, no TODOs, one sentence unless something breaks
-  silently without it. This beats matching the repo's comment density.
+  narrating the change, no reference to the bug, ticket, or feature that
+  prompted it (a reader months later has none of that context), no TODOs,
+  one sentence unless something breaks silently without it. This beats
+  matching the repo's comment density.
 - **Tests only for important, core behaviour**, next to the source as
   `*.test.ts`; no low-value tests and none pinning a fix to your own mistake
   or a review follow-up. Keep pure logic exported and testable.

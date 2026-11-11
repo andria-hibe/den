@@ -318,6 +318,10 @@ export function commentRules(): string {
     `"fixed a bug where", "as requested", no notes to the reviewer, and no ` +
     `mention of your own mistakes. That belongs in the commit message or the ` +
     `PR.\n` +
+    `- Describe the code as it stands, not the work that produced it: no ` +
+    `ticket ids, bug reports, feature names, dates, or "added for X". Someone ` +
+    `reading it months later has none of that context, so it explains nothing; ` +
+    `it belongs in the commit, the PR, or the ticket.\n` +
     `- Stay on the code next to the comment. No asides and no open questions or ` +
     `TODOs; those go in a ticket. Don't restate a schema, type, or list that ` +
     `lives elsewhere; point to it once.\n` +
