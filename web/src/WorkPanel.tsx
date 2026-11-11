@@ -4,7 +4,7 @@ import type { OpenReviewPr } from "../../server/pickup.ts";
 import { api } from "./api.ts";
 import { LinearSection } from "./LinearPanel.tsx";
 import { Fox } from "./Fox.tsx";
-import { accentStyle, relTime } from "./format.ts";
+import { accentStyle, prKey, relTime } from "./format.ts";
 import { useWorkData } from "./WorkData.tsx";
 import { usePersistentString } from "./usePersistent.ts";
 import { BugsTab } from "./BugsTab.tsx";
@@ -12,6 +12,7 @@ type BugsTabProps = Parameters<typeof BugsTab>[0];
 import { ChecksTab } from "./ChecksTab.tsx";
 import { RiskChip } from "./RiskChip.tsx";
 import { SizeCount } from "./SizeCount.tsx";
+import { SnoozeButton, SnoozePick, SnoozedToggle } from "./Snooze.tsx";
 import type { GuideRisk } from "../../shared/guideRisk.ts";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
@@ -28,19 +29,27 @@ const REVIEW_LABEL: Record<PullRequest["review"], string | null> = {
   none: null,
 };
 
+interface SnoozeProps {
+  snoozedUntil?: number;
+  onSnooze: (until: number | null) => void;
+}
+
 function PrCard({
   pr,
   onOpen,
   onDismiss,
   accent,
   risk,
+  snoozedUntil,
+  onSnooze,
 }: {
   pr: PullRequest;
   onOpen: (pr: PullRequest) => void;
   onDismiss: (pr: PullRequest) => void;
   accent?: string;
   risk: GuideRisk | null;
-}) {
+} & SnoozeProps) {
+  const [picking, setPicking] = useState(false);
   const check = CHECK_ICON[pr.checks];
   const review = REVIEW_LABEL[pr.review];
   // Your own approved PR with no red/pending CI is genuinely ready to merge —
@@ -54,14 +63,14 @@ function PrCard({
     pr.mergeable !== "CONFLICTING";
   return (
     <div
-      className={`pr-card ticket-card${pr.needsAttention ? " needs-attention" : ""}${accent ? " session-linked" : ""}`}
+      className={`pr-card ticket-card${pr.needsAttention && !snoozedUntil ? " needs-attention" : ""}${accent ? " session-linked" : ""}${snoozedUntil ? " snoozed" : ""}`}
       style={accentStyle(accent)}
       onClick={() => onOpen(pr)}
       role="button"
       tabIndex={0}
     >
       <div className="pr-top">
-        {pr.needsAttention && (
+        {pr.needsAttention && !snoozedUntil && (
           <button
             type="button"
             className="pr-attn"
@@ -91,6 +100,7 @@ function PrCard({
             conflicts
           </span>
         )}
+        <SnoozeButton until={snoozedUntil} picking={picking} onClick={() => (snoozedUntil ? onSnooze(null) : setPicking((p) => !p))} />
         <a
           className="ticket-ext"
           href={pr.url}
@@ -104,6 +114,15 @@ function PrCard({
         <span className="pr-time">{relTime(pr.updatedAt)}</span>
       </div>
       <div className="pr-title">{pr.title}</div>
+      {picking && (
+        <SnoozePick
+          onPick={(until) => {
+            setPicking(false);
+            onSnooze(until);
+          }}
+          onCancel={() => setPicking(false)}
+        />
+      )}
       <div className="pr-meta">
         {pr.ticketHint && <span className="pr-badge ticket">{pr.ticketHint}</span>}
         {risk && <RiskChip risk={risk} />}
@@ -141,36 +160,48 @@ function PrCard({
 
 function PrList({
   prs,
+  asleep,
+  snoozed,
+  onSnooze,
   onOpenPr,
   onDismissPr,
   prColor,
   prRisk,
 }: {
   prs: PullRequest[];
+  /** This list's snoozed PRs, shown only on request. */
+  asleep: PullRequest[];
+  snoozed: Record<string, number>;
+  onSnooze: (key: string, until: number | null) => void;
   onOpenPr: (pr: PullRequest) => void;
   onDismissPr: (pr: PullRequest) => void;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
   prRisk?: (repo: string, number: number) => GuideRisk | null;
 }) {
-  if (prs.length === 0) {
-    return (
-      <div className="placeholder" style={{ padding: "4px 6px" }}>
-        nothing here 🌿
-      </div>
-    );
-  }
+  const [showAsleep, setShowAsleep] = useState(false);
+  const card = (pr: PullRequest) => (
+    <PrCard
+      key={prKey(pr)}
+      pr={pr}
+      onOpen={onOpenPr}
+      onDismiss={onDismissPr}
+      accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
+      risk={prRisk?.(pr.repo, pr.number) ?? null}
+      snoozedUntil={snoozed[prKey(pr)]}
+      onSnooze={(until) => onSnooze(prKey(pr), until)}
+    />
+  );
   return (
     <>
-      {prs.map((pr) => (
-        <PrCard
-          key={`${pr.repo}#${pr.number}`}
-          pr={pr}
-          onOpen={onOpenPr}
-          onDismiss={onDismissPr}
-          accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
-          risk={prRisk?.(pr.repo, pr.number) ?? null}
-        />
-      ))}
+      {prs.length === 0 ? (
+        <div className="placeholder" style={{ padding: "4px 6px" }}>
+          nothing here 🌿
+        </div>
+      ) : (
+        prs.map(card)
+      )}
+      <SnoozedToggle count={asleep.length} open={showAsleep} onToggle={() => setShowAsleep((v) => !v)} />
+      {showAsleep && asleep.map(card)}
     </>
   );
 }
@@ -187,11 +218,18 @@ function asPullRequest(p: OpenReviewPr): PullRequest {
 
 /** A team PR nobody has reviewed yet. It never offers to approve, comment, or
  * assign: the developer does those on GitHub. */
-function OpenReviewCard({ pr, onOpen, accent }: { pr: OpenReviewPr; onOpen: (pr: PullRequest) => void; accent?: string }) {
+function OpenReviewCard({
+  pr,
+  onOpen,
+  accent,
+  snoozedUntil,
+  onSnooze,
+}: { pr: OpenReviewPr; onOpen: (pr: PullRequest) => void; accent?: string } & SnoozeProps) {
   const check = CHECK_ICON[pr.checks];
+  const [picking, setPicking] = useState(false);
   return (
     <div
-      className={`pr-card ticket-card${accent ? " session-linked" : ""}`}
+      className={`pr-card ticket-card${accent ? " session-linked" : ""}${snoozedUntil ? " snoozed" : ""}`}
       style={accentStyle(accent)}
       onClick={() => onOpen(asPullRequest(pr))}
       role="button"
@@ -209,6 +247,7 @@ function OpenReviewCard({ pr, onOpen, accent }: { pr: OpenReviewPr; onOpen: (pr:
             easy
           </span>
         )}
+        <SnoozeButton until={snoozedUntil} picking={picking} onClick={() => (snoozedUntil ? onSnooze(null) : setPicking((p) => !p))} />
         <a
           className="ticket-ext"
           href={pr.url}
@@ -222,6 +261,15 @@ function OpenReviewCard({ pr, onOpen, accent }: { pr: OpenReviewPr; onOpen: (pr:
         <span className="pr-time" title="opened">{relTime(pr.createdAt)}</span>
       </div>
       <div className="pr-title">{pr.title}</div>
+      {picking && (
+        <SnoozePick
+          onPick={(until) => {
+            setPicking(false);
+            onSnooze(until);
+          }}
+          onCancel={() => setPicking(false)}
+        />
+      )}
       <div className="pr-meta">
         <span className="pr-badge ticket" title="author">{pr.author}</span>
         <span className="pr-checkcounts">
@@ -289,14 +337,31 @@ export function WorkPanel({
     prsLoading: loading,
     refreshPrs,
     dismissPrAttention,
+    snoozed,
+    snoozePr,
+    snoozedPrs,
     linear,
   } = useWorkData();
+  const [showAsleepOpen, setShowAsleepOpen] = useState(false);
 
   // Linear and GitHub each get the whole column on a small screen, rather
   // than GitHub sitting below every ticket.
   const [source, setSource] = usePersistentString("den.workTab", "linear", ["linear", "github", "checks", "bugs"] as const);
   const [prTab, setPrTab] = usePersistentString("den.prTab", "review", ["review", "mine", "open"] as const);
   const open = useOpenReviewPrs(source === "github");
+  const teamKey = (p: OpenReviewPr) => `${p.repo}#${p.number}`;
+  const openAwake = open.prs?.filter((p) => !snoozed[teamKey(p)]) ?? null;
+  const openAsleep = open.prs?.filter((p) => snoozed[teamKey(p)]) ?? [];
+  const teamCard = (pr: OpenReviewPr) => (
+    <OpenReviewCard
+      key={teamKey(pr)}
+      pr={pr}
+      onOpen={onOpenPr}
+      accent={prColor?.(pr.repo, pr.number)}
+      snoozedUntil={snoozed[teamKey(pr)]}
+      onSnooze={(until) => snoozePr(teamKey(pr), until)}
+    />
+  );
   const linearBang = (linear?.unreadNotifications ?? 0) > 0 ? " !" : "";
   const prsBang = data && [...data.reviewRequested, ...data.authored].some((p) => p.needsAttention) ? " !" : "";
 
@@ -407,14 +472,18 @@ export function WorkPanel({
                     aria-selected={prTab === "open"}
                     className={`look-tab${prTab === "open" ? " active" : ""}`}
                     onClick={() => setPrTab("open")}
-                    title="Team PRs that ask your team, not you, for a review and that nobody has reviewed yet. Tanuki tags the easy ones."
+                    title="Open PRs in the work repo that no teammate has reviewed yet (bots don't count). Tanuki tags the easy ones."
                   >
-                    Open PRs for review{open.prs?.length ? ` (${open.prs.length})` : ""}
+                    Open PRs for review{openAwake?.length ? ` (${openAwake.length})` : ""}
                   </button>
                 </div>
                 {prTab !== "open" ? (
                   <PrList
+                    key={prTab}
                     prs={prTab === "review" ? data.reviewRequested : data.authored}
+                    asleep={prTab === "review" ? snoozedPrs.reviewRequested : snoozedPrs.authored}
+                    snoozed={snoozed}
+                    onSnooze={snoozePr}
                     onOpenPr={onOpenPr}
                     onDismissPr={dismissPrAttention}
                     prColor={prColor}
@@ -426,19 +495,18 @@ export function WorkPanel({
                   <div className="loading-row">
                     <Fox pose="walk" size={22} /> loading team PRs…
                   </div>
-                ) : open.prs.length === 0 ? (
-                  <div className="placeholder" style={{ padding: "4px 6px" }}>
-                    nothing waiting for a first review 🌿
-                  </div>
                 ) : (
-                  open.prs.map((pr) => (
-                    <OpenReviewCard
-                      key={`${pr.repo}#${pr.number}`}
-                      pr={pr}
-                      onOpen={onOpenPr}
-                      accent={prColor?.(pr.repo, pr.number)}
-                    />
-                  ))
+                  <>
+                    {openAwake?.length ? (
+                      openAwake.map(teamCard)
+                    ) : (
+                      <div className="placeholder" style={{ padding: "4px 6px" }}>
+                        nothing waiting for a first review 🌿
+                      </div>
+                    )}
+                    <SnoozedToggle count={openAsleep.length} open={showAsleepOpen} onToggle={() => setShowAsleepOpen((v) => !v)} />
+                    {showAsleepOpen && openAsleep.map(teamCard)}
+                  </>
                 )}
               </>
             )}

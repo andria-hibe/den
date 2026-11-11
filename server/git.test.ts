@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { baseCandidates, isDenWorktree, isValidBranch, losesWork, parseWorktrees, pickBaseRef } from "./git.ts";
+import { baseCandidates, isDenWorktree, isValidBranch, losesWork, parseGithubRemote, parseWorktrees, pickBaseRef } from "./git.ts";
 
 describe("isValidBranch", () => {
   it("accepts normal branch names", () => {
@@ -142,5 +142,13 @@ describe("losesWork", () => {
   it("loses uncommitted changes, and commits on a detached HEAD", () => {
     expect(losesWork({ dirty: 1, unpushed: 0, detached: false })).toBe(true);
     expect(losesWork({ dirty: 0, unpushed: 1, detached: true })).toBe(true);
+  });
+});
+
+describe("parseGithubRemote", () => {
+  it("reads owner/name from https and ssh remotes", () => {
+    expect(parseGithubRemote("https://github.com/acme/app.git\n")).toBe("acme/app");
+    expect(parseGithubRemote("git@github.com:acme/my.app.git")).toBe("acme/my.app");
+    expect(parseGithubRemote("https://gitlab.com/acme/app.git")).toBeNull();
   });
 });

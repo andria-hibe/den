@@ -85,7 +85,7 @@ import { currentWatch } from "./fieldMouse.ts";
 import { hasSession, listPastSessions } from "./discover.ts";
 import {
   prepareWork, checkoutPr, NotAtPrHeadError, listWorktrees, isDenWorktree, worktreeChanges, removeWorktree,
-  repoBaseName, isValidBranch, remoteHasBranch, baseRef,
+  repoBaseName, isValidBranch, remoteHasBranch, baseRef, githubRepoOf,
   type WorkEnv,
 } from "./git.ts";
 import { detectAppRunner, appRunnerStatus, detectSetup, setupScript, portHolder, runnPortsFile } from "./apprun.ts";
@@ -1143,10 +1143,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     return buckets;
   });
-  // The work panel's Open PRs for review: team PRs nobody has reviewed, with
-  // Fox's easy picks marked. The digest reads the same cache.
-  const teamPrCache = ttlCache<TeamPr[]>(60_000, async () => {
-    const prs = await getTeamReviewPrs();
+  // The work panel's Open PRs for review: the work repo's PRs nobody has
+  // reviewed, with Fox's easy picks marked. The digest reads the same cache.
+  // Two minutes: each listed PR costs a `gh pr checks` call.
+  const teamPrCache = ttlCache<TeamPr[]>(120_000, async () => {
+    const prs = await getTeamReviewPrs(githubRepoOf(roots().workRepo));
     writePrState({ team: prs });
     return prs;
   });

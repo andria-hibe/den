@@ -1665,6 +1665,69 @@ body {
 .ticket-ext:hover {
   color: var(--accent-ink);
 }
+/* Snooze: on hover or focus only, so a card's top line stays quiet. Text,
+   not an emoji, so it takes the ink tokens like the link beside it. */
+.pr-snooze {
+  margin-left: auto;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.pr-card:hover .pr-snooze,
+.pr-card:focus-within .pr-snooze,
+.pr-snooze.on {
+  opacity: 1;
+}
+.pr-snooze:hover,
+.pr-snooze[aria-pressed="true"] {
+  color: var(--accent-ink);
+}
+.pr-snooze + .ticket-ext {
+  margin-left: 6px;
+}
+.pr-snooze:focus-visible,
+.snoozed-toggle:focus-visible,
+.snooze-pick .btn:focus-visible {
+  outline: 2px solid var(--pink-deep);
+  outline-offset: 1px;
+}
+.pr-card.snoozed {
+  border-style: dashed;
+}
+.pr-card.snoozed .pr-title {
+  color: var(--ink-soft);
+}
+.snooze-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+.snooze-pick .btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.snoozed-toggle {
+  display: block;
+  margin: 4px 0 8px;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.snoozed-toggle:hover {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
 .ticket-card .pr-time {
   margin-left: 8px;
 }

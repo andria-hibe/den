@@ -157,9 +157,9 @@ const tanukiPrompt = (digest: string) =>
   `doesn't tell you. Return only the items that need them or are worth ` +
   `knowing, one line each with its link, marked Decide, Unblock others, or ` +
   `FYI.\n` +
-  `Then go through the digest's Team PRs to pick up section: PRs that ask the ` +
-  `developer's team, not them, for a review, already without drafts, ` +
-  `ones anyone has reviewed, failing CI, and ones a session is on. Pick the likely easy ` +
+  `Then go through the digest's Team PRs to pick up section: the work repo's ` +
+  `open PRs that no teammate has reviewed, already without drafts, the ` +
+  `developer's own, failing CI, and ones a session is on. Pick the likely easy ` +
   `approvals: small, focused, nothing risky (migrations, auth, security, money, ` +
   `deletions), dependabot bumps of dev dependencies. Size and CI settle most; ` +
   `read the diff with \`gh pr diff <n> --repo <repo>\` for at most five PRs ` +

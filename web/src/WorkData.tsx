@@ -26,6 +26,13 @@ interface WorkDataValue {
   refreshPrs: () => void;
   /** Silence a PR's "!" attention flag until the PR next changes. */
   dismissPrAttention: (pr: PullRequest) => void;
+  /** prKey -> when its snooze ends (epoch ms). Snoozed PRs are left out of
+   * `prs` and `flatPrs`, so no card, "!", or notification shows them. */
+  snoozed: Record<string, number>;
+  /** Hide a PR until `until`, or wake it with null. */
+  snoozePr: (key: string, until: number | null) => void;
+  /** The PRs `prs` leaves out because they're snoozed. */
+  snoozedPrs: { authored: PullRequest[]; reviewRequested: PullRequest[] };
   // Linear
   linear: LinearData | null;
   issues: LinearIssue[];
@@ -77,22 +84,46 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     [setDismissed],
   );
 
+  const [snoozedRaw, setSnoozed] = usePersistentJson<Record<string, number>>("den.snoozedPrs", {});
+  const snoozePr = useCallback(
+    (key: string, until: number | null) =>
+      setSnoozed((m) => {
+        const next = { ...m };
+        if (until === null) delete next[key];
+        else next[key] = until;
+        return next;
+      }),
+    [setSnoozed],
+  );
+  // Ended snoozes drop out on the next poll, which re-runs this.
+  const snoozed = useMemo(() => {
+    const now = Date.now();
+    return Object.fromEntries(Object.entries(snoozedRaw).filter(([, until]) => until > now));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prs is the clock: a fresh poll re-checks the times
+  }, [snoozedRaw, prs]);
+  useEffect(() => {
+    if (Object.keys(snoozed).length !== Object.keys(snoozedRaw).length) setSnoozed(snoozed);
+  }, [snoozed, snoozedRaw, setSnoozed]);
+
   // Every consumer (cards, fox, notifications) reads these derived buckets, so
-  // they never disagree about a dismissal.
-  const dprs = useMemo<PrBuckets | null>(() => {
-    if (!prs) return null;
+  // they never disagree about a dismissal or a snooze.
+  const { dprs, snoozedPrs } = useMemo(() => {
+    const empty = { authored: [] as PullRequest[], reviewRequested: [] as PullRequest[] };
+    if (!prs) return { dprs: null, snoozedPrs: empty };
     const clear = (list: PullRequest[]) =>
-      list.map((p) =>
-        p.needsAttention && dismissed[prKey(p)] === p.updatedAt
-          ? { ...p, needsAttention: false }
-          : p,
-      );
+      list
+        .filter((p) => !snoozed[prKey(p)])
+        .map((p) =>
+          p.needsAttention && dismissed[prKey(p)] === p.updatedAt
+            ? { ...p, needsAttention: false }
+            : p,
+        );
+    const asleep = (list: PullRequest[]) => list.filter((p) => snoozed[prKey(p)]);
     return {
-      ...prs,
-      authored: clear(prs.authored),
-      reviewRequested: clear(prs.reviewRequested),
+      dprs: { ...prs, authored: clear(prs.authored), reviewRequested: clear(prs.reviewRequested) } as PrBuckets,
+      snoozedPrs: { authored: asleep(prs.authored), reviewRequested: asleep(prs.reviewRequested) },
     };
-  }, [prs, dismissed]);
+  }, [prs, dismissed, snoozed]);
 
   // Prune dismissals whose PR has left the list or changed since, so
   // localStorage doesn't grow forever.
@@ -174,6 +205,9 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
       prsLoading,
       refreshPrs: () => refreshPrs(true),
       dismissPrAttention,
+      snoozed,
+      snoozePr,
+      snoozedPrs,
       linear,
       issues: linear?.issues ?? [],
       linearNotifs: linear?.unreadNotifications ?? 0,
@@ -190,6 +224,9 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
       prsLoading,
       refreshPrs,
       dismissPrAttention,
+      snoozed,
+      snoozePr,
+      snoozedPrs,
       linear,
       linearConnected,
       linearError,

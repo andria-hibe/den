@@ -240,7 +240,6 @@ export function App() {
       (s) => (s.pr === number && s.prRepo === repo) || hintEq(s.ticketHint, hint),
     );
 
-  // A review pane's guide rates the PR; its card shows the same level.
   const prRisk = (repo: string, number: number) =>
     sessions.find((s) => s.pr === number && s.prRepo === repo && s.risk)?.risk ?? null;
 

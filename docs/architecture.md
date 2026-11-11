@@ -1039,7 +1039,13 @@ developer's day across the other sessions instead of them being the glue.
   fetch retried after 5 minutes), then
   den's churn paths, then test and docs path patterns. `withPickNotes`
   sorts team PRs by that size. The diff view's folding still uses paths
-  only (`shared/churn.ts`). Fox is drawn as the whole
+  only (`shared/churn.ts`). **Snooze** (2026-11-11, from Linear's review
+  snooze): a card's "zz" (shown on hover or focus) hides it until tomorrow 9am, for 3
+  days, or for a week (`Snooze.tsx`); `den.snoozedPrs` in localStorage,
+  held in `WorkData`, which leaves snoozed PRs out of `prs` / `flatPrs`, so
+  no card, tab "!", or notification shows them. Each list ends with "zz N
+  snoozed" to see them dimmed and wake one. Expired snoozes drop out on the
+  next poll. The server doesn't know, so Fox's digest still lists them. Fox is drawn as the whole
   sitting fox (`Fox pose="sit"`, not a bust) in place of a colour dot
   (rail, header, title chip), so it never reads as one of its kits.
   Every session writing code is drawn as a kit whose scarf is the
@@ -1064,11 +1070,14 @@ developer's day across the other sessions instead of them being the glue.
   real and whether a fix landed on the base; never reruns). Kits, my-PR and
   review panes get raccoon too, for their own red CI.
   **Open PRs for review** (andria, 2026-11-06, design agreed with Fox):
-  `getTeamReviewPrs` (`review-requested:@me -user-review-requested:@me`, a
-  request to the developer's team only, minus drafts and their own, then
+  `getTeamReviewPrs(repo)` (andria, 2026-11-11: every open PR in the work
+  repo, `repo:<githubRepoOf(workRepo)>`, up to 50, since the team rarely
+  sends team review requests; without a GitHub origin it falls back to
+  `review-requested:@me -user-review-requested:@me`), minus drafts, their
+  own, and ones they reviewed, then
   `reviewedByTeammate` drops any PR someone other than its author has
   reviewed, comments included; bots don't count) feeds the work panel's
-  third GitHub tab (`GET /api/github/team-prs`, a 60s `teamPrCache` the
+  third GitHub tab (`GET /api/github/team-prs`, a 120s `teamPrCache` the
   digest shares) and the digest's `## Team PRs to pick up` (where pure
   `pickupPrs` also drops failing CI and PRs a session is on). Tanuki picks
   the likely easy approvals from that section (at most five `gh pr diff`

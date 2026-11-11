@@ -107,8 +107,8 @@ const SEARCHES = {
 } as const;
 type SearchName = keyof typeof SEARCHES;
 
-/** Per-file counts for a PR's implementation-only size. Measured 2026-11-11:
- * still cost 1 per query, about 2 KB more per PR. */
+/** Per-file counts for a PR's implementation-only size. They add no GraphQL
+ * rate-limit cost (a query stays at 1 point), only about 2 KB per PR. */
 const SIZE_FIELDS = `changedFiles additions deletions files(first:100){nodes{path additions deletions}} `;
 
 type SizeNode = {
@@ -858,8 +858,8 @@ export interface TeamPr {
 }
 
 // Drafts and PRs the developer wrote or already reviewed are never theirs to pick up.
-const TEAM_PR_QUERY =
-  "is:pr is:open draft:false review-requested:@me -user-review-requested:@me -author:@me -reviewed-by:@me";
+const OPEN_PR_FILTER = "is:pr is:open draft:false -author:@me -reviewed-by:@me";
+const TEAM_LIMIT = 50;
 
 /** Whether anyone but the PR's author has reviewed it. A bot's review (an AI
  * reviewer) doesn't count, and neither does the author answering a thread,
@@ -871,9 +871,12 @@ export function reviewedByTeammate(
   return reviews.some((r) => r.author && r.author.__typename !== "Bot" && r.author.login !== author);
 }
 
-export async function getTeamReviewPrs(): Promise<TeamPr[]> {
+/** Open PRs in the work repo that nobody but bots has reviewed yet. Without a
+ * known repo, PRs that ask one of the developer's teams for a review. */
+export async function getTeamReviewPrs(repo: string | null): Promise<TeamPr[]> {
+  const q = repo ? `repo:${repo} ${OPEN_PR_FILTER}` : `review-requested:@me -user-review-requested:@me ${OPEN_PR_FILTER}`;
   const query =
-    `query{search(type:ISSUE,first:${SEARCH_LIMIT},query:"${TEAM_PR_QUERY}"){issueCount nodes{` +
+    `query{search(type:ISSUE,first:${TEAM_LIMIT},query:"${q}"){issueCount nodes{` +
     `... on PullRequest{number title url headRefName createdAt ${SIZE_FIELDS}reviewDecision ` +
     `author{login} repository{nameWithOwner} reviews(first:50){nodes{state author{login __typename}}}}}}}`;
   type Node = {
@@ -889,7 +892,7 @@ export async function getTeamReviewPrs(): Promise<TeamPr[]> {
     const out = await gh(["api", "graphql", "-f", `query=${query}`]);
     const search = (JSON.parse(out) as { data: { search: { issueCount: number; nodes: (Node | null)[] } } }).data.search;
     for (const n of search.nodes) if (n?.number) found.set(`${n.repository.nameWithOwner}#${n.number}`, n);
-    if (found.size >= Math.min(search.issueCount, SEARCH_LIMIT)) break;
+    if (found.size >= Math.min(search.issueCount, TEAM_LIMIT)) break;
   }
   const open = [...found.values()].filter((n) => !reviewedByTeammate(n.author?.login, n.reviews.nodes));
   return mapLimit(open, 4, async (n) => {

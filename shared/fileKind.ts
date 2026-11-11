@@ -1,6 +1,6 @@
 // What kind of change each file in a PR is, so a PR's size can count the
-// implementation alone (Linear's review line counts do the same). A repo's
-// own .gitattributes wins over den's path guesses.
+// implementation alone. A repo's own .gitattributes wins over den's path
+// guesses.
 import { isChurnPath } from "./churn.ts";
 
 export type FileKind = "implementation" | "test" | "docs" | "generated";
