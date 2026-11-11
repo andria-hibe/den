@@ -2,10 +2,11 @@ import { useState } from "react";
 import { usePersistentString } from "./usePersistent.ts";
 import type { PullRequest } from "../../server/github.ts";
 
-/** What Claude does first when a review opens (#11): the full pass (reading
- * guide, then the code-review skill), the cheap reading guide only for a PR
- * small enough to read yourself, or nothing until you ask. */
-export type PreReview = "full" | "guide" | "none";
+/** What Claude does first when a review opens: the full pass (reading guide,
+ * then the code-review skill), the same pass reporting only blockers, the
+ * cheap reading guide only for a PR small enough to read yourself, or nothing
+ * until you ask. */
+export type PreReview = "full" | "blockers" | "guide" | "none";
 
 export function PrDialog({
   pr,
@@ -21,6 +22,7 @@ export function PrDialog({
   // Remembered, so a small-PR habit sticks.
   const [preReview, setPreReview] = usePersistentString("den.preReview", "full", [
     "full",
+    "blockers",
     "guide",
     "none",
   ] as const);
@@ -81,6 +83,7 @@ export function PrDialog({
               {(
                 [
                   ["full", "Full pre-review", "reading guide, then the code-review pass"],
+                  ["blockers", "Blockers only", "the same, but only what should stop the merge, performance included"],
                   ["guide", "Reading guide only", "cheaper, for a PR small enough to read yourself"],
                   ["none", "Nothing yet", "ask from the Guide or Review tab when you want"],
                 ] as const

@@ -166,7 +166,7 @@ export function PrReviewView({
   work?: { handover: ReactNode; terminals: ReactNode; terminalCount: number };
   /** Start on its own when the view opens: the full pre-review, or the
    * reading guide only. Null: wait to be asked. */
-  autoReview: "full" | "guide" | null;
+  autoReview: "full" | "blockers" | "guide" | null;
   /** Fired once the auto pre-review is sent, so App can stop it re-firing. */
   onAutoReviewStarted?: () => void;
   header: ReactNode;
@@ -239,13 +239,14 @@ export function PrReviewView({
 
   // Submitted, not just pasted: choosing a pre-review means "start now". No
   // client-side delay, since the server holds the paste until the pane is ready.
-  const autoAsk = autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo, owned);
+  const autoAsk =
+    autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo, owned, autoReview === "blockers" ? "blockers" : "full");
 
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
     setTab("guide");
-    if (autoReview === "full") setRequested(true);
+    if (autoReview !== "guide") setRequested(true);
     setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",

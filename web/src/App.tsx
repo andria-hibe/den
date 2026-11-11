@@ -176,7 +176,7 @@ export function App() {
   const [bugModal, setBugModal] = useState<{ issue: BugIssue; note: string | null; findings: BugFinding[] } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   // The PR whose review session should start on its own, and how (#11).
-  const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "guide" } | null>(null);
+  const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "blockers" | "guide" } | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   useEffect(() => setColorPickerOpen(false), [activeId]);
   const [workRepoRoot, setWorkRepoRoot] = useState<string>("");

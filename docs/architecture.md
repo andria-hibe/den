@@ -560,9 +560,15 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   a per-workspace **handover switch** on the notepad (`handover` column,
   `POST /api/sessions/:id/handover`) — off stops the idle refresh at once
   and drops the notepad instruction from the pane's next start (the house
-  rules stay); and the PR dialog's pre-review is now **full / reading guide
-  only / nothing** (remembered in localStorage), the guide being the cheap
-  option for a PR small enough to read yourself. `NotepadPane` leaves a handover's scroll alone and only
+  rules stay); and the PR dialog's pre-review is now **full / blockers only
+  / reading guide only / nothing** (remembered in localStorage), the guide
+  being the cheap option for a PR small enough to read yourself. Blockers
+  only (andria, 2026-11-11) is the full pass with `BLOCKERS_ONLY` appended
+  to `reviewPrompt` (`ReviewFocus`): wrong behaviour, security, data loss,
+  broken contracts or migrations, and performance users or the database
+  would feel; no look-closely notes, design, naming, or test suggestions.
+  Security-only and tests-only passes were left out: wolf and badger cover
+  them on request. `NotepadPane` leaves a handover's scroll alone and only
   follows the bottom for an older appended log.
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill

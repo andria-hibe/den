@@ -28,9 +28,21 @@ export function guidePrompt(number: number, repo: string): string {
   );
 }
 
+/** "blockers": only what should stop the merge, for a quick pass. */
+export type ReviewFocus = "full" | "blockers";
+
+const BLOCKERS_ONLY =
+  ` Report blockers only: findings that should stop the merge. That means ` +
+  `wrong behaviour, security holes, data loss, broken contracts or missing ` +
+  `migrations, and performance problems users or the database would feel ` +
+  `(N+1 or unindexed queries, work repeated in loops or renders, unbounded ` +
+  `lists or payloads). Leave out look-closely notes, design opinions, naming, ` +
+  `and test suggestions. Check every finding against the code before you ` +
+  `report it. If nothing blocks, say so in one line.`;
+
 /** Ask a review pane for the review, in the structure parseReview files per
  * file. */
-export function reviewPrompt(number: number, repo: string, owned = false): string {
+export function reviewPrompt(number: number, repo: string, owned = false, focus: ReviewFocus = "full"): string {
   return (
     `Please review pull request #${number} (${repo}). The PR's full diff has been ` +
     `saved to a file for you (see your instructions) and the PR is checked out in ` +
@@ -48,7 +60,8 @@ export function reviewPrompt(number: number, repo: string, owned = false): strin
     `the diff, and your comments on that file as bullets citing line numbers, each ` +
     `ending with its source tag, then a \`## Checked\` section, as your instructions ` +
     `describe. Skip files you have nothing to say about. If it all looks solid, say ` +
-    `so briefly.`
+    `so briefly.` +
+    (focus === "blockers" ? BLOCKERS_ONLY : "")
   );
 }
 
@@ -68,10 +81,10 @@ export function refreshReviewPrompt(number: number, repo: string): string {
 
 /** The auto pre-review asks for both, guide first: it is the reading order for
  * the review that follows, and it lands while the finding pass is still running. */
-export function autoReviewPrompt(number: number, repo: string, owned = false): string {
+export function autoReviewPrompt(number: number, repo: string, owned = false, focus: ReviewFocus = "full"): string {
   return (
     `${guidePrompt(number, repo)}\n\nThen, once the guide file is saved, review ` +
-    `the PR too. ${reviewPrompt(number, repo, owned)}`
+    `the PR too. ${reviewPrompt(number, repo, owned, focus)}`
   );
 }
 

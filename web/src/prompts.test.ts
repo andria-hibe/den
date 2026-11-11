@@ -53,6 +53,7 @@ describe("paste prompts", () => {
     reviewPrompt: reviewPrompt(42, "org/repo"),
     autoReviewPrompt: autoReviewPrompt(42, "org/repo"),
     autoReviewPromptOwned: autoReviewPrompt(42, "org/repo", true),
+    autoReviewPromptBlockers: autoReviewPrompt(42, "org/repo", false, "blockers"),
     fileReviewPrompt: fileReviewPrompt("server/git.ts", 42, FILE_LINES),
     ticketBrief: ticketBrief(ISSUE),
     ticketNotesSeed: ticketNotesSeed(ISSUE),
