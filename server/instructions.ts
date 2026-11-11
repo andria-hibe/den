@@ -653,8 +653,26 @@ export function reviewInstruction(
       : `Never pass --comment (posts to GitHub) or --fix (edits the working tree). `) +
     `Its report renders in the terminal only and is not the deliverable: fold ` +
     `the verified findings into the notepad review described next, and cover ` +
-    `yourself what its scope misses (design, tests, naming, missing cases). If ` +
+    `yourself what its scope misses (design, tests, missing cases). If ` +
     `the skill is unavailable, do the whole review by hand.\n` +
+    `WHAT TO FLAG: the issues a careful maintainer would block the merge on, ` +
+    `in roughly this order:\n` +
+    `1. Correctness: logic errors, broken invariants, missed edge cases, ` +
+    `off-by-one, races, lifetime and memory bugs, error paths that swallow ` +
+    `failures.\n` +
+    `2. Security: injection, authn and authz mistakes, secret handling, unsafe ` +
+    `deserialization, unsafe defaults, TOCTOU.\n` +
+    `3. Reliability and performance: blocking the wrong thread, unbounded ` +
+    `resource use, accidental O(N^2), retries without backoff.\n` +
+    `4. Contract risk: behaviour changes callers rely on, silently changed ` +
+    `defaults, broken backward compatibility, missing migrations.\n` +
+    `For each finding explain why it is wrong, not what the code does, and give ` +
+    `a concrete fix when one is obvious. Be calibrated: verify each claim ` +
+    `against the actual code rather than inferring from names, and if a finding ` +
+    `is not high-confidence, skip it or leave ", verified" off its tag. This ` +
+    `ranks findings; it doesn't drop the design and missing-test checks. Skip ` +
+    `pure code style, formatting, naming, and anything a linter or CI already ` +
+    `enforces. If you find nothing worth fixing, say so plainly in the summary.\n` +
     `Use the repo's own skills where it has them instead of working it out by ` +
     `hand: a QA review skill for the impact and test-coverage pass, run ` +
     `against this PR's real base branch rather than any base it assumes; and a ` +

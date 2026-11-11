@@ -441,7 +441,11 @@ WebSocket; everything else is REST.
     working tree) explicitly forbidden, and the notepad review still the
     deliverable (the skill's report renders only in the terminal). The skill
     is a first pass, not the review: the instruction says to also cover what
-    its correctness/simplification scope misses. Every review, a review pane's and
+    its correctness/simplification scope misses. A "WHAT TO FLAG" block
+    (from iTerm2's Claude Code integration review prompt; andria, 2026-11-11)
+    ranks findings: correctness, security, reliability and performance, then
+    contract risk; why not what, calibrated, no style or naming nits. Every
+    review, a review pane's and
     the owl subagent's, also runs `REVIEW_CHECKS` (`server/crew.ts`;
     andria, 2026-10-30) **on top of** the full review (which it says to keep
     as thorough as ever), with a line each in the general review: **the
