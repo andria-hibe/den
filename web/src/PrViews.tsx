@@ -11,7 +11,7 @@ import { ToClaude } from "./ToClaude.tsx";
 import { PostReviewDialog, ThreadActions } from "./GitHubPost.tsx";
 import { CheckResultsButton, DeepReviewButton } from "./CheckResults.tsx";
 import { buildReviewPost } from "./reviewPost.ts";
-import { churnFromGuide, isChurnPath } from "./churn.ts";
+import { churnFromGuide, isChurnPath } from "../../shared/churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
 import { autoReviewPrompt, guidePrompt, notePrompt, refreshReviewPrompt, reviewPrompt } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";

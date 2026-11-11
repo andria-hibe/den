@@ -240,6 +240,10 @@ export function App() {
       (s) => (s.pr === number && s.prRepo === repo) || hintEq(s.ticketHint, hint),
     );
 
+  // A review pane's guide rates the PR; its card shows the same level.
+  const prRisk = (repo: string, number: number) =>
+    sessions.find((s) => s.pr === number && s.prRepo === repo && s.risk)?.risk ?? null;
+
   useEffect(() => {
     if (!errMsg) return;
     const t = setTimeout(() => setErrMsg(null), 9000);
@@ -400,7 +404,11 @@ export function App() {
     const fresh = waiting.length > 0 && seenWaiting[s.id] !== JSON.stringify(waiting);
     const lines = [
       ...(s.attention
-        ? [s.turn?.state === "needs-you" ? `Waiting for you: ${s.turn.message ?? "a permission prompt or a question"}` : "Finished a turn while you were away."]
+        ? [
+            s.turn?.state === "needs-you"
+              ? `Waiting for you: ${s.turn.message ?? "a permission prompt or a question"}${s.turn.detail ? `\n${s.turn.detail}` : ""}`
+              : "Finished a turn while you were away.",
+          ]
         : []),
       ...(fresh ? ["Waiting on you:", ...waiting.map((w) => `- ${w}`)] : []),
     ];
@@ -1121,6 +1129,7 @@ export function App() {
               onOpenBug={(issue, note, findings) => setBugModal({ issue, note, findings })}
               ticketColor={ticketColor}
               prColor={prColor}
+              prRisk={prRisk}
             />
           </div>
         </>

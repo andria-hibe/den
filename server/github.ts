@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { logWarn } from "./log.ts";
+import { parseGitAttributes, prSize, type AttrRule, type PrSize } from "../shared/fileKind.ts";
 
 const exec = promisify(execFile);
 
@@ -43,6 +44,8 @@ export interface PullRequest {
   review: ReviewState;
   /** Ticket id parsed from the branch (e.g. "abc-123"). */
   ticketHint?: string;
+  /** Lines changed, in total and in implementation files only. */
+  size?: PrSize;
   /** True for your own PRs (authored), false for others' (review-requested). */
   isMine: boolean;
   /** Whether this PR needs *your* action right now. For authored PRs: failing
@@ -104,6 +107,55 @@ const SEARCHES = {
 } as const;
 type SearchName = keyof typeof SEARCHES;
 
+/** Per-file counts for a PR's implementation-only size. Measured 2026-11-11:
+ * still cost 1 per query, about 2 KB more per PR. */
+const SIZE_FIELDS = `changedFiles additions deletions files(first:100){nodes{path additions deletions}} `;
+
+type SizeNode = {
+  changedFiles?: number;
+  additions?: number;
+  deletions?: number;
+  files?: { nodes: ({ path: string; additions: number; deletions: number } | null)[] } | null;
+};
+
+async function sizeOf(repo: string, n: SizeNode): Promise<PrSize | undefined> {
+  if (typeof n.additions !== "number" || typeof n.deletions !== "number") return undefined;
+  const files = (n.files?.nodes ?? []).filter((f): f is NonNullable<typeof f> => !!f);
+  return prSize(files, { additions: n.additions, deletions: n.deletions, changedFiles: n.changedFiles ?? files.length }, await repoAttributes(repo));
+}
+
+const ATTRS_TTL_MS = 24 * 60 * 60 * 1000;
+const attrsCache = new Map<string, { at: number; rules: Promise<AttrRule[]> }>();
+
+const ATTRS_RETRY_MS = 5 * 60 * 1000;
+
+/** After a failed fetch, sizes go without the repo's rules for a few minutes
+ * rather than asking GitHub again on every poll. */
+function retrySoon(repo: string) {
+  const hit = attrsCache.get(repo);
+  if (hit) hit.at = Date.now() - ATTRS_TTL_MS + ATTRS_RETRY_MS;
+}
+
+/** The repo's .gitattributes rules (default branch), fetched once a day. */
+function repoAttributes(repo: string): Promise<AttrRule[]> {
+  const hit = attrsCache.get(repo);
+  if (hit && Date.now() - hit.at < ATTRS_TTL_MS) return hit.rules;
+  const rules = ghAllowFail(["api", `repos/${repo}/contents/.gitattributes`, "-H", "Accept: application/vnd.github.raw+json"])
+    .then(({ stdout }) => {
+      if (stdout.trim() && !stdout.trimStart().startsWith("{")) return parseGitAttributes(stdout);
+      // No .gitattributes is an answer; anything else is a failure.
+      if (!/"Not Found"/.test(stdout)) retrySoon(repo);
+      return [];
+    })
+    .catch((err) => {
+      logWarn(`github.gitattributes ${repo}`, err);
+      retrySoon(repo);
+      return [];
+    });
+  attrsCache.set(repo, { at: Date.now(), rules });
+  return rules;
+}
+
 // One GraphQL request instead of three `gh search prs` calls plus a `gh pr view`
 // per PR, to stay under GitHub's secondary rate limit.
 const PR_SEARCH_QUERY =
@@ -113,12 +165,12 @@ const PR_SEARCH_QUERY =
       ([alias, q]) =>
         `${alias}:search(type:ISSUE,first:${SEARCH_LIMIT},query:"${q}"){issueCount nodes{` +
         `... on PullRequest{number title url isDraft updatedAt headRefName baseRefName mergeable reviewDecision ` +
-        `author{login} repository{nameWithOwner}}}}`,
+        `${SIZE_FIELDS}author{login} repository{nameWithOwner}}}}`,
     )
     .join(" ") +
   `}`;
 
-export interface SearchNode {
+export interface SearchNode extends SizeNode {
   number: number;
   title: string;
   url: string;
@@ -289,6 +341,7 @@ async function toPullRequest(n: SearchNode): Promise<PullRequest> {
   }
   const branch = n.headRefName ?? undefined;
   return {
+    size: await sizeOf(repo, n),
     number: n.number,
     title: n.title,
     url: n.url,
@@ -787,6 +840,8 @@ export async function getNotifications(since: Date): Promise<GhNotification[]> {
  * developer by name, and that no one else has reviewed yet: the work panel's
  * Open PRs for review, and what the digest offers as PRs to pick up. */
 export interface TeamPr {
+  /** Lines changed, in total and in implementation files only. */
+  size?: PrSize;
   repo: string;
   number: number;
   title: string;
@@ -819,11 +874,12 @@ export function reviewedByTeammate(
 export async function getTeamReviewPrs(): Promise<TeamPr[]> {
   const query =
     `query{search(type:ISSUE,first:${SEARCH_LIMIT},query:"${TEAM_PR_QUERY}"){issueCount nodes{` +
-    `... on PullRequest{number title url headRefName createdAt additions deletions changedFiles reviewDecision ` +
+    `... on PullRequest{number title url headRefName createdAt ${SIZE_FIELDS}reviewDecision ` +
     `author{login} repository{nameWithOwner} reviews(first:50){nodes{state author{login __typename}}}}}}}`;
   type Node = {
     number?: number; title: string; url: string; headRefName: string; createdAt: string;
     additions: number; deletions: number; changedFiles: number; reviewDecision: string | null;
+    files?: SizeNode["files"];
     author: { login: string } | null; repository: { nameWithOwner: string };
     reviews: { nodes: { state: string; author: { login: string; __typename: string } | null }[] };
   };
@@ -854,6 +910,7 @@ export async function getTeamReviewPrs(): Promise<TeamPr[]> {
       additions: n.additions,
       deletions: n.deletions,
       files: n.changedFiles,
+      size: await sizeOf(n.repository.nameWithOwner, n),
       approvals: n.reviews.nodes.filter((r) => r.state === "APPROVED").length,
       review: reviewFrom(n.reviewDecision),
       checks,

@@ -343,7 +343,7 @@ WebSocket; everything else is REST.
     survives, and a block comment still colours across lines. Minified or huge
     files (`MAX_LINES` / `MAX_LINE_CHARS`) stay plain. **Files collapse** (the
     file label in the notes column, or collapse/expand all); highlighting runs
-    only for expanded files. Churn starts collapsed — `churn.ts`: lockfiles,
+    only for expanded files. Churn starts collapsed — `shared/churn.ts`: lockfiles,
     snapshots, generated code by path, plus anything the guide files under a
     section titled churn/lockfile/generated/formatting — unless the review
     commented on it.
@@ -377,6 +377,14 @@ WebSocket; everything else is REST.
     bottom — nothing is ever hidden. Unit-tested in `reviewGuide.test.ts`.
     Why its own file and not the notepad: the review's `## <path>` headings and
     the guide's `## <section title>` ones would otherwise share a parser.
+    **Risk level** (2026-11-11, from Linear's PR risk): the intro ends with
+    `Risk: low|typical|high|very high - <why>`; `shared/guideRisk.ts` takes
+    it out of the intro (parseGuide's `risk`), the Guide tab shows it as a
+    `RiskChip`, and a review pane's `meta().risk` (re-read when the guide
+    file changes; intro only, so a section's "- risk:" note never counts)
+    puts the same chip on that PR's card in the GitHub panel. Medium and
+    moderate read as typical; low is sky so it isn't a second "approved".
+    `guidePrompt` asks for the line too, so any pane's next guide has it.
   - **Where findings came from** (2026-11-06, after acorn): the review
     ends each finding with a source tag (`[hare]`, `[code-review, verified]`,
     `[ticket]`, `[reviewer]` ...; `SOURCE_TAG` in `reviewNotes.ts`), drawn as
@@ -704,7 +712,16 @@ hook input to `~/.den/turn/<groupId>.json`; `watchTurns` (fs.watch) and the
 5s timer call `DenSession.checkTurn`, which flags the rail on a turn that
 finishes or stops for the developer while unwatched, and `meta().turn`
 says which ("Waiting for you: <message>" in the rail tip; any input
-clears it, since Escape at a prompt fires no hook). Clock out's
+clears it, since Escape at a prompt fires no hook). `Turn.detail` gives
+the rail a line under the session name (2026-11-11, from iTerm2's Claude
+Code integration): for a permission prompt, what the tool would run
+(`toolSummary`), from a PermissionRequest hook that writes both the turn
+file (needs-you as the prompt appears) and `<groupId>.tool.json`, which
+the Notification reads because it arrives about 6s later and says only
+"Claude needs your permission" (checked live with the CLI, 2.1.322); for
+a finished turn the developer hasn't seen, the Stop hook's
+`last_assistant_message`, one line. Hidden on the open session. Panes
+pick up the PermissionRequest hook on restart. Clock out's
 "still working" uses it, plus "waiting on you" as a blocker. The OSC title
 glyph stays as the fallback for panes started without the hooks. Stop was
 verified live in `claude -p`; Notification wasn't (no prompts in -p). The
@@ -1009,7 +1026,20 @@ developer's day across the other sessions instead of them being the glue.
   work panel folds to a 46px strip of counts (`den.workFold`, the "»"
   button, or Cmd+\\), and has Linear / GitHub tabs (`den.workTab`), with
   GitHub split into Review requested / My open PRs / Open PRs for review (`den.prTab`); a tab
-  shows "!" when something in it needs you. Fox is drawn as the whole
+  shows "!" when something in it needs you. **PR size** (2026-11-11, from
+  Linear's line counts): both PR searches fetch `SIZE_FIELDS` (per-file
+  counts, first 100 files; hare measured GraphQL cost unchanged at 1, about
+  2 KB more per PR) and `prSize` (`shared/fileKind.ts`, tested) counts only
+  implementation files; the card shows that count with "*" when tests,
+  docs, or generated files make the total bigger (`SizeCount`, total in the
+  tip). Over 100 files it falls back to the totals. `fileKind` takes the
+  repo's `.gitattributes` first (linguist-generated / -vendored /
+  -documentation, `-diff`, Linear's review-test / -generated /
+  -documentation; fetched once a day per repo, `repoAttributes`, a failed
+  fetch retried after 5 minutes), then
+  den's churn paths, then test and docs path patterns. `withPickNotes`
+  sorts team PRs by that size. The diff view's folding still uses paths
+  only (`shared/churn.ts`). Fox is drawn as the whole
   sitting fox (`Fox pose="sit"`, not a bust) in place of a colour dot
   (rail, header, title chip), so it never reads as one of its kits.
   Every session writing code is drawn as a kit whose scarf is the

@@ -10,6 +10,9 @@ import { usePersistentString } from "./usePersistent.ts";
 import { BugsTab } from "./BugsTab.tsx";
 type BugsTabProps = Parameters<typeof BugsTab>[0];
 import { ChecksTab } from "./ChecksTab.tsx";
+import { RiskChip } from "./RiskChip.tsx";
+import { SizeCount } from "./SizeCount.tsx";
+import type { GuideRisk } from "../../shared/guideRisk.ts";
 
 const CHECK_ICON: Record<PullRequest["checks"], { icon: string; cls: string }> = {
   passing: { icon: "✓", cls: "check-pass" },
@@ -30,11 +33,13 @@ function PrCard({
   onOpen,
   onDismiss,
   accent,
+  risk,
 }: {
   pr: PullRequest;
   onOpen: (pr: PullRequest) => void;
   onDismiss: (pr: PullRequest) => void;
   accent?: string;
+  risk: GuideRisk | null;
 }) {
   const check = CHECK_ICON[pr.checks];
   const review = REVIEW_LABEL[pr.review];
@@ -101,6 +106,7 @@ function PrCard({
       <div className="pr-title">{pr.title}</div>
       <div className="pr-meta">
         {pr.ticketHint && <span className="pr-badge ticket">{pr.ticketHint}</span>}
+        {risk && <RiskChip risk={risk} />}
         {/* You reviewed it, so it no longer nags — but it stays listed until it's
             merged or closed, and the badge says why it's still here. */}
         {pr.reviewedByMe && !pr.reviewRequestedFromMe && (
@@ -115,11 +121,17 @@ function PrCard({
         ) : (
           review && <span className={`pr-badge review-${pr.review}`}>{review}</span>
         )}
-        {pr.checkCounts.total > 0 && (
+        {(pr.size || pr.checkCounts.total > 0) && (
           <span className="pr-checkcounts">
-            {pr.checkCounts.failed > 0 && `${pr.checkCounts.failed}✕ `}
-            {pr.checkCounts.pending > 0 && `${pr.checkCounts.pending}◐ `}
-            {pr.checkCounts.passed}✓
+            {pr.size && <SizeCount size={pr.size} />}
+            {pr.size && pr.checkCounts.total > 0 && " · "}
+            {pr.checkCounts.total > 0 && (
+              <>
+                {pr.checkCounts.failed > 0 && `${pr.checkCounts.failed}✕ `}
+                {pr.checkCounts.pending > 0 && `${pr.checkCounts.pending}◐ `}
+                {pr.checkCounts.passed}✓
+              </>
+            )}
           </span>
         )}
       </div>
@@ -132,11 +144,13 @@ function PrList({
   onOpenPr,
   onDismissPr,
   prColor,
+  prRisk,
 }: {
   prs: PullRequest[];
   onOpenPr: (pr: PullRequest) => void;
   onDismissPr: (pr: PullRequest) => void;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
+  prRisk?: (repo: string, number: number) => GuideRisk | null;
 }) {
   if (prs.length === 0) {
     return (
@@ -154,6 +168,7 @@ function PrList({
           onOpen={onOpenPr}
           onDismiss={onDismissPr}
           accent={prColor?.(pr.repo, pr.number, pr.ticketHint)}
+          risk={prRisk?.(pr.repo, pr.number) ?? null}
         />
       ))}
     </>
@@ -209,8 +224,11 @@ function OpenReviewCard({ pr, onOpen, accent }: { pr: OpenReviewPr; onOpen: (pr:
       <div className="pr-title">{pr.title}</div>
       <div className="pr-meta">
         <span className="pr-badge ticket" title="author">{pr.author}</span>
-        <span className="pr-checkcounts" title={`${pr.files} files`}>
-          +{pr.additions} −{pr.deletions}
+        <span className="pr-checkcounts">
+          <SizeCount
+            size={pr.size ?? { additions: pr.additions, deletions: pr.deletions, implAdditions: pr.additions, implDeletions: pr.deletions, partial: false }}
+            files={pr.files}
+          />
         </span>
       </div>
       {pr.easy && pr.why && <div className="pr-why">{pr.why}</div>}
@@ -250,6 +268,7 @@ export function WorkPanel({
   onOpenPr,
   ticketColor,
   prColor,
+  prRisk,
   onFold,
   foldTitle,
   onOpenBug,
@@ -262,6 +281,7 @@ export function WorkPanel({
   onOpenBug: BugsTabProps["onOpenBug"];
   ticketColor?: (identifier: string, hint?: string) => string | undefined;
   prColor?: (repo: string, number: number, hint?: string) => string | undefined;
+  prRisk?: (repo: string, number: number) => GuideRisk | null;
 }) {
   const {
     prs: data,
@@ -398,6 +418,7 @@ export function WorkPanel({
                     onOpenPr={onOpenPr}
                     onDismissPr={dismissPrAttention}
                     prColor={prColor}
+                    prRisk={prRisk}
                   />
                 ) : open.error && !open.prs ? (
                   <div className="browser-error">⚠️ {open.error}</div>

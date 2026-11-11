@@ -4,6 +4,7 @@
 // pick another heading level.
 
 import { looksLikePath, matchFile } from "./reviewNotes.ts";
+import { guideRisk, type GuideRisk } from "../../shared/guideRisk.ts";
 
 export type NoteTone = "explains" | "look closely" | "risk";
 
@@ -25,8 +26,10 @@ export interface GuideSection {
 }
 
 export interface ParsedGuide {
-  /** Everything before the first section heading. */
+  /** Everything before the first section heading, minus the risk line. */
   intro: string;
+  /** The guide's overall risk, from its "Risk:" line. */
+  risk: GuideRisk | null;
   sections: GuideSection[];
   /** Changed files no section claimed, in diff order. */
   leftover: string[];
@@ -159,8 +162,10 @@ export function parseGuide(md: string, files: string[]): ParsedGuide {
     sections.push({ title: s.title, body, files: mine, notes: s.notes });
   }
 
+  const { risk, rest } = guideRisk(introLines.join("\n"));
   return {
-    intro: introLines.join("\n").trim(),
+    intro: rest.trim(),
+    risk,
     sections,
     leftover: files.filter((f) => !claimed.has(f)),
     twice: [...twice],

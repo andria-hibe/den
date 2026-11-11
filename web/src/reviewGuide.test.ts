@@ -170,3 +170,18 @@ describe("guide notes and coverage", () => {
     expect(g.unknown).toEqual(["gone.ts"]);
   });
 });
+
+describe("the guide's risk line", () => {
+  it("is taken out of the intro, however it is decorated", () => {
+    const g = parseGuide("Adds snoozing.\n**Risk:** High - touches the shared cache.\n\n## Core\nFiles: a.ts", ["a.ts"]);
+    expect(g.risk).toEqual({ level: "high", why: "touches the shared cache." });
+    expect(g.intro).toBe("Adds snoozing.");
+    expect(parseGuide("- risk: very high", []).risk?.level).toBe("very high");
+  });
+
+  it("leaves prose and line notes that only mention risk alone", () => {
+    expect(parseGuide("Low risk overall, mostly renames.", []).risk).toBeNull();
+    expect(parseGuide("- risk: high-traffic endpoint gets a new query", []).risk).toBeNull();
+    expect(parseGuide("- risk: server/a.ts:12 might leak", []).risk).toBeNull();
+  });
+});

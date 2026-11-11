@@ -3,6 +3,16 @@ import type { SessionMeta } from "../../server/sessions.ts";
 import { moveItem } from "./reorder.ts";
 import { Critter } from "./Critter.tsx";
 
+/** The line under a session's name: what it's waiting on you for, or how a
+ * turn it finished while you were elsewhere ended. None for the open one,
+ * whose pane already shows it. */
+function railDetail(s: SessionMeta, activeId: string | null): string | null {
+  const t = s.turn;
+  if (!t || s.id === activeId) return null;
+  if (t.state === "needs-you") return t.detail ?? t.message;
+  return t.state === "done" && s.attention ? t.detail : null;
+}
+
 // The left column, one row per workspace. Pure presentation: all state lives in App.
 export function SessionRail({
   rail,
@@ -82,7 +92,9 @@ export function SessionRail({
       )}
       <h2>sessions</h2>
       <div className="session-list">
-        {rail.map((s, i) => (
+        {rail.map((s, i) => {
+          const detail = railDetail(s, activeId);
+          return (
           <div
             key={s.id}
             className={`session ${s.id === activeId ? "active" : ""} ${s.attention ? "attn-row" : ""}${
@@ -198,9 +210,15 @@ export function SessionRail({
             >
               ×
             </button>
+            {detail && (
+              <span className={`session-sub${s.turn?.state === "needs-you" ? " needs-you" : ""}`} title={detail}>
+                {detail}
+              </span>
+            )}
             {renderLinks(s)}
           </div>
-        ))}
+          );
+        })}
         {rail.length === 0 && (
           <div className="placeholder">no sessions yet — start one below 🌱</div>
         )}

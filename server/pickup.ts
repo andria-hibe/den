@@ -28,7 +28,7 @@ export function readPickNotes(): { updatedAt: string | null; notes: Record<strin
 /** The PRs with Fox's notes on them, easy ones first, then smallest first. A
  * note for a PR no longer listed is dropped. */
 export function withPickNotes(prs: TeamPr[], notes: Record<string, PickNote>): OpenReviewPr[] {
-  const size = (p: TeamPr) => p.additions + p.deletions;
+  const size = (p: TeamPr) => (p.size ? p.size.implAdditions + p.size.implDeletions : p.additions + p.deletions);
   return prs
     .map((p) => {
       const n = notes[`${p.repo}#${p.number}`];

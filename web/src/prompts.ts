@@ -17,7 +17,9 @@ export function guidePrompt(number: number, repo: string): string {
   return (
     `Please write the reading guide for pull request #${number} (${repo}) to the ` +
     `guide file named in your instructions. Read the saved diff first, and the ` +
-    `changed files for context. Group the changed files into sections by what ` +
+    `changed files for context. End the opening lines with "Risk: <level> - ` +
+    `<one reason>", the level one of low, typical, high, or very high for the ` +
+    `whole PR. Group the changed files into sections by what ` +
     `they do, most important first (the core of the change, then supporting ` +
     `changes, then low-signal churn), and give each section a \`## \` heading, ` +
     `two to four lines on its purpose and impact, and a \`Files:\` line naming ` +

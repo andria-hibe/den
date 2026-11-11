@@ -5,8 +5,9 @@ import { useMemo } from "react";
 import { DiffView, diffForFiles } from "./DiffView.tsx";
 import { Fox } from "./Fox.tsx";
 import { Md } from "./Md.tsx";
-import { churnFromGuide, isChurnPath } from "./churn.ts";
+import { churnFromGuide, isChurnPath } from "../../shared/churn.ts";
 import { parseGuide, type GuideNote } from "./reviewGuide.ts";
+import { RiskChip } from "./RiskChip.tsx";
 import { ToClaude } from "./ToClaude.tsx";
 import { usePersistentJson } from "./usePersistent.ts";
 import { anchorLine, linesInDiff } from "./reviewPost.ts";
@@ -105,7 +106,7 @@ export function PrGuideTab({
   onRequested: () => void;
 }) {
   const parsed = useMemo(() => parseGuide(guide, files), [guide, files]);
-  const { intro, leftover, twice, unknown } = parsed;
+  const { intro, risk, leftover, twice, unknown } = parsed;
   // A note's line number is a guess; the code it quotes, when it quotes some,
   // says where it really is (as when the review is posted).
   const sections = useMemo(
@@ -133,6 +134,7 @@ export function PrGuideTab({
       <div className="pr-review-overall">
         <div className="pr-review-head">
           <h4>reading guide</h4>
+          {risk && <RiskChip risk={risk} />}
           <ToClaude
             sessionId={sessionId}
             text={prompt}

@@ -626,7 +626,10 @@ export function reviewInstruction(
     `(create or overwrite it). It is how the developer reads the diff: it ` +
     `replaces file-alphabetical order with the order the change makes sense in. ` +
     `Structure it exactly like this: two or three lines saying what the PR does ` +
-    `and how to read it, then one "## <section title>" heading per group of ` +
+    `and how to read it, then a line "Risk: <level> - <one reason>", the level ` +
+    `one of low, typical, high, or very high for the whole PR (high when it ` +
+    `touches data, permissions, money, or shared code many callers use), then ` +
+    `one "## <section title>" heading per group of ` +
     `related changes, most important first - the core of the implementation, ` +
     `then the supporting changes, then low-signal churn (generated files, ` +
     `lockfiles, formatting, fixtures) last. Under each heading write two to ` +

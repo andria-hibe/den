@@ -16,6 +16,7 @@ import { store, type SessionRow } from "./store.ts";
 import { developerSections, type DigestSession } from "./digest.ts";
 import { compactions, contextSize } from "./usage.ts";
 import { mergeHooks, readTurn, removeTurn, turnHooks, watchTurns, type Turn } from "./turnState.ts";
+import { guideRisk, type GuideRisk } from "../shared/guideRisk.ts";
 import { CHECKS_DIR, checkResultPath } from "./doneCheck.ts";
 
 /** The directory panes save check results to, made on first use. */
@@ -252,6 +253,24 @@ function handoverWaiting(groupId: string): string[] {
   }
 }
 
+const riskCache = new Map<string, { mtime: number; risk: GuideRisk | null }>();
+
+/** A review pane's overall risk, from its guide's intro: a section's
+ * "- risk: ..." line notes must not count. */
+function reviewRisk(groupId: string): GuideRisk | null {
+  try {
+    const file = reviewGuidePath(groupId);
+    const mtime = statSync(file).mtimeMs;
+    const hit = riskCache.get(groupId);
+    if (hit?.mtime === mtime) return hit.risk;
+    const { risk } = guideRisk(readFileSync(file, "utf8").split(/^ {0,3}#{2,6}\s/m)[0]);
+    riskCache.set(groupId, { mtime, risk });
+    return risk;
+  } catch {
+    return null;
+  }
+}
+
 /** Whether a checkout is mid-merge or mid-rebase, or has staged changes. */
 function gitWorkState(cwd: string): { merging: boolean; staged: boolean } {
   const git = (...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 5000 }).trim();
@@ -444,7 +463,7 @@ export interface SessionMeta {
   /** See DenSession.termTheme. */
   termTheme: PaneTheme | null;
   /** See DenSession.turn. */
-  turn: { state: Turn["state"]; message: string | null } | null;
+  turn: { state: Turn["state"]; message: string | null; detail: string | null } | null;
   color: string;
   cwd: string;
   shell: boolean;
@@ -483,6 +502,8 @@ export interface SessionMeta {
   keepAlive: boolean;
   /** Its handover's "Waiting on you" items, for the rail. */
   waiting: string[];
+  /** A review pane's overall risk, from its reading guide. */
+  risk: GuideRisk | null;
   /** The crew subagents (agent types) its Claude pane has at work. */
   crewActive: string[];
   /** How full its Claude pane's context window is, as of its last reply. */
@@ -795,7 +816,7 @@ class DenSession {
     this.lastInputAt = this.lastActive;
     // Escape at a prompt fires no hook, so any input ends "waiting on you";
     // an answered prompt goes on to report working.
-    if (this.turn?.state === "needs-you") this.turn = { state: "done", at: this.lastActive, message: null };
+    if (this.turn?.state === "needs-you") this.turn = { state: "done", at: this.lastActive, message: null, detail: null };
   }
 
   /**
@@ -837,7 +858,7 @@ class DenSession {
       agentName: this.agentName,
       promptStale: this.status === "running" && this.promptStale,
       termTheme: this.termTheme,
-      turn: this.status === "running" && this.turn ? { state: this.turn.state, message: this.turn.message } : null,
+      turn: this.status === "running" && this.turn ? { state: this.turn.state, message: this.turn.message, detail: this.turn.detail } : null,
       color: this.color,
       cwd: this.cwd,
       shell: this.shell,
@@ -860,6 +881,7 @@ class DenSession {
       owned: this.owned,
       keepAlive: this.keepAlive,
       waiting: worksLikeWorkspace(this) ? handoverWaiting(this.groupId) : [],
+      risk: this.view === "review" ? reviewRisk(this.groupId) : null,
       stack: stackStatus(this.id),
       ticketChanged: this.ticketChanged,
       crewActive: this.shell || this.role !== "main" ? [] : activeCrew(this.groupId),

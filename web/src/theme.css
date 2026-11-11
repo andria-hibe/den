@@ -596,6 +596,21 @@ body {
   font-size: 10px;
   color: var(--ink-soft);
 }
+/* What a session waits on you for, or how its unseen turn ended: one line. */
+.session-sub {
+  flex-basis: 100%;
+  min-width: 0;
+  padding-left: 22px;
+  margin-top: -6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-sub.needs-you {
+  color: var(--accent-ink);
+}
 /* Attention nudge: a session rang the bell while you were elsewhere. */
 .attn-dot {
   margin-left: auto;
@@ -1562,6 +1577,32 @@ body {
   color: var(--ink-soft);
   border-style: dashed;
 }
+/* The reading guide's overall risk for a PR; "typical" keeps the plain badge.
+   Low is sky, not mint, so it doesn't read as a second approval. */
+.risk-chip {
+  white-space: nowrap;
+}
+.risk-chip.has-why {
+  cursor: help;
+}
+.pr-review-head .risk-chip {
+  margin: 0 auto 0 8px;
+}
+.pr-badge.risk-low {
+  background: var(--sky);
+  color: #234a63;
+  border-color: transparent;
+}
+.pr-badge.risk-high {
+  background: var(--peach);
+  color: #6b4a2a;
+  border-color: transparent;
+}
+.pr-badge.risk-very-high {
+  background: var(--pink);
+  color: #7a2a45;
+  border-color: transparent;
+}
 /* Your own approved + green-CI PRs: brighter than a plain "approved" badge. */
 .pr-badge.ready {
   background: var(--mint);
@@ -1571,6 +1612,7 @@ body {
 }
 .pr-checkcounts {
   margin-left: auto;
+  white-space: nowrap;
   font-size: 10px;
   color: var(--ink-soft);
 }
