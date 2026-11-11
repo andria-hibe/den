@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { rasterize } from "./Fox.tsx";
-import { BUSTS, CRITTERS, CRITTER_PALETTE, type CritterKind } from "./critterSprites.ts";
+import { ALERTS, BUSTS, CRITTERS, CRITTER_PALETTE, type CritterKind } from "./critterSprites.ts";
 
 /** `a` moved `t` of the way to `b`; both "#rrggbb". */
 function mix(a: string, b: string, t: number): string {
@@ -24,10 +24,13 @@ export function Critter({
   size = 38,
   tint,
   bust = false,
+  alert = false,
   className,
 }: {
   kind: CritterKind;
   size?: number;
+  /** Draw its "!" pose, where it has one (ALERTS). */
+  alert?: boolean;
   /** Draw only the head and shoulders (BUSTS), for small places. */
   bust?: boolean;
   /** A kit's scarf colour: its session's colour. */
@@ -37,10 +40,10 @@ export function Critter({
   const { src, cols, rows } = useMemo(
     () =>
       rasterize(
-        bust && BUSTS[kind] ? crop(CRITTERS[kind], BUSTS[kind]) : CRITTERS[kind],
+        bust && BUSTS[kind] ? crop(CRITTERS[kind], BUSTS[kind]) : (alert && ALERTS[kind]) || CRITTERS[kind],
         tint ? { ...CRITTER_PALETTE, X: tint, Y: mix(tint, CRITTER_PALETTE.D, 0.4) } : CRITTER_PALETTE,
       ),
-    [kind, tint, bust],
+    [kind, tint, bust, alert],
   );
   const scale = Math.max(1, Math.round(size / rows));
   return (

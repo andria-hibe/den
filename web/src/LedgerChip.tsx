@@ -78,8 +78,13 @@ export function LedgerChip({ mouse = false }: { mouse?: boolean }) {
   lines.push("", `As of ${relTimeAgo(data.limits.at)}.`);
 
   return (
-    <span className={`ledger-chip ${pace.status} mouse-${watch.level}`} title={lines.join("\n")}>
-      {mouse && <Critter kind="mouse" size={19} className="ledger-mouse" />}
+    <span
+      className={`ledger-chip ${pace.status} mouse-${watch.level}`}
+      title={lines.join("\n")}
+      role={watch.level === "ok" ? undefined : "img"}
+      aria-label={watch.level === "ok" ? undefined : `Tokens at risk: ${watch.alerts.map((a) => a.message).join(" ")}`}
+    >
+      {mouse && <Critter kind="mouse" size={19} alert={watch.level !== "ok"} className="ledger-mouse" />}
       {Math.round(pace.used)}%
       <span className="ledger-bar" aria-hidden>
         <span className="ledger-fill" style={{ width: `${Math.min(pace.used, 100)}%` }} />

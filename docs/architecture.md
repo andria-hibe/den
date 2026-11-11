@@ -739,7 +739,9 @@ incrementally, weighted by API price ratios (`weigh`), as shares of the
 last 30 minutes. New alerts go to a running Fox once each (inbox message;
 Fox tells the developer and suggests what to pause), to a native
 notification and the pace chip (`mouse-watch` / `mouse-tight`, alerts and
-top spenders on hover), and into the digest. While `tight` it also
+top spenders on hover; while any alert is up the chip's mouse raises a "!"
+like the alerted fox, `ALERTS.mouse` in `critterSprites.ts`), and into the
+digest. While `tight` it also
 manages: no Fable for owl (`fableHasRoom`), no quiet-spell idle handovers
 (clock out, nap, and start fresh still write them), and the done check
 needs a second click (`tokens_tight`; `api()` errors now carry `code`).

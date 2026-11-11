@@ -43,6 +43,7 @@ export const CRITTER_PALETTE: Record<string, string> = {
   i: "#b4d8f6",
   X: "#ffb7d5", // kit's scarf: the session's colour in the app (Critter tint)
   Y: "#c5809f", // the scarf's shaded lower row, so it stands off the orange fur
+  x: "#ff5c7a", // alert mark, as the fox's
 };
 
 export type CritterKind = "tanuki" | "raccoon" | "hedgehog" | "mouse" | "owl" | "badger" | "hare" | "wolf" | "squirrel" | "beaver" | "bowerbird" | "kit";
@@ -327,6 +328,14 @@ export const CREW: CrewMember[] = [
   { kind: "squirrel", name: "Squirrel", job: "Runs Fox's errands: sizes up a Linear project's tickets, matches tickets to PRs, pre-reads a PR, and reports back", model: "Sonnet", built: true },
   { kind: "owl", name: "Owl", job: "Reviews code (colleagues' PRs, and a kit's own PR before you look) and advises kits and Fox on hard problems", model: "Opus, or Fable for the hardest when the week has room", built: true },
 ];
+
+/** A critter raising a "!" like the alerted fox (foxSprites.ts ALERT), in the
+ * same top-right corner: the field mouse when the week's tokens are at risk.
+ * The mouse's stem is a row longer than the fox's, since the pace chip draws
+ * it at 1x, where the fox's shape reads as a smudge. */
+export const ALERTS: Partial<Record<CritterKind, string[]>> = {
+  mouse: CRITTERS.mouse.map((row, i) => (i < 4 || i === 5 ? row.slice(0, 16) + "xx" : row)),
+};
 
 /** Head-and-shoulders crops for small places (the rail, headers), where a
  * whole 18x19 sprite at 1x is too small to tell a kit's scarf colour:
