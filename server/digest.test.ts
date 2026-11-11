@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pickupPrs, sharedFailures, tagReviewRequests } from "./digest.ts";
-import type { GhNotification, PullRequest, TeamPr } from "./github.ts";
+import { pickupPrs, setAsideSnoozed, sharedFailures, tagReviewRequests } from "./digest.ts";
+import type { GhNotification, PrBuckets, PullRequest, TeamPr } from "./github.ts";
 
 const pr = (number: number, names: string[]) =>
   ({ number, failingChecks: names.map((name) => ({ name })) }) as unknown as PullRequest;
@@ -29,5 +29,21 @@ describe("tagReviewRequests", () => {
   it("tags named and team requests, drops ones no longer open to the developer, and leaves other reasons alone", () => {
     const out = tagReviewRequests([note("review_requested", 1), note("review_requested", 2), note("review_requested", 3), note("mention", 4)], named, team);
     expect(out.map((n) => [n.title, n.requested])).toEqual([["PR 1", "named"], ["PR 3", "team"], ["PR 4", undefined]]);
+  });
+});
+
+describe("setAsideSnoozed", () => {
+  it("takes snoozed PRs out of every list and lists them as put off, soonest first", () => {
+    const p = (number: number) => ({ repo: "o/r", number, title: `t${number}`, url: `u${number}` }) as PullRequest;
+    const prs = { authored: [p(1), p(2)], reviewRequested: [p(3)], fetchedAt: "" } as PrBuckets;
+    const team = [{ repo: "o/r", number: 4, title: "t4", url: "u4" }] as TeamPr[];
+    const r = setAsideSnoozed(prs, team, { "o/r#2": 200, "o/r#4": 100, "o/r#9": 300 });
+    expect(r.prs?.authored.map((x) => x.number)).toEqual([1]);
+    expect(r.teamPrs).toEqual([]);
+    expect(r.later).toEqual([
+      { key: "o/r#4", title: "t4", url: "u4", until: 100 },
+      { key: "o/r#2", title: "t2", url: "u2", until: 200 },
+      { key: "o/r#9", title: null, url: null, until: 300 },
+    ]);
   });
 });

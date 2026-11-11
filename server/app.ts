@@ -11,7 +11,7 @@ import { StillAnswering, askLine, readThreads } from "./lineAsk.ts";
 import { BUGS_PATH, BUG_QUEUE_PATH, MANAGER_NAME, DIGEST_PATH, DIGEST_SESSIONS_PATH, MANAGER_DIR, PRS_PATH, TODAY_PATH } from "./paths.ts";
 import { bugLeadRule, freshBriefPrompt, freshStartPrompt } from "./instructions.ts";
 import { tellPane } from "./inbox.ts";
-import { buildDigest, buildPrState, pickupPrs, tagReviewRequests } from "./digest.ts";
+import { buildDigest, buildPrState, pickupPrs, setAsideSnoozed, tagReviewRequests } from "./digest.ts";
 import { openArgs } from "./openPath.ts";
 import { readLimits } from "./limits.ts";
 import { weekPace } from "../shared/pace.ts";
@@ -96,6 +96,7 @@ import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
 import { store } from "./store.ts";
 import { checkPrompt, deletePrompt, listPrompts, savePrompt } from "./reviewPrompts.ts";
+import { listSnoozes, setSnooze } from "./snooze.ts";
 import { isPaneTheme, setPaneTheme } from "./paneTheme.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -544,6 +545,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // The rail's clean-up button (#29): the skill it names, and where it opens.
   app.get("/api/cleanup", async () => ({ skill: cleanupSkill(), cwd: roots().workRepo }));
+
+  app.get("/api/github/snoozes", async () => ({ snoozed: listSnoozes() }));
+  app.post("/api/github/snooze", async (req, reply) => {
+    const body = (req.body ?? {}) as { key?: unknown; until?: unknown };
+    if (body.until === undefined || !setSnooze(body.key, body.until)) {
+      reply.code(400);
+      return { error: "bad_snooze" };
+    }
+    return { snoozed: listSnoozes() };
+  });
 
   app.get("/api/review-prompts", async () => ({ prompts: listPrompts() }));
   app.post("/api/review-prompts", async (req, reply) => {
@@ -1282,7 +1293,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const writeDigest = async () => {
     const bounded = <T,>(p: Promise<T>, fallback: T) =>
       Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), 10_000))]);
-    const [prs, linear, linearInbox, githubInbox, teamPrs] = await Promise.all([
+    const [allPrs, linear, linearInbox, githubInbox, allTeamPrs] = await Promise.all([
       bounded(prCache.get(false), null),
       hasKey() ? bounded(linearCache.get(false), null) : Promise.resolve(null),
       hasKey() ? bounded(getInboxNotifications(), null) : Promise.resolve(null),
@@ -1297,6 +1308,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       // first digest: nothing counts as new
     }
     const digestSessions = sessions.digestSessions(seen);
+    const { prs, teamPrs, later } = setAsideSnoozed(allPrs, allTeamPrs, listSnoozes());
     const pickup = teamPrs && pickupPrs(teamPrs, digestSessions);
     const threadsFor = (p: { number: number; repo: string }) => ({ pr: p.number, repo: p.repo, threads: null as OpenThread[] | null });
     const reviewThreads = prs?.authored.map(threadsFor);
@@ -1321,6 +1333,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
         reviewThreads: reviewThreads ?? null,
         othersThreads,
         teamPrs: pickup,
+        later,
       }),
     );
   };

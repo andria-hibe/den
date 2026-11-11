@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -84,26 +85,46 @@ export function WorkDataProvider({ children }: { children: ReactNode }) {
     [setDismissed],
   );
 
-  const [snoozedRaw, setSnoozed] = usePersistentJson<Record<string, number>>("den.snoozedPrs", {});
-  const snoozePr = useCallback(
-    (key: string, until: number | null) =>
-      setSnoozed((m) => {
-        const next = { ...m };
-        if (until === null) delete next[key];
-        else next[key] = until;
-        return next;
-      }),
-    [setSnoozed],
-  );
+  // Kept by the server, so Fox's digest can list them under Later.
+  const [snoozedRaw, setSnoozed] = useState<Record<string, number>>({});
+  // Bumped by every snooze, so an answer to an older request can't undo it.
+  const snoozeSeq = useRef(0);
+  const takeSnoozes = useCallback((seq: number, next: Record<string, number>) => {
+    if (seq !== snoozeSeq.current) return;
+    setSnoozed((m) => (JSON.stringify(m) === JSON.stringify(next) ? m : next));
+  }, []);
+  const loadSnoozes = useCallback(() => {
+    const seq = snoozeSeq.current;
+    api<{ snoozed: Record<string, number> }>("/api/github/snoozes")
+      .then((d) => takeSnoozes(seq, d.snoozed))
+      .catch(() => {});
+  }, [takeSnoozes]);
+  useEffect(() => {
+    loadSnoozes();
+    const t = setInterval(loadSnoozes, POLL_MS);
+    return () => clearInterval(t);
+  }, [loadSnoozes]);
+  const snoozePr = useCallback((key: string, until: number | null) => {
+    const seq = ++snoozeSeq.current;
+    setSnoozed((m) => {
+      const next = { ...m };
+      if (until === null) delete next[key];
+      else next[key] = until;
+      return next;
+    });
+    api<{ snoozed: Record<string, number> }>("/api/github/snooze", {
+      method: "POST",
+      body: JSON.stringify({ key, until }),
+    })
+      .then((d) => takeSnoozes(seq, d.snoozed))
+      .catch(() => seq === snoozeSeq.current && loadSnoozes());
+  }, [loadSnoozes, takeSnoozes]);
   // Ended snoozes drop out on the next poll, which re-runs this.
   const snoozed = useMemo(() => {
     const now = Date.now();
     return Object.fromEntries(Object.entries(snoozedRaw).filter(([, until]) => until > now));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- prs is the clock: a fresh poll re-checks the times
   }, [snoozedRaw, prs]);
-  useEffect(() => {
-    if (Object.keys(snoozed).length !== Object.keys(snoozedRaw).length) setSnoozed(snoozed);
-  }, [snoozed, snoozedRaw, setSnoozed]);
 
   // Every consumer (cards, fox, notifications) reads these derived buckets, so
   // they never disagree about a dismissal or a snooze.

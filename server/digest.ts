@@ -48,6 +48,35 @@ export interface DigestInput {
   /** PRs asking the developer's team, not them, for a review, already
    * through `pickupPrs`; null when GitHub didn't answer. */
   teamPrs?: TeamPr[] | null;
+  /** What the developer put off, from `setAsideSnoozed`. */
+  later?: LaterItem[];
+}
+
+export interface LaterItem {
+  key: string;
+  title: string | null;
+  url: string | null;
+  until: number;
+}
+
+/** The PRs with snoozed ones taken out, and those listed as put off. */
+export function setAsideSnoozed(
+  prs: PrBuckets | null,
+  teamPrs: TeamPr[] | null,
+  snoozed: Record<string, number>,
+): { prs: PrBuckets | null; teamPrs: TeamPr[] | null; later: LaterItem[] } {
+  const key = (p: { repo: string; number: number }) => `${p.repo}#${p.number}`;
+  const awake = <T extends { repo: string; number: number }>(list: T[]) => list.filter((p) => !(key(p) in snoozed));
+  const known = new Map(
+    [...(prs?.authored ?? []), ...(prs?.reviewRequested ?? []), ...(teamPrs ?? [])].map((p) => [key(p), p]),
+  );
+  return {
+    prs: prs && { ...prs, authored: awake(prs.authored), reviewRequested: awake(prs.reviewRequested) },
+    teamPrs: teamPrs && awake(teamPrs),
+    later: Object.entries(snoozed)
+      .sort((a, b) => a[1] - b[1])
+      .map(([k, until]) => ({ key: k, title: known.get(k)?.title ?? null, url: known.get(k)?.url ?? null, until })),
+  };
 }
 
 /** Team PRs worth offering the developer to pick up: not failing CI, and not
@@ -160,9 +189,14 @@ function prLine(p: PullRequest): string {
   return `- #${p.number} ${p.title} (${p.repo}, ${p.branch ?? "?"}) - ${bits.join(", ")}`;
 }
 
+function localTime(ms: number): string {
+  const at = new Date(ms);
+  return `${at.toDateString()} ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+
 export function buildDigest(d: DigestInput): string {
   const at = new Date(d.now);
-  const local = `${at.toDateString()} ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const local = localTime(d.now);
   const out: string[] = [
     `# den digest, ${local} local (${at.toISOString()})`,
     "",
@@ -286,6 +320,18 @@ export function buildDigest(d: DigestInput): string {
   for (const a of d.watch?.alerts ?? []) out.push(`Field mouse (${a.level}): ${a.message}`);
   if (d.watch?.burners.length) {
     out.push(`Spending the most in the last 30 minutes: ${d.watch.burners.map((b) => `${b.name} ${b.share}%`).join(", ")}.`);
+  }
+  if (d.later?.length) {
+    out.push(
+      "",
+      "## Later",
+      "",
+      "What the developer has put off. Leave these off today's list until their date.",
+      "",
+      ...d.later.map(
+        (l) => `- PR ${l.key}${l.title ? ` ${l.title}` : ""}${l.url ? ` (${l.url})` : ""} - snoozed until ${localTime(l.until)} local`,
+      ),
+    );
   }
   return out.join("\n") + "\n";
 }

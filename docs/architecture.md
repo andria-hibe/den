@@ -1077,11 +1077,15 @@ developer's day across the other sessions instead of them being the glue.
   sorts team PRs by that size. The diff view's folding still uses paths
   only (`shared/churn.ts`). **Snooze** (2026-11-11, from Linear's review
   snooze): a card's "zz" (shown on hover or focus) hides it until tomorrow 9am, for 3
-  days, or for a week (`Snooze.tsx`); `den.snoozedPrs` in localStorage,
-  held in `WorkData`, which leaves snoozed PRs out of `prs` / `flatPrs`, so
-  no card, tab "!", or notification shows them. Each list ends with "zz N
-  snoozed" to see them dimmed and wake one. Expired snoozes drop out on the
-  next poll. The server doesn't know, so Fox's digest still lists them. Fox is drawn as the whole
+  days, or for a week (`Snooze.tsx`). The server keeps them
+  (`server/snooze.ts`, settings key `snoozedPrs`, at most 31 days; `GET
+  /api/github/snoozes`, `POST /api/github/snooze`), and `WorkData` leaves
+  snoozed PRs out of `prs` / `flatPrs`, so no card, tab "!", or
+  notification shows them. Each list ends with "zz N snoozed" to see them
+  and wake one. Fox's digest drops them from its PR sections
+  (`setAsideSnoozed`, tested) and lists them in a closing `## Later`
+  section ("what the developer has put off", andria 2026-11-11), soonest
+  first. Fox is drawn as the whole
   sitting fox (`Fox pose="sit"`, not a bust) in place of a colour dot
   (rail, header, title chip), so it never reads as one of its kits.
   Every session writing code is drawn as a kit whose scarf is the
