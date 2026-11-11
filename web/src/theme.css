@@ -1580,7 +1580,8 @@ body {
    closes, so mark quietly why it's still listed. */
 .pr-badge.reviewed {
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--warn-ink);
+  border-color: var(--warn-ink);
   border-style: dashed;
 }
 /* The reading guide's overall risk for a PR; "typical" keeps the plain badge.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
+import { Fox } from "./Fox.tsx";
 import { relTimeAgo } from "./format.ts";
 import type { BugCard, SkippedBug, TriageCard } from "../../server/bugBuster.ts";
 import type { BugFinding } from "./BugDialog.tsx";
@@ -75,7 +76,7 @@ export function BugsTab({
   if (!view)
     return (
       <div className="pr-section">
-        {error ? <div className="browser-error">⚠️ {error} (trying again every 30 seconds)</div> : <div className="loading-row">loading...</div>}
+        {error ? <div className="browser-error">⚠️ {error} (trying again every 30 seconds)</div> : <div className="loading-row"><Fox pose="walk" size={22} /> loading…</div>}
       </div>
     );
 
