@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import { renderMarkdown } from "./markdown.ts";
 import { sourceChips } from "./reviewNotes.ts";
 import { highlightLines, languageFor } from "./highlight.ts";
+import { markHtml, wordMarks } from "./wordDiff.ts";
 import { ToClaude } from "./ToClaude.tsx";
 import { fileReviewPrompt } from "./prompts.ts";
 import { LineThreadView, threadKey, useLineThreads, type LineAt } from "./LineAsk.tsx";
@@ -193,6 +194,14 @@ function DiffFileBlock({
   const nums = useMemo(() => lineNumbers(b.lines), [b.lines]);
   // Only expanded files are highlighted, so collapsed ones cost nothing.
   const html = useHighlighted(b.file, b.lines, nums, !collapsed);
+  // Marked once per diff, not per render: the notes poll re-renders often.
+  const marked = useMemo(() => {
+    if (collapsed) return null;
+    const out = new Map<number, string>();
+    for (const [i, ranges] of wordMarks(b.lines)) out.set(i, markHtml(html?.get(i), b.lines[i].slice(1), ranges));
+    return out;
+  }, [b.lines, html, collapsed]);
+  const lineHtml = (i: number) => marked?.get(i) ?? html?.get(i);
   const { add, del } = useMemo(() => changeCounts(b.lines), [b.lines]);
   return (
     <div className={`diff-file-block${collapsed ? " collapsed" : ""}`}>
@@ -247,7 +256,7 @@ function DiffFileBlock({
                   line={line}
                   nos={nums[i]}
                   className={`diff-line ${classify(line)}`}
-                  html={html?.get(i)}
+                  html={lineHtml(i)}
                   onAsk={key ? () => toggle(key) : undefined}
                   asked={!!(key && threads?.[key])}
                 />

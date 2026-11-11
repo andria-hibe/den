@@ -346,7 +346,18 @@ WebSocket; everything else is REST.
     only for expanded files. Churn starts collapsed — `shared/churn.ts`: lockfiles,
     snapshots, generated code by path, plus anything the guide files under a
     section titled churn/lockfile/generated/formatting — unless the review
-    commented on it.
+    commented on it. **Changed words** are marked inside changed lines
+    (`wordDiff.ts`, tested; andria 2026-11-11, from Linear's structural
+    highlighting): `wordMarks` pairs each run of removed lines with the
+    added run after it, line by line, and `wordRanges` diffs their tokens
+    (LCS on the tokens between their shared start and end), skipping lines
+    over 500 chars or pairs sharing under 40%, where every word would be
+    marked, and pairs over 40k table cells or past a file's 20M (hare: a
+    worst-case 2,000-pair diff went from ~1.9s to ~20ms). `markHtml` wraps the ranges in
+    `<mark class="diff-word">` inside each text run of the highlighted
+    HTML, closing and reopening around spans so tags stay balanced; tints
+    are the `--code-add-word-bg` / `--code-del-word-bg` tokens. Expanded
+    files only, like highlighting.
   - `reviewNotes.ts` — pure `parseReview(md, files)` → `{ overall, byFile }`:
     splits the review markdown a review session writes to its notepad into the
     general review plus per-file sections, keyed by `## <path>` headings. Matching

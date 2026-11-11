@@ -45,6 +45,8 @@
   --code-del: #a8284a;
   --code-add-bg: rgba(63, 191, 127, 0.16);
   --code-del-bg: rgba(255, 92, 122, 0.14);
+  --code-add-word-bg: rgba(63, 191, 127, 0.36);
+  --code-del-word-bg: rgba(255, 92, 122, 0.32);
   --code-hunk-bg: rgba(120, 170, 220, 0.14);
   --code-anchor-bg: rgba(255, 143, 190, 0.2);
   --hl-keyword: #7a3fb0;
@@ -91,6 +93,8 @@
     --code-del: #ff9db0;
     --code-add-bg: rgba(63, 191, 127, 0.13);
     --code-del-bg: rgba(255, 92, 122, 0.13);
+    --code-add-word-bg: rgba(63, 191, 127, 0.32);
+    --code-del-word-bg: rgba(255, 92, 122, 0.32);
     --code-hunk-bg: rgba(180, 216, 246, 0.08);
     --code-anchor-bg: rgba(255, 183, 213, 0.14);
     --hl-keyword: #d7a7ff;
@@ -133,6 +137,8 @@
   --code-del: #ff9db0;
   --code-add-bg: rgba(63, 191, 127, 0.13);
   --code-del-bg: rgba(255, 92, 122, 0.13);
+  --code-add-word-bg: rgba(63, 191, 127, 0.32);
+  --code-del-word-bg: rgba(255, 92, 122, 0.32);
   --code-hunk-bg: rgba(180, 216, 246, 0.08);
   --code-anchor-bg: rgba(255, 183, 213, 0.14);
   --hl-keyword: #d7a7ff;
@@ -2174,6 +2180,9 @@ body {
 .diff-hunk { color: var(--code-hunk); background: var(--code-hunk-bg); }
 .diff-add { color: var(--code-add); background: var(--code-add-bg); }
 .diff-del { color: var(--code-del); background: var(--code-del-bg); }
+.diff-word { color: inherit; background: transparent; border-radius: 3px; }
+.diff-add .diff-word { background: var(--code-add-word-bg); }
+.diff-del .diff-word { background: var(--code-del-word-bg); }
 
 .pr-info {
   border: 2px solid var(--border);
