@@ -568,7 +568,22 @@ A **session** = one PTY (`DenSession`) with `groupId` + `role` ("main"|"shell").
   broken contracts or migrations, and performance users or the database
   would feel; no look-closely notes, design, naming, or test suggestions.
   Security-only and tests-only passes were left out: wolf and badger cover
-  them on request. `NotepadPane` leaves a handover's scroll alone and only
+  them on request. **Saved review prompts** (andria, 2026-11-11): the
+  developer's own prompts sit between the built-ins and "Reading guide
+  only", with edit / delete and "+ save your own review prompt" (inline
+  `PromptEditor`, `ReviewPrompts.tsx`). Stored as one JSON list in the
+  settings table (`server/reviewPrompts.ts`, `GET/POST
+  /api/review-prompts`, `DELETE /api/review-prompts/:id`; at most 20,
+  name 40 and text 2000 chars). `checkPrompt` runs `toAscii`
+  (`shared/ascii.ts`): curly quotes, dashes, ellipses, arrows, and nbsp
+  become ASCII and anything else is refused, since the text is pasted into
+  a pane, and re-checked on read. A saved prompt is a `ReviewFocus`
+  appended to `reviewPrompt` between `--- focus ---` markers, with the
+  change / commit / post rules restated after it. On a plain review pane
+  the deny backstop still blocks writes whatever it says; on an owned one
+  only the wording does. The picker shows each prompt's text (a preview,
+  the whole in the tip), so a rewritten one is visible. The dialog's pick is `den.preReviewPick`
+  (a built-in or `saved:<id>`; a deleted prompt falls back to full). `NotepadPane` leaves a handover's scroll alone and only
   follows the bottom for an older appended log.
   The notepad is scoped to the workspace: kept across exit/restart, but **deleted
   when the workspace is closed** (`remove()`), so `~/.den/progress` doesn't fill
@@ -1507,6 +1522,11 @@ local control plane, not a public API:
 - Electron: `sandbox:true`, `contextIsolation:true`, navigation pinned to the app
   origin, and only `http(s)` URLs reach `shell.openExternal`.
 
+- **Saved review prompts** (`/api/review-prompts`) are reachable by curl
+  from any pane too, so a pane could plant or rewrite one that a later
+  review pastes. It adds persistence, not power (the paste route already
+  reaches any pane); the picker shows each prompt's text so a change is
+  visible, and a plain review pane's deny backstop still blocks writes.
 - **Bug buster routes** (`/api/bugs/*`) are reachable by curl from any
   pane, like the other routes: the worst a pane can do is point bug buster
   at another project, assign open unstarted bugs to the developer, or start

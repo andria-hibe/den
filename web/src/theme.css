@@ -2350,6 +2350,9 @@ body {
   flex-direction: column;
   gap: 6px;
   margin: 2px 4px 12px;
+  /* Many saved prompts scroll here, keeping "start review" in reach. */
+  max-height: 46vh;
+  overflow-y: auto;
 }
 .pr-prereview {
   display: flex;
@@ -2362,6 +2365,51 @@ body {
 .pr-prereview-sub {
   color: var(--ink-soft);
   font-size: 12px;
+}
+/* Saved review prompts: edit and delete sit at the row's end. */
+.pr-prompt-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+.pr-prompt-new {
+  align-self: flex-start;
+  width: auto;
+  height: auto;
+  padding: 2px 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.pr-prompt-new:hover {
+  color: var(--accent-ink);
+}
+.prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+}
+.prompt-editor-field {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--ink);
+  resize: vertical;
+}
+.prompt-editor-error {
+  font-size: 12px;
+  color: var(--accent-ink);
+}
+.prompt-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 .pr-own {
   margin: 0 4px 12px;

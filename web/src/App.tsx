@@ -12,7 +12,8 @@ import { useClockOutRound } from "./useClockOutRound.ts";
 import type { ClockOutRound } from "../../server/sessions.ts";
 import { TicketDialog } from "./TicketDialog.tsx";
 import { BugDialog, type BugFinding } from "./BugDialog.tsx";
-import { PrDialog, type PreReview } from "./PrDialog.tsx";
+import { PrDialog, type ReviewStart } from "./PrDialog.tsx";
+import type { ReviewFocus } from "./prompts.ts";
 import { PrReviewView, PrMyView } from "./PrViews.tsx";
 import { OwnPrToggle } from "./OwnPrToggle.tsx";
 import { CrewButtons } from "./CrewButtons.tsx";
@@ -176,7 +177,7 @@ export function App() {
   const [bugModal, setBugModal] = useState<{ issue: BugIssue; note: string | null; findings: BugFinding[] } | null>(null);
   const [prModal, setPrModal] = useState<PullRequest | null>(null);
   // The PR whose review session should start on its own, and how (#11).
-  const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "full" | "blockers" | "guide" } | null>(null);
+  const [autoReviewPr, setAutoReviewPr] = useState<{ pr: number; mode: "review" | "guide"; focus: ReviewFocus } | null>(null);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   useEffect(() => setColorPickerOpen(false), [activeId]);
   const [workRepoRoot, setWorkRepoRoot] = useState<string>("");
@@ -695,14 +696,14 @@ export function App() {
     setPrModal(pr);
   };
 
-  const reviewPr = (pr: PullRequest, opts: { preReview: PreReview; owned: boolean }) => {
+  const reviewPr = (pr: PullRequest, opts: ReviewStart) => {
     setPrModal(null);
     const existing = sessionForPr(pr);
     if (existing) {
       selectSession(existing.id);
       return;
     }
-    if (opts.preReview !== "none") setAutoReviewPr({ pr: pr.number, mode: opts.preReview });
+    if (opts.start !== "none") setAutoReviewPr({ pr: pr.number, mode: opts.start, focus: opts.focus });
     addSession({
       view: "review",
       owned: opts.owned,
@@ -993,7 +994,7 @@ export function App() {
                   }
                 : undefined
             }
-            autoReview={autoReviewPr?.pr === active.pr ? autoReviewPr.mode : null}
+            autoReview={autoReviewPr?.pr === active.pr ? autoReviewPr : null}
             onAutoReviewStarted={() => setAutoReviewPr(null)}
             header={renderHeader(active)}
             terminal={

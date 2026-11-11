@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isAscii } from "../../shared/ascii.ts";
+import { isAscii, toAscii } from "../../shared/ascii.ts";
 import { lineChanges, restoreTicket, ticketDescription } from "../../shared/handover.ts";
 import type { LinearIssue } from "../../server/linear.ts";
 import {
@@ -54,6 +54,7 @@ describe("paste prompts", () => {
     autoReviewPrompt: autoReviewPrompt(42, "org/repo"),
     autoReviewPromptOwned: autoReviewPrompt(42, "org/repo", true),
     autoReviewPromptBlockers: autoReviewPrompt(42, "org/repo", false, "blockers"),
+    autoReviewPromptSaved: autoReviewPrompt(42, "org/repo", false, { name: "n", text: "Look at the migrations." }),
     fileReviewPrompt: fileReviewPrompt("server/git.ts", 42, FILE_LINES),
     ticketBrief: ticketBrief(ISSUE),
     ticketNotesSeed: ticketNotesSeed(ISSUE),
@@ -177,5 +178,13 @@ describe("ticket edits", () => {
       "- On Mondays.",
       "+ On Tuesdays.",
     ]);
+  });
+});
+
+describe("toAscii", () => {
+  it("swaps typographic characters in a saved prompt and reports the rest", () => {
+    const { text, left } = toAscii("Don’t “skip” tests — check… → \u{1F600}");
+    expect(text).toBe("Don't \"skip\" tests - check... -> \u{1F600}");
+    expect(left).toEqual(["\u{1F600}"]);
   });
 });

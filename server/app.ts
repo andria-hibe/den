@@ -95,6 +95,7 @@ import { notePrs, refreshStacks } from "./stack.ts";
 import { foundAtStart, withFoundAtStart } from "./startContext.ts";
 import { isLocalRequest } from "./security.ts";
 import { store } from "./store.ts";
+import { checkPrompt, deletePrompt, listPrompts, savePrompt } from "./reviewPrompts.ts";
 import { isPaneTheme, setPaneTheme } from "./paneTheme.ts";
 import { logWarn } from "./log.ts";
 import type { ClientMessage, ServerMessage } from "./ws-protocol.ts";
@@ -543,6 +544,26 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   // The rail's clean-up button (#29): the skill it names, and where it opens.
   app.get("/api/cleanup", async () => ({ skill: cleanupSkill(), cwd: roots().workRepo }));
+
+  app.get("/api/review-prompts", async () => ({ prompts: listPrompts() }));
+  app.post("/api/review-prompts", async (req, reply) => {
+    const body = (req.body ?? {}) as { id?: unknown; name?: unknown; text?: unknown };
+    const checked = checkPrompt(body);
+    if ("error" in checked) {
+      reply.code(400);
+      return checked;
+    }
+    const saved = savePrompt(typeof body.id === "string" ? body.id : null, checked);
+    if (!saved) {
+      reply.code(typeof body.id === "string" ? 404 : 409);
+      return { error: typeof body.id === "string" ? "That prompt is gone." : "That's the most prompts den keeps; delete one first." };
+    }
+    return { prompt: saved };
+  });
+  app.delete("/api/review-prompts/:id", async (req) => {
+    deletePrompt((req.params as { id: string }).id);
+    return { ok: true };
+  });
 
   // The week's pace and the costliest chats, for the topbar (#45).
   app.get("/api/usage", async () => sessions.usageOverview());

@@ -13,7 +13,7 @@ import { CheckResultsButton, DeepReviewButton } from "./CheckResults.tsx";
 import { buildReviewPost } from "./reviewPost.ts";
 import { churnFromGuide, isChurnPath } from "../../shared/churn.ts";
 import { parseGuide } from "./reviewGuide.ts";
-import { autoReviewPrompt, guidePrompt, notePrompt, refreshReviewPrompt, reviewPrompt } from "./prompts.ts";
+import { autoReviewPrompt, guidePrompt, notePrompt, refreshReviewPrompt, reviewPrompt, type ReviewFocus } from "./prompts.ts";
 import type { PrDetail, PrReviewNote } from "../../server/github.ts";
 
 function usePrDetail(repo: string, number: number) {
@@ -166,7 +166,7 @@ export function PrReviewView({
   work?: { handover: ReactNode; terminals: ReactNode; terminalCount: number };
   /** Start on its own when the view opens: the full pre-review, or the
    * reading guide only. Null: wait to be asked. */
-  autoReview: "full" | "blockers" | "guide" | null;
+  autoReview: { mode: "review" | "guide"; focus: ReviewFocus } | null;
   /** Fired once the auto pre-review is sent, so App can stop it re-firing. */
   onAutoReviewStarted?: () => void;
   header: ReactNode;
@@ -240,13 +240,13 @@ export function PrReviewView({
   // Submitted, not just pasted: choosing a pre-review means "start now". No
   // client-side delay, since the server holds the paste until the pane is ready.
   const autoAsk =
-    autoReview === "guide" ? guideAsk : autoReviewPrompt(number, repo, owned, autoReview === "blockers" ? "blockers" : "full");
+    !autoReview || autoReview.mode === "guide" ? guideAsk : autoReviewPrompt(number, repo, owned, autoReview.focus);
 
   useEffect(() => {
     if (!autoReview || started.current) return;
     started.current = true;
     setTab("guide");
-    if (autoReview !== "guide") setRequested(true);
+    if (autoReview.mode === "review") setRequested(true);
     setGuideRequested(true);
     api(`/api/sessions/${sessionId}/paste`, {
       method: "POST",
