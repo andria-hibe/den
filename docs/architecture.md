@@ -1125,7 +1125,9 @@ developer's day across the other sessions instead of them being the glue.
   **Open PRs for review** (andria, 2026-11-06, design agreed with Fox):
   `getTeamReviewPrs(repo)` (andria, 2026-11-11: every open PR in the work
   repo, `repo:<githubRepoOf(workRepo)>`, up to 50, since the team rarely
-  sends team review requests; without a GitHub origin it falls back to
+  sends team review requests; 2026-11-13: only PRs into the repo's base
+  branch, `base:<repoBaseName>`, so stacked PRs stay out, and none with
+  failing CI; without a GitHub origin it falls back to
   `review-requested:@me -user-review-requested:@me`), minus drafts, their
   own, and ones they reviewed, then
   `reviewedByTeammate` drops any PR someone other than its author has

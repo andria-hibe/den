@@ -1185,11 +1185,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     return buckets;
   });
-  // The work panel's Open PRs for review: the work repo's PRs nobody has
-  // reviewed, with Fox's easy picks marked. The digest reads the same cache.
+  // The work panel's Open PRs for review: the work repo's PRs into its base
+  // branch that nobody has reviewed, with Fox's easy picks marked. The digest reads the same cache.
   // Two minutes: each listed PR costs a `gh pr checks` call.
   const teamPrCache = ttlCache<TeamPr[]>(120_000, async () => {
-    const prs = await getTeamReviewPrs(githubRepoOf(roots().workRepo));
+    const { workRepo } = roots();
+    const prs = await getTeamReviewPrs(githubRepoOf(workRepo), repoBaseName(workRepo, baseBranchOverride()));
     writePrState({ team: prs });
     return prs;
   });

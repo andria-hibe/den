@@ -472,7 +472,7 @@ export function WorkPanel({
                     aria-selected={prTab === "open"}
                     className={`look-tab${prTab === "open" ? " active" : ""}`}
                     onClick={() => setPrTab("open")}
-                    title="Open PRs in the work repo that no teammate has reviewed yet (bots don't count). Tanuki tags the easy ones."
+                    title="Open PRs into the work repo's base branch that no teammate has reviewed yet (bots don't count) and whose CI isn't failing. Tanuki tags the easy ones."
                   >
                     Open PRs for review{openAwake?.length ? ` (${openAwake.length})` : ""}
                   </button>

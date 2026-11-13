@@ -871,10 +871,13 @@ export function reviewedByTeammate(
   return reviews.some((r) => r.author && r.author.__typename !== "Bot" && r.author.login !== author);
 }
 
-/** Open PRs in the work repo that nobody but bots has reviewed yet. Without a
- * known repo, PRs that ask one of the developer's teams for a review. */
-export async function getTeamReviewPrs(repo: string | null): Promise<TeamPr[]> {
-  const q = repo ? `repo:${repo} ${OPEN_PR_FILTER}` : `review-requested:@me -user-review-requested:@me ${OPEN_PR_FILTER}`;
+/** Open PRs into the work repo's base branch that nobody but bots has
+ * reviewed yet and whose CI isn't failing. Without a known repo, PRs that ask
+ * one of the developer's teams for a review. */
+export async function getTeamReviewPrs(repo: string | null, base: string | null): Promise<TeamPr[]> {
+  const q = repo
+    ? `repo:${repo}${base ? ` base:${base}` : ""} ${OPEN_PR_FILTER}`
+    : `review-requested:@me -user-review-requested:@me ${OPEN_PR_FILTER}`;
   const query =
     `query{search(type:ISSUE,first:${TEAM_LIMIT},query:"${q}"){issueCount nodes{` +
     `... on PullRequest{number title url headRefName createdAt ${SIZE_FIELDS}reviewDecision ` +
@@ -895,7 +898,7 @@ export async function getTeamReviewPrs(repo: string | null): Promise<TeamPr[]> {
     if (found.size >= Math.min(search.issueCount, TEAM_LIMIT)) break;
   }
   const open = [...found.values()].filter((n) => !reviewedByTeammate(n.author?.login, n.reviews.nodes));
-  return mapLimit(open, 4, async (n) => {
+  const prs = await mapLimit(open, 4, async (n) => {
     let checks: CheckState = "none";
     try {
       checks = summarizeChecks(await fetchChecks(n.repository.nameWithOwner, n.number as number)).state;
@@ -919,4 +922,5 @@ export async function getTeamReviewPrs(repo: string | null): Promise<TeamPr[]> {
       checks,
     };
   });
+  return prs.filter((p) => p.checks !== "failing");
 }
